@@ -1,0 +1,54 @@
+@import "tailwindcss";
+
+/* An instrument for one reader, so: paper, ink, and enough contrast to read a
+   long table without strain. No dark mode — she reads in a library, and a
+   catalogue that inverts itself depending on a system setting is one more thing
+   to explain. */
+
+:root {
+  --background: #fbfaf7;
+  --foreground: #1c1a17;
+  --muted: #6f6a62;
+  --rule: #e2ddd4;
+  --accent: #7a2f1d;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-rule: var(--rule);
+  --color-accent: var(--accent);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+a {
+  color: inherit;
+}
+
+/* Form controls, styled once here rather than repeated across every field. */
+input[type='text'],
+input[type='number'],
+select,
+textarea {
+  width: 100%;
+  background: #fff;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  padding: 0.35rem 0.5rem;
+  font-size: 0.875rem;
+  color: var(--foreground);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
