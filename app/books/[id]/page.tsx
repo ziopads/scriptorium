@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
-import { addNote, changeStatus, removeNote } from '@/lib/actions';
+import { addNote, changeStatus } from '@/lib/actions';
+import { NoteCard } from '@/components/note-card';
 import { requireAllowedUser } from '@/lib/auth/guard';
 import { getBook, listsForBook } from '@/lib/books';
 import { formatBibliography, formatNote } from '@/lib/citation';
@@ -146,47 +147,8 @@ export default async function BookPage({
           <p className="text-sm text-muted">None yet.</p>
         ) : (
           <ul className="divide-y divide-rule border-y border-rule">
-            {notes.map((n) => (
-              <li key={n.id} className="py-3 text-sm space-y-1">
-                {n.quote ? (
-                  <blockquote className="border-l-2 border-rule pl-3 italic">
-                    {n.quote}
-                  </blockquote>
-                ) : null}
-                <p className="whitespace-pre-wrap">{n.body}</p>
-
-                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs text-muted">
-                  <span>
-                    {n.printed_page !== null ? `p. ${n.printed_page}` : 'no page'}
-                  </span>
-
-                  {n.tags.map((tag) => (
-                    <Link
-                      key={tag}
-                      href={`/notes?tag=${encodeURIComponent(tag)}`}
-                      className="hover:text-accent"
-                    >
-                      #{tag}
-                    </Link>
-                  ))}
-
-                  {n.origin === 'assistant' ? (
-                    <span className={n.reviewed ? '' : 'text-accent'}>
-                      {n.reviewed
-                        ? 'assistant draft, reviewed'
-                        : 'assistant draft, unreviewed'}
-                    </span>
-                  ) : null}
-
-                  <form action={removeNote} className="ml-auto">
-                    <input type="hidden" name="id" value={n.id} />
-                    <input type="hidden" name="book_id" value={book.id} />
-                    <button type="submit" className="hover:text-accent">
-                      Delete
-                    </button>
-                  </form>
-                </div>
-              </li>
+            {notes.map((note) => (
+              <NoteCard key={note.id} note={note} />
             ))}
           </ul>
         )}

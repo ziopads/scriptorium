@@ -22,6 +22,21 @@ export async function listNotesForBook(bookId: string): Promise<Note[]> {
   return rows as Note[];
 }
 
+// Everything, newest first. The default view of /notes — a notes page that shows
+// nothing until you pick a filter is a filing cabinet you cannot open.
+export async function listAllNotes(): Promise<NoteWithBook[]> {
+  const sql = db();
+  const rows = await sql`
+    select n.id, n.book_id, n.printed_page, n.quote, n.body, n.tags,
+           n.origin, n.reviewed, n.created_at, n.updated_at,
+           b.title as book_title, b.author as book_author
+    from notes n
+    join books b on b.id = n.book_id
+    order by n.updated_at desc
+  `;
+  return rows as NoteWithBook[];
+}
+
 export async function getNote(id: number): Promise<Note | null> {
   const sql = db();
   const rows = (await sql`

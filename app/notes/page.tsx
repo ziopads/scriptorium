@@ -1,50 +1,49 @@
 import Link from 'next/link';
 
+import { NoteCard } from '@/components/note-card';
 import { requireAllowedUser } from '@/lib/auth/guard';
-import { allTags, listNotesByTag, listUnreviewedNotes, searchNotes } from '@/lib/notes';
-import type { NoteWithBook } from '@/lib/types';
+import {
+  allTags,
+  listAllNotes,
+  listNotesByTag,
+  listUnreviewedNotes,
+  searchNotes,
+} from '@/lib/notes';
 
 export const dynamic = 'force-dynamic';
 
-// Notes across the whole corpus, filtered by tag or by a substring of her own
-// writing. This never touches chunks — it is the September half of retrieval,
-// and it works with no books extracted at all.
+// Notes across the whole corpus. This never touches chunks — it is the
+// September half of retrieval, and it works with no books extracted at all.
 export default async function NotesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tag?: string; q?: string; unreviewed?: string }>;
+  searchParams: Promise<{ tag?: string; q?: string; filter?: string }>;
 }) {
   await requireAllowedUser();
 
-  const { tag, q, unreviewed } = await searchParams;
+  const { tag, q, filter } = await searchParams;
 
-  let notes: NoteWithBook[] = [];
-  if (unreviewed) {
-    notes = await listUnreviewedNotes();
-  } else if (tag) {
-    notes = await listNotesByTag(tag);
-  } else if (q) {
-    notes = await searchNotes(q);
-  }
+  const notes =
+    filter === 'unreviewed'
+      ? await listUnreviewedNotes()
+      : filter === 'untagged'
+        ? (await listAllNotes()).filter((n) => n.tags.length === 0)
+        : tag
+          ? await listNotesByTag(tag)
+          : q
+            ? await searchNotes(q)
+            : await listAllNotes();
 
   const tags = await allTags();
 
-  const heading = unreviewed
-    ? 'Unreviewed'
-    : tag
-      ? `#${tag}`
-      : q
-        ? `“${q}”`
-        : 'Notes';
+  const heading = tag ? `#${tag}` : q ? `Search: ${q}` : filter ? filter : 'Notes';
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl mb-1">{heading}</h1>
         <p className="text-sm text-muted">
-          {tag || q || unreviewed
-            ? `${notes.length} notes`
-            : 'Choose a tag, or search your own writing.'}
+          {notes.length} {notes.length === 1 ? 'note' : 'notes'}
         </p>
       </div>
 
@@ -64,69 +63,53 @@ export default async function NotesPage({
         </button>
       </form>
 
-      {tags.length > 0 ? (
-        <nav className="flex flex-wrap gap-x-3 gap-y-1 text-sm">
-          {tags.map((t) => (
-            <Link
-              key={t.tag}
-              href={`/notes?tag=${encodeURIComponent(t.tag)}`}
-              className={t.tag === tag ? 'text-accent' : 'text-muted hover:text-accent'}
-            >
-              #{t.tag}
-              <span className="ml-1 font-mono text-xs">{t.count}</span>
-            </Link>
-          ))}
+      <nav className="flex flex-wrap gap-x-3 gap-y-1 text-sm">
+        <Link
+          href="/notes"
+          className={!tag && !q && !filter ? 'text-accent' : 'text-muted hover:text-accent'}
+        >
+          All
+        </Link>
+
+        {tags.map((t) => (
           <Link
-            href="/notes?unreviewed=1"
-            className={unreviewed ? 'text-accent' : 'text-muted hover:text-accent'}
+            key={t.tag}
+            href={`/notes?tag=${encodeURIComponent(t.tag)}`}
+            className={t.tag === tag ? 'text-accent' : 'text-muted hover:text-accent'}
           >
-            unreviewed
+            #{t.tag}
+            <span className="ml-1 font-mono text-xs">{t.count}</span>
           </Link>
-        </nav>
-      ) : null}
+        ))}
 
-      {notes.length > 0 ? (
+        <Link
+          href="/notes?filter=untagged"
+          className={
+            filter === 'untagged' ? 'text-accent' : 'text-muted hover:text-accent'
+          }
+        >
+          untagged
+        </Link>
+
+        <Link
+          href="/notes?filter=unreviewed"
+          className={
+            filter === 'unreviewed' ? 'text-accent' : 'text-muted hover:text-accent'
+          }
+        >
+          unreviewed
+        </Link>
+      </nav>
+
+      {notes.length === 0 ? (
+        <p className="text-sm text-muted">Nothing here yet.</p>
+      ) : (
         <ul className="divide-y divide-rule border-y border-rule">
-          {notes.map((n) => (
-            <li key={n.id} className="py-4 space-y-1 text-sm">
-              <Link
-                href={`/books/${n.book_id}`}
-                className="text-xs text-muted hover:text-accent"
-              >
-                {n.book_author ?? '—'}, <span className="italic">{n.book_title}</span>
-                {n.printed_page !== null ? `, ${n.printed_page}` : null}
-              </Link>
-
-              {n.quote ? (
-                <blockquote className="border-l-2 border-rule pl-3 italic">
-                  {n.quote}
-                </blockquote>
-              ) : null}
-
-              <p className="whitespace-pre-wrap">{n.body}</p>
-
-              <div className="flex flex-wrap gap-x-3 text-xs text-muted">
-                {n.tags.map((t) => (
-                  <Link
-                    key={t}
-                    href={`/notes?tag=${encodeURIComponent(t)}`}
-                    className="hover:text-accent"
-                  >
-                    #{t}
-                  </Link>
-                ))}
-                {n.origin === 'assistant' ? (
-                  <span className={n.reviewed ? '' : 'text-accent'}>
-                    {n.reviewed
-                      ? 'assistant draft, reviewed'
-                      : 'assistant draft, unreviewed'}
-                  </span>
-                ) : null}
-              </div>
-            </li>
+          {notes.map((note) => (
+            <NoteCard key={note.id} note={note} showBook />
           ))}
         </ul>
-      ) : null}
+      )}
     </div>
   );
 }
