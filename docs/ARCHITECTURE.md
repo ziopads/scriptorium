@@ -1,6 +1,6 @@
 # Scriptorium — architecture
 
-**Version:** 0.3
+**Version:** 0.4
 **Date:** 2026-09-08
 **Status:** draft
 **Scope:** How the thing is built. What it has to do is in `REQUIREMENTS.md`;
@@ -10,6 +10,9 @@ what was rejected during the original design conversation is in `HANDOFF.md`.
 
 ## Changelog
 
+- **0.4** (2026-09-08) — Triage run over 42 files. §4 rewritten from measurement
+  rather than estimate: the corpus is about a quarter of the assumed size, and
+  the storage ceiling that shaped the schema does not bind.
 - **0.3** (2026-09-08) — Schema applied to the Neon production branch: 19
   statements, 87 ms. Both outstanding schema uncertainties closed by the run.
   `pg_trgm` is available on Neon, and Postgres accepted the generated `tsv`
@@ -104,38 +107,37 @@ is pennies and seconds.
 
 ## 4. Storage budget
 
-The 0.5 GB Neon free-plan ceiling is the constraint that shapes the schema.
+Measured, not estimated. `pipeline/triage.py` over the 42 files in hand: 8,568
+pages, 18.8 million characters, about 4.7 million tokens. The original design
+assumed 70 MB of text; it is 18 MB. At a 400-word target that is roughly 9,000
+chunks rather than 27,000.
 
-| | Naive | As designed |
-|---|---|---|
-| Page text | 70 MB in Postgres | 0 — lives in R2 |
-| Chunk text | ~80 MB | ~80 MB |
-| Vectors | 110 MB at 1024 dims | ~55 MB at 512 dims |
-| Vector index | ~110 MB | ~55 MB |
-| Full-text index | ~40 MB | ~40 MB |
-| **Total** | **~410 MB** | **~230 MB** |
+| | Measured, 1024 dimensions |
+|---|---|
+| Page text | 18 MB |
+| Chunk text | ~21 MB |
+| Vectors | ~37 MB |
+| Vector index | ~37 MB |
+| Full-text index | ~10 MB |
+| **Total** | **~125 MB** |
 
-Three levers produced the second column, and they are independent:
+Even doubled for the full 85-book list rather than the 42 files in hand, that
+sits inside Neon's 0.5 GB free-plan ceiling with room to spare. **The storage
+constraint that shaped this design does not bind.** Three consequences:
 
-1. **Pages in R2.** The handoff already treats pages as the durable artifact and
-   the database as derived, so this follows the design rather than bending it.
-   One JSON object per book. `expand_context` fetches the book's object and
-   slices the requested page range. If per-book fetch latency becomes annoying,
-   the fallback is one object per page, which R2's free operation allowances
-   absorb without difficulty.
-2. **512 dimensions rather than 1024.** On a corpus of this size, embedding
-   dimension will not be what limits retrieval quality. Voyage's models expose
-   256, 512, 1024, and 2048.
-3. **`halfvec`.** pgvector's 16-bit float column halves vector storage again.
-   Confirmed available on Neon, on every plan, and indexable by Hierarchical
-   Navigable Small World (HNSW) up to 4,000 dimensions against 2,000 for the
-   ordinary `vector` type.
+1. **Embedding dimension is no longer expensive.** 1024 is affordable, so the
+   choice follows retrieval quality rather than arithmetic.
+2. **`halfvec` stays in reserve**, and is now unlikely to be needed. It remains
+   available: pgvector 0.8.6 on this project, HNSW-indexable to 4,000
+   dimensions against 2,000 for the ordinary `vector` type.
+3. **Pages still live in R2, but now by design rather than by necessity.** Pages
+   are the durable artifact and the database is derived from them; keeping that
+   division visible in the infrastructure is worth more than the 18 MB it saves.
+   One JSON object per book; `expand_context` fetches it and slices the page
+   range.
 
-Lever 3 is held in reserve. If the corpus lands larger than estimated, it buys
-another 55 MB without touching anything else.
-
-Overrunning the free plan is not a cliff. Neon's Launch plan has no monthly
-minimum, storage at $0.35 per GB-month; 400 MB is about fourteen cents a month.
+Overrunning the free plan was never a cliff in any case. Neon's Launch plan has
+no monthly minimum, storage at $0.35 per GB-month.
 
 ## 5. Schema
 
@@ -319,15 +321,27 @@ Recalled and **not** verified, flagged for checking before it matters:
 - The output dimensions and multilingual quality of Voyage's current generation.
   The published dimension options belonged to the previous generation; confirm
   against Voyage's own documentation before `chunks.embedding` is declared.
-- Word and token counts for the corpus, which come from the handoff's estimate
-  rather than from measurement.
+- Word and token counts for the corpus — **now measured**. See §4: 8,568 pages
+  and 18.8 million characters across 42 files, 34 with a usable text layer and
+  492 pages needing optical character recognition.
+- **Raised by the triage, not yet resolved:** several files are excerpts rather
+  than whole volumes, three are separate chapters of one title, and one title
+  appears twice under different filenames. `books.source_path` assumes one file
+  per book and does not accommodate this. See §12.
 
 ## 12. Open items
 
-1. The extraction triage (`REQUIREMENTS.md` §8.1). Blocks the storage estimate
-   as well as the schedule.
-2. Authentication for the web application (§8.8).
-3. Embedding model and dimension (§8.5), which fixes `chunks.embedding`.
-4. Whether `expand_context` fetches per book or per page from R2. Decide after
+1. **One book, several files.** The triage found three separate PDFs covering
+   one title, and several files that are excerpts rather than whole volumes.
+   `books.source_path` is a single column. Either the files are concatenated
+   before extraction, or a `sources` table carries one row per file with its own
+   `page_offset`. The second is correct; the first is faster and covers about
+   five books.
+2. Embedding model and dimension (`REQUIREMENTS.md` §8.5), which fixes
+   `chunks.embedding`. No longer constrained by storage.
+3. Whether `expand_context` fetches per book or per page from R2. Decide after
    measuring one fetch.
-5. Position card schema (§8.4), to be settled with her.
+4. Position card schema (§8.4), to be settled with her. Now reachable before the
+   exam, since the corpus is 81 percent text-layer.
+5. Which files in the corpus folder are not on the reading list, and whether
+   they are ingested anyway as dissertation material.
