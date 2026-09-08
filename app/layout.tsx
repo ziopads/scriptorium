@@ -59,7 +59,7 @@ export default async function RootLayout({ children }: LayoutProps<'/'>) {
 
         <footer className="border-t border-rule">
           <div className="mx-auto max-w-5xl px-6 py-4 text-xs text-muted">
-            Comprehensive exams, the exam date
+            Reading list, bibliography, and notes
           </div>
         </footer>
       </body>

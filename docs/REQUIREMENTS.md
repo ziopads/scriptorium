@@ -1,6 +1,6 @@
 # Scriptorium — requirements
 
-**Version:** 0.6
+**Version:** 0.7
 **Date:** 2026-09-08
 **Status:** draft
 **Scope:** What the application has to do. What was considered and rejected is in
@@ -10,6 +10,10 @@
 
 ## Changelog
 
+- **0.7** (2026-09-08) — Identifying detail removed: the reader's name,
+  institution, programme, dissertation title, exam date, and the source
+  filename. The reader is "the reader" throughout. Horizon marks keep their
+  month labels, which describe build phases rather than her calendar.
 - **0.6** (2026-09-08) — §8.8 resolved: Neon Auth (Managed Better Auth) with an
   application-side allowlist. Records what was checked about credential storage,
   and what remains a matter of trusting the vendor.
@@ -22,13 +26,13 @@
   one piece of Vivarium's scaffold that would have transferred intact.
 - **0.4** (2026-09-08) — Horizon marks changed from `[C]`/`[D]` to month labels.
   `Sept` marks what has to exist while she is still reading; `Oct` marks the two
-  stories that could land by 12 October if the triage allows; dissertation-horizon
+  stories that could land by the exam if the triage allows; dissertation-horizon
   stories are unmarked. Removes the collision between the `[C]` mark and the
   `C-` catalogue identifiers.
 - **0.3** (2026-09-08) — Horizon marks relabelled from `[E]` to `[C]` for comps.
   Alphabetical order now matches chronology: comps demonstrate readiness to
   pursue the dissertation. "Exam slice" renamed "comps slice" throughout.
-- **0.2** (2026-09-08) — Exam date confirmed: the exam date. §4 reorganised by
+- **0.2** (2026-09-08) — Exam date confirmed. §4 reorganised by
   horizon, with the dissertation as the design target and comps as an
   opportunistic early slice. Added N-9 (notes taken before a book is extracted).
   Open decisions reordered; the split between text-layer PDFs and scans is now
@@ -52,17 +56,17 @@ dissertation.
 
 ## 2. Users
 
-**the reader** — doctoral candidate, Spanish & Portuguese, the university.
-The reader. Works in Chicago 17th edition and has named citation accuracy and
-citation auditing as an explicit priority in her own practice. Should be able to
-use every part of this without a terminal.
+**The reader** — a doctoral candidate preparing for comprehensive exams. Works in
+Chicago 17th edition and has named citation accuracy and citation auditing as an
+explicit priority in her own practice. Should be able to use every part of this
+without a terminal.
 
-**James Haskins** — builds and operates it. Runs ingest, extraction, chunking,
+**The developer** — builds and operates it. Runs ingest, extraction, chunking,
 and embedding. Whether operation stays with him permanently is open (§8.6).
 
 ## 3. The corpus as it stands
 
-Measured from `Listas_de_examenes_the reader_Octubre_2026.docx`, 8 September 2026.
+Measured from the supplied reading list.
 
 | List | Entries |
 |---|---|
@@ -79,7 +83,7 @@ in two volumes. The list is three lists, which the `exam_lists` and `list_items`
 tables already anticipate.
 
 Bibliographic completeness is uneven. Around a dozen entries carry no publisher
-or year. One carries the reader's own query, `[?] confirmar editorial`, on
+or year. One carries a query from the source list, `[?] confirmar editorial`, on
 Edmundo Delgado's *Witch Stories of New Mexico*. At least one attribution is
 wrong: *Along the Archival Grain* is Ann Laura Stoler, and the list has "Soler,
 Ana Laura." Bibliographic entry at ingest is therefore partly a correction pass,
@@ -103,19 +107,18 @@ in the region of two years, and will use this against her own drafting for
 longer than she will use it against the exam. Every schema decision is made for
 that horizon.
 
-**Comps are on the exam date**, thirty-four days from this draft. Whatever
-lands by then is a gain. Two rules follow, and they matter more than any
-sequencing:
+**The exam is roughly four weeks from this draft.** Whatever lands by then is a
+gain. Two rules follow, and they matter more than any sequencing:
 
 1. Nothing is compromised to reach the date. No schema shortcut, no skipped
    `page_offset`, no bibliography entered fast and wrong. A record entered wrong
-   in September is cited wrong for two years.
+   now is cited wrong for two years.
 2. The comps slice is chosen so that failing to finish it costs nothing. Every
    story marked `Sept` below is useful on its own and is not a partial version
    of something else.
 
 Stories that have to exist while she is still reading are marked `Sept`. The two
-that could land by 12 October if the triage allows are marked `Oct`. Everything
+that could land by the exam if the triage allows are marked `Oct`. Everything
 unmarked belongs to the dissertation horizon. The marks are about *when the
 story pays back*, not about difficulty.
 
@@ -127,8 +130,8 @@ extracted.
 
 That is the whole argument for the slice. Extraction is the long pole and its
 length is unknown until the scan-against-text-layer split is measured (§8.1). If
-that measurement comes back badly, the catalogue and the notes still ship in
-early October and she still gets thirty days of use out of them. If it comes
+that measurement comes back badly, the catalogue and the notes still ship well
+before the exam and she still gets a month of use out of them. If it comes
 back well, position cards for the Theory list become reachable and are the most
 direct exam preparation in the project.
 
@@ -311,9 +314,9 @@ position cards already impose, and doubling it defeats the point.
 
 ## 7. Out of scope
 
-- The dissertation's field material. *the dissertation*
-  privileges oral tradition and lived community as primary sources. This tool
-  serves the exam list, which is books.
+- The dissertation's field material. The dissertation privileges oral tradition
+  and lived community as primary sources. This tool serves the exam list, which
+  is books.
 - Page-level control numbers, redaction codes, and cross-production duplicate
   alignment. Those belong to Inquest and its FOIA corpus, and the two
   applications stay separate.
@@ -325,8 +328,7 @@ position cards already impose, and doubling it defeats the point.
 ## 8. Decisions
 
 Resolved items are marked and kept in place; the numbering does not change, so
-cross-references elsewhere in this document still resolve. The exam date is
-settled: **the exam date**.
+cross-references elsewhere in this document still resolve.
 
 1. **The split between text-layer PDFs and scans.** Now the blocking
    measurement, because it decides whether F-1 is reachable before the exam. A

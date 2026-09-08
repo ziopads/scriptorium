@@ -40,3 +40,6 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 .neon
+
+# design record, kept locally rather than in the repo
+docs/HANDOFF.md

@@ -1,7 +1,7 @@
 -- Scriptorium — book seed
 --
--- Transcribed from Listas_de_examenes_the reader_Octubre_2026.docx on 8 September 2026.
--- Generated, not hand-typed. Re-runnable: every statement is an upsert.
+-- Transcribed from the supplied reading list. Generated, not hand-typed.
+-- Re-runnable: every statement is an upsert.
 --
 -- TRANSCRIPTION RULES
 --
@@ -11,7 +11,7 @@
 --
 --   Two known errors are corrected, each flagged in notes_internal on its row:
 --   "Soler, Ana Laura" -> Ann Laura Stoler, and "Ebrigh, Malcom" -> Malcolm
---   Ebright. Her own query on the Edmundo Delgado entry is preserved as written.
+--   Ebright. A query on the Edmundo Delgado entry is preserved as written.
 --
 --   Names printed first-name-first are inverted, because Chicago bibliography
 --   form and lib/citation.ts both expect "Last, First".
@@ -110,7 +110,7 @@ values
    2003, '2.ª ed.', 'en,es', null),
   ('delgado-witch-stories-new-mexico-1994', 'Witch Stories of New Mexico / Brujas de Nuevo México', null, 'Delgado, Edmundo',
    null, null, 'Sunstone Press', null,
-   1994, null, 'en,es', 'Her own query on the entry: "[?] confirmar editorial". Publisher unconfirmed.'),
+   1994, null, 'en,es', 'Source list carried the query "[?] confirmar editorial". Publisher unconfirmed.'),
   ('espinosa-cuentos-de-cuanto-hay-1998', 'Cuentos de cuanto hay / Tales from Spanish New Mexico', null, null,
    'Hayes, Joe', 'Espinosa, J. Manuel', 'University of New Mexico Press', null,
    1998, null, 'en,es', 'Espinosa is recopilador; Joe Hayes edited and translated. Illustrations by William Rotsaert.'),

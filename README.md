@@ -5,9 +5,9 @@ comprehensive exam list as text, keeps a correct bibliographic record for each,
 and exposes both to search, to notes, and to a conversational assistant reached
 over the Model Context Protocol.
 
-Built for the reader, doctoral candidate in Spanish & Portuguese at CU
-the university. Comprehensive exams are the exam date; the dissertation that follows
-is the horizon the design is actually aimed at.
+The design target is the dissertation that follows the exams, a horizon of
+roughly two years. The exam itself is an early slice: whatever is ready by then
+is a gain, and nothing is compromised to reach it.
 
 ## Where the thinking is written down
 
@@ -18,7 +18,10 @@ reasoning behind decisions that already look settled.
 |---|---|
 | `docs/REQUIREMENTS.md` | What it has to do. User stories with stable identifiers, decisions and their reasons, acceptance criteria. |
 | `docs/ARCHITECTURE.md` | How it is built. Storage budget, schema departures, the MCP surface, and a section separating what was verified from what is recalled. |
-| `docs/HANDOFF.md` | The original design conversation, including what was rejected and why. |
+
+A third document, `docs/HANDOFF.md`, records the original design conversation
+including what was rejected and why. It is deliberately untracked — it carries
+identifying detail and nothing in the codebase depends on it.
 
 ## Stack
 
@@ -136,7 +139,7 @@ hand through a Claude subscription and entered as reviewed text.
 **Explicit environment files.** `node --env-file=...`, never an implicit default.
 Files are named at `git add`; never `git add -A`.
 
-## State, September 2026
+## State
 
 Working: sign-in behind a two-address allowlist, the catalogue, list membership,
 the Chicago citation forms, reading status, the edit form, and the gaps page for

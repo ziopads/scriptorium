@@ -227,7 +227,7 @@ create index if not exists chunks_section_idx   on chunks (section_type);
 --     on chunks using hnsw (embedding vector_cosine_ops);
 
 -- ---------------------------------------------------------------------------
--- Seed: the four lists from Listas_de_examenes_the reader_Octubre_2026.docx
+-- Seed: the four lists from the source reading list
 -- ---------------------------------------------------------------------------
 
 insert into exam_lists (id, name, description, sort) values
