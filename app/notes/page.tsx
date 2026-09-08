@@ -61,6 +61,12 @@ export default async function NotesPage({
         >
           Search
         </button>
+        <a
+          href="/api/export/notes"
+          className="ml-auto self-center text-xs text-muted hover:text-accent"
+        >
+          Download CSV
+        </a>
       </form>
 
       <nav className="flex flex-wrap gap-x-3 gap-y-1 text-sm">

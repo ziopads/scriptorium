@@ -116,6 +116,22 @@ export async function updateImprint(
   `;
 }
 
+// Every list membership in one query. The export needs list names for all 85
+// books, and calling listsForBook() per book would be 85 separate HTTP round
+// trips through the Neon driver.
+export async function allListMemberships(): Promise<
+  { book_id: string; name: string; rationale: string | null }[]
+> {
+  const sql = db();
+  const rows = await sql`
+    select li.book_id, el.name, li.rationale
+    from list_items li
+    join exam_lists el on el.id = li.list_id
+    order by el.sort
+  `;
+  return rows as { book_id: string; name: string; rationale: string | null }[];
+}
+
 // Which lists a book sits on, with the rationale for each membership (C-5).
 export async function listsForBook(bookId: string): Promise<BookListEntry[]> {
   const sql = db();
