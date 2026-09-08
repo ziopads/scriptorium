@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
-import { changeStatus } from '@/lib/actions';
+import { addNote, changeStatus, removeNote } from '@/lib/actions';
 import { requireAllowedUser } from '@/lib/auth/guard';
 import { getBook, listsForBook } from '@/lib/books';
 import { formatBibliography, formatNote } from '@/lib/citation';
@@ -139,8 +139,9 @@ export default async function BookPage({
         </form>
       </section>
 
-      <section className="space-y-2">
+      <section className="space-y-4">
         <h2 className="text-base">Notes</h2>
+
         {notes.length === 0 ? (
           <p className="text-sm text-muted">None yet.</p>
         ) : (
@@ -152,19 +153,84 @@ export default async function BookPage({
                     {n.quote}
                   </blockquote>
                 ) : null}
-                <p>{n.body}</p>
-                <p className="text-xs text-muted">
-                  {n.printed_page !== null ? `p. ${n.printed_page}` : 'no page'}
-                  {n.origin === 'assistant'
-                    ? n.reviewed
-                      ? ' · assistant draft, reviewed'
-                      : ' · assistant draft, unreviewed'
-                    : null}
-                </p>
+                <p className="whitespace-pre-wrap">{n.body}</p>
+
+                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs text-muted">
+                  <span>
+                    {n.printed_page !== null ? `p. ${n.printed_page}` : 'no page'}
+                  </span>
+
+                  {n.tags.map((tag) => (
+                    <Link
+                      key={tag}
+                      href={`/notes?tag=${encodeURIComponent(tag)}`}
+                      className="hover:text-accent"
+                    >
+                      #{tag}
+                    </Link>
+                  ))}
+
+                  {n.origin === 'assistant' ? (
+                    <span className={n.reviewed ? '' : 'text-accent'}>
+                      {n.reviewed
+                        ? 'assistant draft, reviewed'
+                        : 'assistant draft, unreviewed'}
+                    </span>
+                  ) : null}
+
+                  <form action={removeNote} className="ml-auto">
+                    <input type="hidden" name="id" value={n.id} />
+                    <input type="hidden" name="book_id" value={book.id} />
+                    <button type="submit" className="hover:text-accent">
+                      Delete
+                    </button>
+                  </form>
+                </div>
               </li>
             ))}
           </ul>
         )}
+
+        <form action={addNote} className="space-y-3 border-t border-rule pt-4">
+          <input type="hidden" name="book_id" value={book.id} />
+
+          <label className="block space-y-1">
+            <span className="text-sm">Note</span>
+            <textarea name="body" rows={4} required />
+          </label>
+
+          <label className="block space-y-1">
+            <span className="text-sm">Quotation</span>
+            <textarea name="quote" rows={2} />
+            <span className="block text-xs text-muted">
+              Verbatim. This is what re-locates the note if the book is extracted
+              later, so type it as printed.
+            </span>
+          </label>
+
+          <div className="flex flex-wrap items-end gap-3">
+            <label className="w-28 space-y-1">
+              <span className="text-sm">Page</span>
+              <input type="number" name="printed_page" />
+            </label>
+
+            <label className="min-w-56 flex-1 space-y-1">
+              <span className="text-sm">Tags</span>
+              <input type="text" name="tags" placeholder="comma, separated" />
+            </label>
+
+            <button
+              type="submit"
+              className="border border-accent px-4 py-1.5 text-sm text-accent hover:bg-accent hover:text-background"
+            >
+              Add note
+            </button>
+          </div>
+
+          <p className="text-xs text-muted">
+            The page is the printed folio, not the file page.
+          </p>
+        </form>
       </section>
     </div>
   );

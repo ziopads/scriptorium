@@ -22,6 +22,7 @@ import {
   updateImprint,
   upsertBook,
 } from '@/lib/books';
+import { createNote, deleteNote, updateNote } from '@/lib/notes';
 import type { Book, BookInput } from '@/lib/types';
 
 function text(form: FormData, key: string): string | null {
@@ -135,4 +136,86 @@ export async function leaveList(form: FormData): Promise<void> {
 
   revalidatePath('/');
   revalidatePath(`/books/${id}`);
+}
+
+// ---------------------------------------------------------------------------
+// Notes
+// ---------------------------------------------------------------------------
+
+// Tags arrive as one comma-separated field rather than a tag widget. She is
+// typing while reading, and a text input costs nothing to learn. Duplicates and
+// case differences are folded here so that the tag index does not accumulate
+// three spellings of the same word.
+function tags(form: FormData): string[] {
+  const raw = text(form, 'tags');
+  if (!raw) return [];
+
+  const seen = new Set<string>();
+  for (const tag of raw.split(',')) {
+    const trimmed = tag.trim().toLowerCase();
+    if (trimmed) seen.add(trimmed);
+  }
+  return [...seen];
+}
+
+export async function addNote(form: FormData): Promise<void> {
+  await requireAllowedUser();
+
+  const bookId = text(form, 'book_id');
+  const body = text(form, 'body');
+
+  if (!bookId) throw new Error('addNote called without a book_id.');
+  if (!body) throw new Error('A note needs a body.');
+
+  // origin defaults to 'human' and reviewed follows from it. Only the
+  // draft_note MCP tool will pass 'assistant'.
+  await createNote({
+    book_id: bookId,
+    body,
+    quote: text(form, 'quote'),
+    printed_page: number(form, 'printed_page'),
+    tags: tags(form),
+  });
+
+  revalidatePath(`/books/${bookId}`);
+  revalidatePath('/notes');
+}
+
+export async function editNote(form: FormData): Promise<void> {
+  await requireAllowedUser();
+
+  const id = number(form, 'id');
+  const bookId = text(form, 'book_id');
+  const body = text(form, 'body');
+
+  if (id === null) throw new Error('editNote called without an id.');
+  if (!body) throw new Error('A note needs a body.');
+
+  // Editing sets reviewed and leaves origin alone, so an assistant draft she
+  // has corrected still records where its first sentence came from.
+  await updateNote(id, {
+    body,
+    quote: text(form, 'quote'),
+    printed_page: number(form, 'printed_page'),
+    tags: tags(form),
+  });
+
+  if (bookId) revalidatePath(`/books/${bookId}`);
+  revalidatePath('/notes');
+}
+
+// Deletion exists here and will have no counterpart on the MCP server. Removing
+// her own writing stays in the application, where an accidental tool call
+// cannot reach it.
+export async function removeNote(form: FormData): Promise<void> {
+  await requireAllowedUser();
+
+  const id = number(form, 'id');
+  const bookId = text(form, 'book_id');
+  if (id === null) throw new Error('removeNote called without an id.');
+
+  await deleteNote(id);
+
+  if (bookId) revalidatePath(`/books/${bookId}`);
+  revalidatePath('/notes');
 }
