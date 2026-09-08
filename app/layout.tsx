@@ -14,6 +14,13 @@ export const metadata: Metadata = {
   description: 'Reading list, bibliography, and notes.',
 };
 
+// The layout reads the session to decide whether to show a name and a sign-out
+// button, which means every route touches cookies. Declaring that here stops
+// Next attempting to prerender /_not-found and /auth/sign-in and reporting the
+// fallback as an error on every build. Nothing was static anyway — every page
+// queries the database.
+export const dynamic = 'force-dynamic';
+
 const NAV = [
   { href: '/', label: 'Lists' },
   { href: '/books', label: 'Catalogue' },
