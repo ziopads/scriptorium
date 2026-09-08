@@ -1,12 +1,17 @@
 import Link from 'next/link';
 
 import { saveImprint } from '@/lib/actions';
+import { requireAllowedUser } from '@/lib/auth/guard';
 import { incompleteBooks } from '@/lib/books';
+
+export const dynamic = 'force-dynamic';
 
 // One row per incomplete record, each its own form, so a save writes one book
 // and leaves the page where it was. The point of this screen is working down a
 // list of twenty without navigating away from it.
 export default async function GapsPage() {
+  await requireAllowedUser();
+
   const entries = await incompleteBooks();
 
   return (

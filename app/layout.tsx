@@ -3,6 +3,9 @@ import Link from 'next/link';
 import { Geist, Geist_Mono } from 'next/font/google';
 import './globals.css';
 
+import { signOut } from '@/app/auth/sign-in/actions';
+import { getAllowedUser } from '@/lib/auth/guard';
+
 const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] });
 const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] });
 
@@ -17,7 +20,11 @@ const NAV = [
   { href: '/gaps', label: 'Gaps' },
 ];
 
-export default function RootLayout({ children }: LayoutProps<'/'>) {
+export default async function RootLayout({ children }: LayoutProps<'/'>) {
+  // Display only. The guard that matters runs in each page and each Server
+  // Action; this just decides whether to show a name and a sign-out button.
+  const user = await getAllowedUser();
+
   return (
     <html
       lang="en"
@@ -36,6 +43,15 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
                 </Link>
               ))}
             </nav>
+
+            {user ? (
+              <form action={signOut} className="ml-auto flex items-baseline gap-3 text-sm">
+                <span className="text-muted">{user.name ?? user.email}</span>
+                <button type="submit" className="text-muted hover:text-accent">
+                  Sign out
+                </button>
+              </form>
+            ) : null}
           </div>
         </header>
 

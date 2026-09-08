@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { changeStatus } from '@/lib/actions';
+import { requireAllowedUser } from '@/lib/auth/guard';
 import { getBook, listsForBook } from '@/lib/books';
 import { formatBibliography, formatNote } from '@/lib/citation';
 import { listNotesForBook } from '@/lib/notes';
@@ -25,11 +26,15 @@ function Field({ label, value }: { label: string; value: string | number | null 
   );
 }
 
+export const dynamic = 'force-dynamic';
+
 export default async function BookPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
+  await requireAllowedUser();
+
   const { id } = await params;
 
   const book = await getBook(id);

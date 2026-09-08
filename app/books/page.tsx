@@ -1,13 +1,18 @@
 import Link from 'next/link';
 
+import { requireAllowedUser } from '@/lib/auth/guard';
 import { listBooks, listBooksInList, listExamLists } from '@/lib/books';
 import { formatBibliography } from '@/lib/citation';
+
+export const dynamic = 'force-dynamic';
 
 export default async function BooksPage({
   searchParams,
 }: {
   searchParams: Promise<{ list?: string }>;
 }) {
+  await requireAllowedUser();
+
   const { list } = await searchParams;
 
   const [lists, books] = await Promise.all([

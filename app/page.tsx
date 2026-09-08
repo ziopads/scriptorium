@@ -1,12 +1,17 @@
 import Link from 'next/link';
 
+import { requireAllowedUser } from '@/lib/auth/guard';
 import {
   booksWithoutSource,
   incompleteBooks,
   listExamListsWithCounts,
 } from '@/lib/books';
 
+export const dynamic = 'force-dynamic';
+
 export default async function HomePage() {
+  await requireAllowedUser();
+
   const [lists, incomplete, unsourced] = await Promise.all([
     listExamListsWithCounts(),
     incompleteBooks(),

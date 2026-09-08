@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { saveBook } from '@/lib/actions';
+import { requireAllowedUser } from '@/lib/auth/guard';
 import { getBook } from '@/lib/books';
 
 const STATUSES = ['unread', 'reading', 'read'] as const;
@@ -29,11 +30,15 @@ function Row({
   );
 }
 
+export const dynamic = 'force-dynamic';
+
 export default async function EditBookPage({
   params,
 }: {
   params: Promise<{ id: string }>;
 }) {
+  await requireAllowedUser();
+
   const { id } = await params;
 
   const book = await getBook(id);

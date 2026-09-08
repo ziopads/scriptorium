@@ -14,6 +14,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 
+import { requireAllowedUser } from '@/lib/auth/guard';
 import {
   addToList,
   removeFromList,
@@ -41,6 +42,8 @@ function number(form: FormData, key: string): number | null {
 // it is the primary key, notes and chunks will reference it, and it appears in
 // URLs. Changing one is a migration, not a form field.
 export async function saveBook(form: FormData): Promise<void> {
+  await requireAllowedUser();
+
   const id = text(form, 'id');
   const title = text(form, 'title');
 
@@ -78,6 +81,8 @@ export async function saveBook(form: FormData): Promise<void> {
 // One row of the gaps table. Stays on the page afterwards, because the point of
 // that screen is working down a list without navigating.
 export async function saveImprint(form: FormData): Promise<void> {
+  await requireAllowedUser();
+
   const id = text(form, 'id');
   if (!id) throw new Error('saveImprint called without an id.');
 
@@ -94,6 +99,8 @@ export async function saveImprint(form: FormData): Promise<void> {
 }
 
 export async function changeStatus(form: FormData): Promise<void> {
+  await requireAllowedUser();
+
   const id = text(form, 'id');
   const status = text(form, 'status') as Book['status'] | null;
   if (!id || !status) throw new Error('changeStatus needs an id and a status.');
@@ -105,6 +112,8 @@ export async function changeStatus(form: FormData): Promise<void> {
 }
 
 export async function joinList(form: FormData): Promise<void> {
+  await requireAllowedUser();
+
   const id = text(form, 'id');
   const listId = text(form, 'list_id');
   if (!id || !listId) throw new Error('joinList needs an id and a list_id.');
@@ -116,6 +125,8 @@ export async function joinList(form: FormData): Promise<void> {
 }
 
 export async function leaveList(form: FormData): Promise<void> {
+  await requireAllowedUser();
+
   const id = text(form, 'id');
   const listId = text(form, 'list_id');
   if (!id || !listId) throw new Error('leaveList needs an id and a list_id.');
