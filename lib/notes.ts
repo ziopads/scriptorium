@@ -8,7 +8,7 @@
 // (N-9).
 
 import { db } from '@/lib/db';
-import type { Note, NoteInput, NoteWithBook } from '@/lib/types';
+import type { Note, NoteInput, NoteRevision, NoteWithBook } from '@/lib/types';
 
 export async function listNotesForBook(bookId: string): Promise<Note[]> {
   const sql = db();
@@ -138,6 +138,16 @@ export async function createNote(input: NoteInput): Promise<Note> {
 //
 // Editing always sets reviewed and leaves origin alone, so the record of where
 // a sentence came from survives the edit while its status changes.
+//
+// The previous state is copied into note_revisions in the same statement. A
+// data-modifying common table expression and the outer update both read the
+// same snapshot, so the CTE sees the row as it was before the update — which is
+// what makes this safe over the HTTP driver, where two separate calls would not
+// share a transaction.
+//
+// The `where` inside the CTE means an edit that changes nothing writes no
+// revision. Opening the edit form and pressing Save should not manufacture
+// history.
 export async function updateNote(
   id: number,
   fields: {
@@ -149,6 +159,20 @@ export async function updateNote(
 ): Promise<Note> {
   const sql = db();
   const rows = (await sql`
+    with previous as (
+      insert into note_revisions
+        (note_id, body, quote, printed_page, tags, origin, reviewed, written_at)
+      select id, body, quote, printed_page, tags, origin, reviewed, updated_at
+      from notes
+      where id = ${id}
+        and (
+          body is distinct from ${fields.body}
+          or quote is distinct from ${fields.quote}
+          or printed_page is distinct from ${fields.printed_page}
+          or tags is distinct from ${fields.tags}
+        )
+      returning note_id
+    )
     update notes set
       body         = ${fields.body},
       quote        = ${fields.quote},
@@ -160,6 +184,32 @@ export async function updateNote(
     returning *
   `) as Note[];
   return rows[0];
+}
+
+// The superseded states of one note, newest first. Read on demand rather than
+// joined into every note query — most notes will never have been edited.
+export async function listRevisions(noteId: number): Promise<NoteRevision[]> {
+  const sql = db();
+  const rows = await sql`
+    select id, note_id, body, quote, printed_page, tags, origin, reviewed,
+           written_at, superseded_at
+    from note_revisions
+    where note_id = ${noteId}
+    order by superseded_at desc
+  `;
+  return rows as NoteRevision[];
+}
+
+// How many times each note has been edited, for the whole page at once. One
+// query rather than one per note.
+export async function revisionCounts(): Promise<Map<number, number>> {
+  const sql = db();
+  const rows = (await sql`
+    select note_id, count(*)::int as count
+    from note_revisions
+    group by note_id
+  `) as { note_id: number; count: number }[];
+  return new Map(rows.map((r) => [r.note_id, r.count]));
 }
 
 // Deletion lives here and has no counterpart on the MCP route. Correction and

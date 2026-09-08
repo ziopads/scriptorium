@@ -83,6 +83,21 @@ export type NoteInput = {
   origin?: NoteOrigin;
 };
 
+// A superseded state of a note. Append-only: the current state lives in notes,
+// and this is what it used to be.
+export interface NoteRevision {
+  id: number;
+  note_id: number;
+  body: string;
+  quote: string | null;
+  printed_page: number | null;
+  tags: string[];
+  origin: NoteOrigin;
+  reviewed: boolean;
+  written_at: string;
+  superseded_at: string;
+}
+
 // A note with enough of its book to render a citation without a second query.
 export interface NoteWithBook extends Note {
   book_title: string;

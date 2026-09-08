@@ -1,7 +1,15 @@
 import Link from 'next/link';
 
 import { editNote, removeNote } from '@/lib/actions';
+import { listRevisions } from '@/lib/notes';
 import type { Note, NoteWithBook } from '@/lib/types';
+
+// Dates are shown as a plain ISO day. A relative form ("3 days ago") reads
+// nicely and is useless in a citation, which is the thing these notes are
+// eventually for.
+function day(value: string): string {
+  return value.slice(0, 10);
+}
 
 // One note, used on the book page and on /notes.
 //
@@ -15,13 +23,15 @@ function isWithBook(note: Note | NoteWithBook): note is NoteWithBook {
   return 'book_title' in note;
 }
 
-export function NoteCard({
+export async function NoteCard({
   note,
   showBook = false,
 }: {
   note: Note | NoteWithBook;
   showBook?: boolean;
 }) {
+  const revisions = await listRevisions(note.id);
+
   return (
     <li className="py-4 space-y-1 text-sm">
       {showBook && isWithBook(note) ? (
@@ -69,6 +79,17 @@ export function NoteCard({
               : 'assistant draft, unreviewed'}
           </span>
         ) : null}
+
+        <span className="ml-auto">
+          {day(note.created_at)}
+          {revisions.length > 0 ? (
+            <>
+              {' · edited '}
+              {day(note.updated_at)}
+              {revisions.length > 1 ? ` (${revisions.length} revisions)` : null}
+            </>
+          ) : null}
+        </span>
       </div>
 
       <details className="pt-1">
@@ -128,6 +149,32 @@ export function NoteCard({
             Delete this note
           </button>
         </form>
+
+        {revisions.length > 0 ? (
+          <div className="mt-4 border-l-2 border-rule pl-3">
+            <p className="text-xs uppercase tracking-wide text-muted">
+              Earlier versions
+            </p>
+            <ol className="mt-2 space-y-3">
+              {revisions.map((revision) => (
+                <li key={revision.id} className="space-y-1">
+                  <p className="text-xs text-muted">
+                    written {day(revision.written_at)}, replaced{' '}
+                    {day(revision.superseded_at)}
+                    {revision.origin === 'assistant'
+                      ? revision.reviewed
+                        ? ' · assistant draft, reviewed'
+                        : ' · assistant draft, unreviewed'
+                      : null}
+                  </p>
+                  <p className="whitespace-pre-wrap text-xs text-muted">
+                    {revision.body}
+                  </p>
+                </li>
+              ))}
+            </ol>
+          </div>
+        ) : null}
       </details>
     </li>
   );
