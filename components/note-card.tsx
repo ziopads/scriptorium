@@ -1,15 +1,9 @@
 import Link from 'next/link';
 
 import { editNote, removeNote } from '@/lib/actions';
+import { day } from '@/lib/dates';
 import { listRevisions } from '@/lib/notes';
 import type { Note, NoteWithBook } from '@/lib/types';
-
-// Dates are shown as a plain ISO day. A relative form ("3 days ago") reads
-// nicely and is useless in a citation, which is the thing these notes are
-// eventually for.
-function day(value: string): string {
-  return value.slice(0, 10);
-}
 
 // One note, used on the book page and on /notes.
 //

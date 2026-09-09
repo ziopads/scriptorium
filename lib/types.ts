@@ -4,6 +4,8 @@
 // would mean every query result needs mapping and every mismatch is a silent
 // undefined, which is a poor trade for one reader's application.
 
+import type { Timestamp } from '@/lib/dates';
+
 export type BookStatus = 'unread' | 'reading' | 'read';
 export type SourceFormat = 'pdf_text' | 'pdf_ocr' | 'epub' | 'none';
 export type NoteOrigin = 'human' | 'assistant';
@@ -30,8 +32,10 @@ export interface Book {
   vivarium_item_id: number | null;
   notes_internal: string | null;
 
-  created_at: string;
-  updated_at: string;
+  // The Neon driver parses timestamptz into a Date. Declaring these as string
+  // was a lie the compiler accepted and the runtime did not.
+  created_at: Timestamp;
+  updated_at: Timestamp;
 }
 
 // Everything except the generated and defaulted columns. Every bibliographic
@@ -70,8 +74,8 @@ export interface Note {
   tags: string[];
   origin: NoteOrigin;
   reviewed: boolean;
-  created_at: string;
-  updated_at: string;
+  created_at: Timestamp;
+  updated_at: Timestamp;
 }
 
 export type NoteInput = {
@@ -94,8 +98,8 @@ export interface NoteRevision {
   tags: string[];
   origin: NoteOrigin;
   reviewed: boolean;
-  written_at: string;
-  superseded_at: string;
+  written_at: Timestamp;
+  superseded_at: Timestamp;
 }
 
 // A note with enough of its book to render a citation without a second query.

@@ -2,6 +2,7 @@ import Link from 'next/link';
 
 import { NoteCard } from '@/components/note-card';
 import { requireAllowedUser } from '@/lib/auth/guard';
+import { day as localDay, readableDay } from '@/lib/dates';
 import {
   allTags,
   listAllNotes,
@@ -12,27 +13,6 @@ import {
 import type { NoteWithBook } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
-
-// Postgres returns timestamps in UTC and Vercel's runtime is UTC, so slicing
-// the first ten characters off created_at would file a note written at 7pm in
-// Boulder under the following day. That is precisely wrong for the thing this
-// grouping is for: returning to what she wrote on an afternoon she remembers.
-const ZONE = 'America/Denver';
-
-function localDay(value: string): string {
-  // en-CA formats as YYYY-MM-DD, which sorts correctly as a string.
-  return new Date(value).toLocaleDateString('en-CA', { timeZone: ZONE });
-}
-
-function readableDay(day: string): string {
-  return new Date(`${day}T12:00:00Z`).toLocaleDateString('en-US', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-    year: 'numeric',
-    timeZone: 'UTC',
-  });
-}
 
 // Notes across the whole corpus. This never touches chunks — it is the
 // September half of retrieval, and it works with no books extracted at all.

@@ -9,6 +9,11 @@
 function field(value: unknown): string {
   if (value === null || value === undefined) return '';
 
+  // The Neon driver parses timestamptz into a Date. String(date) would give
+  // "Mon Sep 08 2026 18:00:00 GMT+0000", which is unsortable in a spreadsheet
+  // and ambiguous everywhere else.
+  if (value instanceof Date) return value.toISOString();
+
   // Postgres arrays arrive as JS arrays; a semicolon keeps them readable in one
   // cell without colliding with the delimiter.
   const raw = Array.isArray(value) ? value.join('; ') : String(value);
