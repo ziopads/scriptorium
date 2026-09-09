@@ -58,8 +58,15 @@ export default async function HomePage() {
           </Link>{' '}
           are missing a field a Chicago entry needs.
         </p>
-        <p className="text-muted">
-          {unsourced.length} have no file yet, so nothing can be extracted from them.
+        <p>
+          <Link
+            href="/books?source=missing"
+            className="text-accent underline underline-offset-2"
+          >
+            {unsourced.length} titles
+          </Link>{' '}
+          have no file yet, so nothing can be extracted from them. That list is
+          the one to work down when hunting for copies.
         </p>
       </section>
     </div>

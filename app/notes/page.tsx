@@ -9,34 +9,90 @@ import {
   listUnreviewedNotes,
   searchNotes,
 } from '@/lib/notes';
+import type { NoteWithBook } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
+
+// Postgres returns timestamps in UTC and Vercel's runtime is UTC, so slicing
+// the first ten characters off created_at would file a note written at 7pm in
+// Boulder under the following day. That is precisely wrong for the thing this
+// grouping is for: returning to what she wrote on an afternoon she remembers.
+const ZONE = 'America/Denver';
+
+function localDay(value: string): string {
+  // en-CA formats as YYYY-MM-DD, which sorts correctly as a string.
+  return new Date(value).toLocaleDateString('en-CA', { timeZone: ZONE });
+}
+
+function readableDay(day: string): string {
+  return new Date(`${day}T12:00:00Z`).toLocaleDateString('en-US', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  });
+}
 
 // Notes across the whole corpus. This never touches chunks — it is the
 // September half of retrieval, and it works with no books extracted at all.
 export default async function NotesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tag?: string; q?: string; filter?: string }>;
+  searchParams: Promise<{ tag?: string; q?: string; filter?: string; day?: string }>;
 }) {
   await requireAllowedUser();
 
-  const { tag, q, filter } = await searchParams;
+  const { tag, q, filter, day } = await searchParams;
 
-  const notes =
+  // One query and derive the rest. At a few hundred notes the day index and the
+  // day filter are cheaper computed here than as extra round trips.
+  const everything = await listAllNotes();
+
+  const notes: NoteWithBook[] =
     filter === 'unreviewed'
       ? await listUnreviewedNotes()
       : filter === 'untagged'
-        ? (await listAllNotes()).filter((n) => n.tags.length === 0)
+        ? everything.filter((n) => n.tags.length === 0)
         : tag
           ? await listNotesByTag(tag)
           : q
             ? await searchNotes(q)
-            : await listAllNotes();
+            : day
+              ? everything.filter((n) => localDay(n.created_at) === day)
+              : everything;
 
   const tags = await allTags();
 
-  const heading = tag ? `#${tag}` : q ? `Search: ${q}` : filter ? filter : 'Notes';
+  const days = new Map<string, number>();
+  for (const note of everything) {
+    const key = localDay(note.created_at);
+    days.set(key, (days.get(key) ?? 0) + 1);
+  }
+  const dayList = [...days.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+
+  // Grouped by the day the note was written, but only in the unfiltered view —
+  // inside a tag or a search the grouping would fragment the result.
+  const grouped = !tag && !q && !filter && !day;
+  const byDay = new Map<string, NoteWithBook[]>();
+  if (grouped) {
+    for (const note of notes) {
+      const key = localDay(note.created_at);
+      const existing = byDay.get(key);
+      if (existing) existing.push(note);
+      else byDay.set(key, [note]);
+    }
+  }
+
+  const heading = tag
+    ? `#${tag}`
+    : q
+      ? `Search: ${q}`
+      : day
+        ? readableDay(day)
+        : filter
+          ? filter
+          : 'Notes';
 
   return (
     <div className="space-y-6">
@@ -72,7 +128,9 @@ export default async function NotesPage({
       <nav className="flex flex-wrap gap-x-3 gap-y-1 text-sm">
         <Link
           href="/notes"
-          className={!tag && !q && !filter ? 'text-accent' : 'text-muted hover:text-accent'}
+          className={
+            !tag && !q && !filter && !day ? 'text-accent' : 'text-muted hover:text-accent'
+          }
         >
           All
         </Link>
@@ -107,8 +165,41 @@ export default async function NotesPage({
         </Link>
       </nav>
 
+      {dayList.length > 1 ? (
+        <nav className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+          <span className="text-muted">By day:</span>
+          {dayList.slice(0, 30).map(([key, count]) => (
+            <Link
+              key={key}
+              href={`/notes?day=${key}`}
+              className={key === day ? 'text-accent' : 'text-muted hover:text-accent'}
+            >
+              {key}
+              <span className="ml-1 font-mono">{count}</span>
+            </Link>
+          ))}
+        </nav>
+      ) : null}
+
       {notes.length === 0 ? (
         <p className="text-sm text-muted">Nothing here yet.</p>
+      ) : grouped ? (
+        <div className="space-y-8">
+          {[...byDay.entries()].map(([key, dayNotes]) => (
+            <section key={key}>
+              <h2 className="mb-1 text-xs uppercase tracking-wide text-muted">
+                <Link href={`/notes?day=${key}`} className="hover:text-accent">
+                  {readableDay(key)}
+                </Link>
+              </h2>
+              <ul className="divide-y divide-rule border-y border-rule">
+                {dayNotes.map((note) => (
+                  <NoteCard key={note.id} note={note} showBook />
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
       ) : (
         <ul className="divide-y divide-rule border-y border-rule">
           {notes.map((note) => (

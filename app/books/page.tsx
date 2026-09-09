@@ -9,24 +9,35 @@ export const dynamic = 'force-dynamic';
 export default async function BooksPage({
   searchParams,
 }: {
-  searchParams: Promise<{ list?: string }>;
+  searchParams: Promise<{ list?: string; source?: string }>;
 }) {
   await requireAllowedUser();
 
-  const { list } = await searchParams;
+  const { list, source } = await searchParams;
 
-  const [lists, books] = await Promise.all([
+  const [lists, all] = await Promise.all([
     listExamLists(),
     list ? listBooksInList(list) : listBooks(),
   ]);
 
+  const books =
+    source === 'missing'
+      ? all.filter((b) => b.source_format === 'none')
+      : source === 'held'
+        ? all.filter((b) => b.source_format !== 'none')
+        : all;
+
+  const missingCount = all.filter((b) => b.source_format === 'none').length;
   const active = lists.find((l) => l.id === list);
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl mb-1">{active ? active.name : 'Catalogue'}</h1>
-        <p className="text-sm text-muted">{books.length} entries</p>
+        <p className="text-sm text-muted">
+          {books.length} entries
+          {source ? null : ` · ${all.length - missingCount} with a file`}
+        </p>
       </div>
 
       <nav className="flex flex-wrap items-baseline gap-3 text-sm">
@@ -54,6 +65,31 @@ export default async function BooksPage({
         </a>
       </nav>
 
+      <nav className="flex flex-wrap gap-3 text-xs">
+        <Link
+          href={list ? `/books?list=${list}` : '/books'}
+          className={source ? 'text-muted hover:text-accent' : 'text-accent'}
+        >
+          Any file status
+        </Link>
+        <Link
+          href={`/books?${list ? `list=${list}&` : ''}source=held`}
+          className={
+            source === 'held' ? 'text-accent' : 'text-muted hover:text-accent'
+          }
+        >
+          File held
+        </Link>
+        <Link
+          href={`/books?${list ? `list=${list}&` : ''}source=missing`}
+          className={
+            source === 'missing' ? 'text-accent' : 'text-muted hover:text-accent'
+          }
+        >
+          No file yet ({missingCount})
+        </Link>
+      </nav>
+
       {/* GET rather than a Server Action, so the selection ends up in the URL
           and the resulting works cited can be bookmarked or re-opened without
           ticking eighty-five boxes again. */}
@@ -75,6 +111,14 @@ export default async function BooksPage({
                   <div className="flex-1">
                     <div className="flex items-baseline justify-between gap-4">
                       <Link href={`/books/${book.id}`} className="hover:text-accent">
+                        {book.source_format !== 'none' ? (
+                          <span
+                            className="text-accent"
+                            title={`File held (${book.source_format})`}
+                          >
+                            ✓{' '}
+                          </span>
+                        ) : null}
                         {book.author ?? book.editor ?? '—'}
                         {'. '}
                         <span className="italic">{book.title}</span>
