@@ -9,15 +9,22 @@
 // Writes use `returning *`, where the shape is the whole row by definition.
 
 import { db } from '@/lib/db';
-import type { Book, BookInput, BookListEntry, ExamList } from '@/lib/types';
+import type {
+  Book,
+  BookInput,
+  BookListEntry,
+  ExamList,
+  Purpose,
+  Standing,
+} from '@/lib/types';
 
 export async function listBooks(): Promise<Book[]> {
   const sql = db();
   const rows = await sql`
     select id, title, subtitle, author, translator, editor, publisher, place,
-           year, edition, language, status, source_format, source_path,
-           r2_pages_key, page_offset, vivarium_item_id, notes_internal,
-           created_at, updated_at
+           year, edition, language, status, purpose, standing, standing_note,
+           source_format, source_path, r2_pages_key, page_offset,
+           vivarium_item_id, notes_internal, created_at, updated_at
     from books
     order by coalesce(author, title), year nulls last
   `;
@@ -29,6 +36,7 @@ export async function listBooksInList(listId: string): Promise<Book[]> {
   const rows = await sql`
     select b.id, b.title, b.subtitle, b.author, b.translator, b.editor,
            b.publisher, b.place, b.year, b.edition, b.language, b.status,
+           b.purpose, b.standing, b.standing_note,
            b.source_format, b.source_path, b.r2_pages_key, b.page_offset,
            b.vivarium_item_id, b.notes_internal, b.created_at, b.updated_at
     from books b
@@ -43,9 +51,9 @@ export async function getBook(id: string): Promise<Book | null> {
   const sql = db();
   const rows = (await sql`
     select id, title, subtitle, author, translator, editor, publisher, place,
-           year, edition, language, status, source_format, source_path,
-           r2_pages_key, page_offset, vivarium_item_id, notes_internal,
-           created_at, updated_at
+           year, edition, language, status, purpose, standing, standing_note,
+           source_format, source_path, r2_pages_key, page_offset,
+           vivarium_item_id, notes_internal, created_at, updated_at
     from books
     where id = ${id}
   `) as Book[];
@@ -56,9 +64,9 @@ export async function booksWithoutSource(): Promise<Book[]> {
   const sql = db();
   const rows = await sql`
     select id, title, subtitle, author, translator, editor, publisher, place,
-           year, edition, language, status, source_format, source_path,
-           r2_pages_key, page_offset, vivarium_item_id, notes_internal,
-           created_at, updated_at
+           year, edition, language, status, purpose, standing, standing_note,
+           source_format, source_path, r2_pages_key, page_offset,
+           vivarium_item_id, notes_internal, created_at, updated_at
     from books
     where source_format = 'none'
     order by coalesce(author, title)
@@ -156,7 +164,8 @@ export async function upsertBook(input: BookInput): Promise<Book> {
   const rows = (await sql`
     insert into books (
       id, title, subtitle, author, translator, editor, publisher, place, year,
-      edition, language, status, source_format, source_path, r2_pages_key,
+      edition, language, status, purpose, standing, standing_note,
+      source_format, source_path, r2_pages_key,
       page_offset, vivarium_item_id, notes_internal, updated_at
     ) values (
       ${b.id},
@@ -171,6 +180,9 @@ export async function upsertBook(input: BookInput): Promise<Book> {
       ${b.edition ?? null},
       ${b.language ?? null},
       ${b.status ?? 'unread'},
+      ${b.purpose ?? 'unassigned'},
+      ${b.standing ?? 'assigned'},
+      ${b.standing_note ?? null},
       ${b.source_format ?? 'none'},
       ${b.source_path ?? null},
       ${b.r2_pages_key ?? null},
@@ -191,6 +203,9 @@ export async function upsertBook(input: BookInput): Promise<Book> {
       edition          = excluded.edition,
       language         = excluded.language,
       status           = excluded.status,
+      purpose          = excluded.purpose,
+      standing         = excluded.standing,
+      standing_note    = excluded.standing_note,
       source_format    = excluded.source_format,
       source_path      = excluded.source_path,
       r2_pages_key     = excluded.r2_pages_key,
@@ -202,6 +217,41 @@ export async function upsertBook(input: BookInput): Promise<Book> {
   `) as Book[];
 
   return rows[0];
+}
+
+// Set purpose and standing across a selection. Either may be left alone, which
+// is why both are optional rather than defaulted: a bulk bar needs "no change"
+// to be distinct from any real value, or one stray click with everything
+// selected rewrites the whole catalogue.
+export async function characterizeBooks(
+  ids: string[],
+  fields: { purpose?: Purpose; standing?: Standing },
+): Promise<number> {
+  if (ids.length === 0) return 0;
+  if (!fields.purpose && !fields.standing) return 0;
+
+  const sql = db();
+  const rows = (await sql`
+    update books set
+      purpose    = coalesce(${fields.purpose ?? null}, purpose),
+      standing   = coalesce(${fields.standing ?? null}, standing),
+      updated_at = now()
+    where id = any(${ids})
+    returning id
+  `) as { id: string }[];
+
+  return rows.length;
+}
+
+export async function setStandingNote(
+  id: string,
+  note: string | null,
+): Promise<void> {
+  const sql = db();
+  await sql`
+    update books set standing_note = ${note}, updated_at = now()
+    where id = ${id}
+  `;
 }
 
 // Status changes are frequent and touch nothing else, so they get their own

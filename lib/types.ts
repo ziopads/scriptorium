@@ -10,6 +10,36 @@ export type BookStatus = 'unread' | 'reading' | 'read';
 export type SourceFormat = 'pdf_text' | 'pdf_ocr' | 'epub' | 'none';
 export type NoteOrigin = 'human' | 'assistant';
 
+// What the book is for.
+export type Purpose = 'comps' | 'both' | 'dissertation' | 'unassigned';
+
+// How it got onto the list. Kept separate from purpose so that a book her
+// advisors excluded can still be central to the dissertation, and so that the
+// difference between the assigned list and hers stays queryable.
+export type Standing = 'assigned' | 'added' | 'excluded';
+
+// Short forms for the catalogue, where 85 rows of "dissertation" would crowd
+// out the titles.
+export const PURPOSE_CODE: Record<Purpose, string> = {
+  comps: 'c',
+  both: 'c/d',
+  dissertation: 'd',
+  unassigned: 'x',
+};
+
+export const PURPOSE_LABEL: Record<Purpose, string> = {
+  comps: 'Comps only',
+  both: 'Comps and dissertation',
+  dissertation: 'Dissertation only',
+  unassigned: 'Not yet decided',
+};
+
+export const STANDING_LABEL: Record<Standing, string> = {
+  assigned: 'On the assigned list',
+  added: 'Added by her',
+  excluded: 'Excluded by advisors as non-canonical',
+};
+
 export interface Book {
   id: string;
   title: string;
@@ -24,6 +54,9 @@ export interface Book {
   language: string | null;
 
   status: BookStatus;
+  purpose: Purpose;
+  standing: Standing;
+  standing_note: string | null;
   source_format: SourceFormat;
   source_path: string | null;
   r2_pages_key: string | null;

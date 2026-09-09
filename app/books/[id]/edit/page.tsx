@@ -4,9 +4,50 @@ import { notFound } from 'next/navigation';
 import { saveBook } from '@/lib/actions';
 import { requireAllowedUser } from '@/lib/auth/guard';
 import { getBook } from '@/lib/books';
+import {
+  PURPOSE_LABEL,
+  STANDING_LABEL,
+  type Purpose,
+  type Standing,
+} from '@/lib/types';
 
 const STATUSES = ['unread', 'reading', 'read'] as const;
 const FORMATS = ['none', 'pdf_text', 'pdf_ocr', 'epub'] as const;
+const PURPOSES: Purpose[] = ['comps', 'both', 'dissertation', 'unassigned'];
+const STANDINGS: Standing[] = ['assigned', 'added', 'excluded'];
+
+// Radio rather than a menu. Four mutually exclusive values, and options that
+// are always visible say what the categories are without being opened. A
+// checkbox group would permit "comps" and "unassigned" at once, which is
+// meaningless — the exclusivity is information the control should carry.
+function RadioSet<T extends string>({
+  name,
+  values,
+  labels,
+  current,
+}: {
+  name: string;
+  values: readonly T[];
+  labels: Record<T, string>;
+  current: T;
+}) {
+  return (
+    <div className="space-y-1">
+      {values.map((value) => (
+        <label key={value} className="flex items-baseline gap-2 text-sm">
+          <input
+            type="radio"
+            name={name}
+            value={value}
+            defaultChecked={value === current}
+            className="w-auto"
+          />
+          {labels[value]}
+        </label>
+      ))}
+    </div>
+  );
+}
 
 function Row({
   name,
@@ -82,6 +123,45 @@ export default async function EditBookPage({
             value={book.language}
             hint="es, en, or en,es for a facing-page volume"
           />
+        </fieldset>
+
+        <fieldset className="space-y-4">
+          <legend className="text-base mb-2">Standing</legend>
+          <p className="text-xs text-muted">
+            What the book is for, and how it came to be on the list. These are
+            recorded separately so that a book excluded by an advisor can still be
+            central to the dissertation, and so the difference between the assigned
+            list and hers stays visible.
+          </p>
+
+          <div className="space-y-1">
+            <span className="text-sm">Purpose</span>
+            <RadioSet
+              name="purpose"
+              values={PURPOSES}
+              labels={PURPOSE_LABEL}
+              current={book.purpose}
+            />
+          </div>
+
+          <div className="space-y-1">
+            <span className="text-sm">How it got here</span>
+            <RadioSet
+              name="standing"
+              values={STANDINGS}
+              labels={STANDING_LABEL}
+              current={book.standing}
+            />
+          </div>
+
+          <label className="block space-y-1">
+            <span className="text-sm">On that determination</span>
+            <textarea name="standing_note" rows={3} defaultValue={book.standing_note ?? ''} />
+            <span className="block text-xs text-muted">
+              Why a book belongs, or why an exclusion is wrong. Yours to argue
+              with — separate from the ingest notes below.
+            </span>
+          </label>
         </fieldset>
 
         <fieldset className="space-y-4">

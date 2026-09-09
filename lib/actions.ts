@@ -17,13 +17,14 @@ import { redirect } from 'next/navigation';
 import { requireAllowedUser } from '@/lib/auth/guard';
 import {
   addToList,
+  characterizeBooks,
   removeFromList,
   setStatus,
   updateImprint,
   upsertBook,
 } from '@/lib/books';
 import { createNote, deleteNote, updateNote } from '@/lib/notes';
-import type { Book, BookInput } from '@/lib/types';
+import type { Book, BookInput, Purpose, Standing } from '@/lib/types';
 
 function text(form: FormData, key: string): string | null {
   const raw = form.get(key);
@@ -64,6 +65,9 @@ export async function saveBook(form: FormData): Promise<void> {
     edition: text(form, 'edition'),
     language: text(form, 'language'),
     status: (text(form, 'status') ?? 'unread') as Book['status'],
+    purpose: (text(form, 'purpose') ?? 'unassigned') as Purpose,
+    standing: (text(form, 'standing') ?? 'assigned') as Standing,
+    standing_note: text(form, 'standing_note'),
     source_format: (text(form, 'source_format') ??
       'none') as Book['source_format'],
     source_path: text(form, 'source_path'),
@@ -141,7 +145,6 @@ export async function leaveList(form: FormData): Promise<void> {
 // ---------------------------------------------------------------------------
 // Notes
 // ---------------------------------------------------------------------------
-
 // Tags arrive as one comma-separated field rather than a tag widget. She is
 // typing while reading, and a text input costs nothing to learn. Duplicates and
 // case differences are folded here so that the tag index does not accumulate
@@ -218,4 +221,31 @@ export async function removeNote(form: FormData): Promise<void> {
 
   if (bookId) revalidatePath(`/books/${bookId}`);
   revalidatePath('/notes');
+}
+
+// ---------------------------------------------------------------------------
+// Bulk characterization
+// ---------------------------------------------------------------------------
+
+// Called from the catalogue's client table rather than from a form, because
+// shift-click range selection needs browser state. The mutation is still a
+// Server Action: only the selecting is client-side, and the guard runs here as
+// it does everywhere else.
+//
+// Undefined means leave alone. That distinction is the whole safety property —
+// a bulk bar whose "no change" is indistinguishable from a real value will
+// eventually rewrite eighty-five records on one stray click.
+export async function characterizeSelection(
+  ids: string[],
+  fields: { purpose?: Purpose; standing?: Standing },
+): Promise<{ updated: number }> {
+  await requireAllowedUser();
+
+  const updated = await characterizeBooks(ids, fields);
+
+  revalidatePath('/books');
+  revalidatePath('/');
+  for (const id of ids) revalidatePath(`/books/${id}`);
+
+  return { updated };
 }
