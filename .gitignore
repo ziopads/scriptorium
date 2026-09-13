@@ -43,3 +43,10 @@ next-env.d.ts
 
 # design record, kept locally rather than in the repo
 docs/HANDOFF.md
+
+# the corpus itself: copyrighted, large, and not ours to distribute
+pipeline/corpus/
+pipeline/.venv/
+pipeline/pages/
+*.pdf
+*.epub
