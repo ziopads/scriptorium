@@ -44,9 +44,24 @@ export default async function WorksPage({
     .filter((w) => (kind === 'contained' ? w.container_id !== null : true));
 
   const missingCount = all.filter(
-    (w) => w.source_format === 'none' && w.container_id === null,
+    (w) =>
+      w.source_format === 'none' &&
+      w.container_id === null &&
+      examinable.has(w.id),
   ).length;
   const active = lists.find((l) => l.id === list);
+
+  // Counts are about examinable works throughout. Two denominators on one
+  // screen — 160 works against 63 with no file — read as an inconsistency even
+  // when both are right, because the second silently excluded containers and
+  // the working lists.
+  const examinableAll = all.filter((w) => examinable.has(w.id));
+  const citable = examinableAll.filter(
+    (w) => w.source_format === 'pdf_text' || w.source_format === 'pdf_ocr',
+  ).length;
+  const heldNotCitable = examinableAll.filter(
+    (w) => w.source_format === 'epub',
+  ).length;
 
   const rows: Row[] = filtered.map((work) => {
     const container = work.container_id ? byId.get(work.container_id) ?? null : null;
@@ -61,7 +76,7 @@ export default async function WorksPage({
       purpose: work.purpose,
       standing: work.standing,
       examinable: examinable.has(work.id),
-      has_file: work.source_format !== 'none',
+      source_format: work.source_format,
       missing: formatBibliography(work, container).missing,
     };
   });
@@ -80,7 +95,10 @@ export default async function WorksPage({
       <div>
         <h1 className="text-2xl mb-1">{active ? active.name : 'Catalogue'}</h1>
         <p className="text-sm text-muted">
-          {rows.length} of {all.length} · {all.length - missingCount} with a file
+          {rows.length} shown · {examinableAll.length} examinable, of which{' '}
+          {citable} are citable
+          {heldNotCitable > 0 ? ` and ${heldNotCitable} held without page numbers` : null}
+          {' '}· {missingCount} with no file
         </p>
       </div>
 

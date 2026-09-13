@@ -33,9 +33,22 @@ export interface Row {
   purpose: Purpose;
   standing: Standing;
   examinable: boolean;
-  has_file: boolean;
+  source_format: string;
   missing: string[];
 }
+
+// What the file marker means, spelled out rather than left to a tooltip.
+//
+// The distinction that matters is not held against not held. It is citable
+// against not citable: an EPUB reflows, so there is no page 87 to cite, and a
+// row showing the same tick as a complete PDF hides that. Borderlands is the
+// case in point — held, searchable, and useless for a footnote.
+const FILE_MARK: Record<string, { mark: string; label: string; dim: boolean }> = {
+  pdf_text: { mark: '✓', label: 'PDF — citable to a page', dim: false },
+  pdf_ocr: { mark: '✓', label: 'Scanned PDF, OCR applied — citable to a page', dim: false },
+  epub: { mark: '○', label: 'EPUB — searchable, no page numbers', dim: true },
+  none: { mark: '', label: 'No file', dim: true },
+};
 
 // Distinct from every real value, so "leave alone" cannot be confused with a
 // choice. A single "none" default meant one stray Apply wiped a field across a
@@ -120,12 +133,16 @@ export function CatalogueTable({ rows }: { rows: Row[] }) {
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-baseline gap-3 text-xs text-muted">
+      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs text-muted">
         <label className="flex items-center gap-2">
           <input type="checkbox" checked={allSelected} onChange={toggleAll} className="w-auto" />
           Select all {rows.length}
         </label>
         <span>Tick a row, then shift-click another to take everything between.</span>
+        <span className="ml-auto">
+          <span className="text-accent">✓</span> citable · <span>○</span> no page
+          numbers · blank: no file
+        </span>
         {note ? <span className="text-accent">{note}</span> : null}
       </div>
 
@@ -193,7 +210,17 @@ export function CatalogueTable({ rows }: { rows: Row[] }) {
               <div className="flex-1">
                 <div className="flex items-baseline justify-between gap-4">
                   <Link href={`/works/${row.id}`} className="hover:text-accent">
-                    {row.has_file ? <span className="text-accent">✓ </span> : null}
+                    {(() => {
+                      const f = FILE_MARK[row.source_format] ?? FILE_MARK.none;
+                      return f.mark ? (
+                        <span
+                          title={f.label}
+                          className={f.dim ? 'text-muted' : 'text-accent'}
+                        >
+                          {f.mark}{' '}
+                        </span>
+                      ) : null;
+                    })()}
                     {row.author ?? '—'}
                     {'. '}
                     {row.container_title ? (
@@ -224,10 +251,6 @@ export function CatalogueTable({ rows }: { rows: Row[] }) {
                     <span>{row.status}</span>
                   </span>
                 </div>
-
-                {row.missing.length > 0 ? (
-                  <p className="mt-1 text-xs text-accent">missing: {row.missing.join(', ')}</p>
-                ) : null}
               </div>
             </div>
           </li>
