@@ -1,53 +1,66 @@
 import Link from 'next/link';
 
 import { requireAllowedUser } from '@/lib/auth/guard';
-import {
-  booksWithoutSource,
-  incompleteBooks,
-  listExamListsWithCounts,
-} from '@/lib/books';
+import { examinableIds, incompleteWorks, listExamLists, listWorks, listSections } from '@/lib/works';
 
 export const dynamic = 'force-dynamic';
 
 export default async function HomePage() {
   await requireAllowedUser();
 
-  const [lists, incomplete, unsourced] = await Promise.all([
-    listExamListsWithCounts(),
-    incompleteBooks(),
-    booksWithoutSource(),
+  const [lists, sections, works, incomplete, examinable] = await Promise.all([
+    listExamLists(),
+    listSections(),
+    listWorks(),
+    incompleteWorks(),
+    examinableIds(),
   ]);
 
-  const total = lists.reduce((sum, list) => sum + list.count, 0);
+  const membershipCount = new Map<string, number>();
+  for (const section of sections) {
+    membershipCount.set(section.list_id, membershipCount.get(section.list_id) ?? 0);
+  }
+
+  const unsourced = works.filter(
+    (w) => w.source_format === 'none' && w.container_id === null && examinable.has(w.id),
+  );
 
   return (
     <div className="space-y-10">
       <section>
         <h1 className="text-2xl mb-1">Reading list</h1>
         <p className="text-sm text-muted">
-          {total} entries across {lists.length} lists.
+          {examinable.size} examinable works · {works.length} records in all
         </p>
       </section>
 
-      <section>
-        <ul className="divide-y divide-rule border-y border-rule">
-          {lists.map((list) => (
-            <li key={list.id}>
-              <Link
-                href={`/books?list=${list.id}`}
-                className="flex items-baseline justify-between py-3 hover:text-accent"
-              >
-                <span>
+      <section className="space-y-4">
+        {lists.map((list) => {
+          const own = sections.filter((s) => s.list_id === list.id);
+          return (
+            <div key={list.id} className="border-y border-rule py-3">
+              <div className="flex items-baseline justify-between">
+                <Link href={`/works?list=${list.id}`} className="hover:text-accent">
                   {list.name}
-                  {list.description ? (
-                    <span className="text-muted text-sm"> — {list.description}</span>
-                  ) : null}
-                </span>
-                <span className="font-mono text-sm text-muted">{list.count}</span>
-              </Link>
-            </li>
-          ))}
-        </ul>
+                  {list.examinable ? null : (
+                    <span className="text-xs text-muted"> · not examinable</span>
+                  )}
+                </Link>
+              </div>
+              {own.length > 0 ? (
+                <ul className="mt-1 space-y-0.5 text-xs text-muted">
+                  {own.map((section) => (
+                    <li key={section.id}>
+                      {section.letter ? `${section.letter}. ` : null}
+                      {section.title}
+                      {section.kind === 'supplementary' ? ' (supplementary)' : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </div>
+          );
+        })}
       </section>
 
       <section className="space-y-2 text-sm">
@@ -56,17 +69,16 @@ export default async function HomePage() {
           <Link href="/gaps" className="text-accent underline underline-offset-2">
             {incomplete.length} records
           </Link>{' '}
-          are missing a field a Chicago entry needs.
+          are missing a field a citation needs.
         </p>
         <p>
           <Link
-            href="/books?source=missing"
+            href="/works?source=missing"
             className="text-accent underline underline-offset-2"
           >
-            {unsourced.length} titles
+            {unsourced.length} examinable works
           </Link>{' '}
-          have no file yet, so nothing can be extracted from them. That list is
-          the one to work down when hunting for copies.
+          have no file yet. That list is the one to work down when hunting for copies.
         </p>
       </section>
     </div>

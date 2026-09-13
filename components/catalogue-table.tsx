@@ -10,32 +10,36 @@ import {
   STANDING_LABEL,
   type Purpose,
   type Standing,
+  type WorkKind,
 } from '@/lib/types';
 
 // The catalogue, with range selection and a bulk bar.
 //
-// This is the one client component in the application. Shift-click needs
-// browser state, and eighty-five rows of one-at-a-time ticking is a real cost.
-// The mutation stays a Server Action — only the selecting happens here.
+// The one client component in the application: shift-click needs browser state,
+// and ticking 125 rows one at a time is a real cost. The mutation is still a
+// Server Action — only the selecting happens here.
 //
-// The selection drives both jobs: characterize the ticked books, or build a
-// works cited from them. One set of checkboxes rather than two columns.
+// One selection drives both jobs: characterize the ticked works, or build a
+// works cited from them.
 
 export interface Row {
   id: string;
   author: string | null;
   title: string;
   year: number | null;
+  kind: WorkKind;
+  container_title: string | null;
   status: string;
   purpose: Purpose;
   standing: Standing;
+  examinable: boolean;
   has_file: boolean;
   missing: string[];
 }
 
-// Distinct from any real value, so "leave alone" cannot be confused with a
-// choice. Vivarium learned this the hard way: a single "none" default meant one
-// stray Apply wiped a field across the whole catalogue.
+// Distinct from every real value, so "leave alone" cannot be confused with a
+// choice. A single "none" default meant one stray Apply wiped a field across a
+// whole catalogue in Vivarium.
 const NO_CHANGE = '__nochange__';
 
 const PURPOSES: Purpose[] = ['comps', 'both', 'dissertation', 'unassigned'];
@@ -48,16 +52,14 @@ export function CatalogueTable({ rows }: { rows: Row[] }) {
   const [note, setNote] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  // The anchor for shift-click. A ref rather than state: it is read during a
-  // click, never rendered, and putting it in state would rerender every row on
-  // each tick.
+  // A ref, not state: read during a click, never rendered, and state would
+  // rerender every row on each tick.
   const anchorRef = useRef<string | null>(null);
 
   function toggle(id: string, shift: boolean) {
     // Read the anchor BEFORE setSelected. The updater does not run until React
-    // re-renders, by which time the assignment at the end of this function has
-    // already overwritten the ref — which makes every shift-click a range from
-    // the clicked row to itself.
+    // re-renders, by which time the assignment below has already overwritten
+    // the ref — which makes every shift-click a range from a row to itself.
     const anchor = anchorRef.current;
 
     setSelected((prev) => {
@@ -102,8 +104,7 @@ export function CatalogueTable({ rows }: { rows: Row[] }) {
     startTransition(async () => {
       const { updated } = await characterizeSelection(ids, {
         purpose: bulkPurpose === NO_CHANGE ? undefined : (bulkPurpose as Purpose),
-        standing:
-          bulkStanding === NO_CHANGE ? undefined : (bulkStanding as Standing),
+        standing: bulkStanding === NO_CHANGE ? undefined : (bulkStanding as Standing),
       });
       setNote(`${updated} updated`);
       setSelected(new Set());
@@ -115,19 +116,13 @@ export function CatalogueTable({ rows }: { rows: Row[] }) {
 
   const worksCitedHref =
     '/works-cited?' + [...selected].map((id) => `id=${encodeURIComponent(id)}`).join('&');
-
   const allSelected = rows.length > 0 && rows.every((r) => selected.has(r.id));
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-baseline gap-3 text-xs text-muted">
         <label className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            checked={allSelected}
-            onChange={toggleAll}
-            className="w-auto"
-          />
+          <input type="checkbox" checked={allSelected} onChange={toggleAll} className="w-auto" />
           Select all {rows.length}
         </label>
         <span>Tick a row, then shift-click another to take everything between.</span>
@@ -140,32 +135,20 @@ export function CatalogueTable({ rows }: { rows: Row[] }) {
 
           <label className="flex items-center gap-2">
             Purpose
-            <select
-              value={bulkPurpose}
-              onChange={(e) => setBulkPurpose(e.target.value)}
-              className="w-52"
-            >
+            <select value={bulkPurpose} onChange={(e) => setBulkPurpose(e.target.value)} className="w-52">
               <option value={NO_CHANGE}>— no change —</option>
               {PURPOSES.map((p) => (
-                <option key={p} value={p}>
-                  {PURPOSE_LABEL[p]}
-                </option>
+                <option key={p} value={p}>{PURPOSE_LABEL[p]}</option>
               ))}
             </select>
           </label>
 
           <label className="flex items-center gap-2">
             Standing
-            <select
-              value={bulkStanding}
-              onChange={(e) => setBulkStanding(e.target.value)}
-              className="w-64"
-            >
+            <select value={bulkStanding} onChange={(e) => setBulkStanding(e.target.value)} className="w-64">
               <option value={NO_CHANGE}>— no change —</option>
               {STANDINGS.map((s) => (
-                <option key={s} value={s}>
-                  {STANDING_LABEL[s]}
-                </option>
+                <option key={s} value={s}>{STANDING_LABEL[s]}</option>
               ))}
             </select>
           </label>
@@ -185,10 +168,7 @@ export function CatalogueTable({ rows }: { rows: Row[] }) {
 
           <button
             type="button"
-            onClick={() => {
-              setSelected(new Set());
-              anchorRef.current = null;
-            }}
+            onClick={() => { setSelected(new Set()); anchorRef.current = null; }}
             className="text-muted hover:text-accent"
           >
             Clear
@@ -198,17 +178,13 @@ export function CatalogueTable({ rows }: { rows: Row[] }) {
 
       <ul className="divide-y divide-rule border-y border-rule">
         {rows.map((row) => (
-          <li
-            key={row.id}
-            className={`py-3 ${selected.has(row.id) ? 'bg-accent/5' : ''}`}
-          >
+          <li key={row.id} className={`py-3 ${selected.has(row.id) ? 'bg-accent/5' : ''}`}>
             <div className="flex items-baseline gap-3">
               <input
                 type="checkbox"
                 checked={selected.has(row.id)}
                 // onChange does not carry shiftKey, so the work happens in
-                // onClick and this exists only to keep React from warning about
-                // an uncontrolled input.
+                // onClick; this exists to keep React from warning.
                 onChange={() => {}}
                 onClick={(e) => toggle(row.id, e.shiftKey)}
                 className="mt-1 w-auto shrink-0"
@@ -216,15 +192,24 @@ export function CatalogueTable({ rows }: { rows: Row[] }) {
 
               <div className="flex-1">
                 <div className="flex items-baseline justify-between gap-4">
-                  <Link href={`/books/${row.id}`} className="hover:text-accent">
+                  <Link href={`/works/${row.id}`} className="hover:text-accent">
                     {row.has_file ? <span className="text-accent">✓ </span> : null}
                     {row.author ?? '—'}
                     {'. '}
-                    <span className="italic">{row.title}</span>
+                    {row.container_title ? (
+                      <>
+                        <span>“{row.title}”</span>
+                        <span className="text-muted"> in </span>
+                        <span className="italic text-muted">{row.container_title}</span>
+                      </>
+                    ) : (
+                      <span className="italic">{row.title}</span>
+                    )}
                     {row.year ? <span className="text-muted"> ({row.year})</span> : null}
                   </Link>
 
                   <span className="flex shrink-0 items-baseline gap-3 font-mono text-xs text-muted">
+                    {row.kind !== 'monograph' ? <span>{row.kind.replace('_', ' ')}</span> : null}
                     <span
                       title={PURPOSE_LABEL[row.purpose]}
                       className={row.purpose === 'unassigned' ? 'text-accent' : ''}
@@ -241,9 +226,7 @@ export function CatalogueTable({ rows }: { rows: Row[] }) {
                 </div>
 
                 {row.missing.length > 0 ? (
-                  <p className="mt-1 text-xs text-accent">
-                    missing: {row.missing.join(', ')}
-                  </p>
+                  <p className="mt-1 text-xs text-accent">missing: {row.missing.join(', ')}</p>
                 ) : null}
               </div>
             </div>

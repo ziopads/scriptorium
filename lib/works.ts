@@ -1,0 +1,331 @@
+// Reads and writes for the catalogue.
+//
+// Replaces lib/books.ts. The table is `works` because it holds monographs, the
+// essays inside them, and films — the reading list cites all three as items.
+//
+// Column lists are written out in full rather than `select *`, and repeated
+// rather than held in a constant, because the Neon tagged template interpolates
+// values and not identifiers. Writes use `returning *`.
+
+import { db } from '@/lib/db';
+import type {
+  ExamList,
+  ListMembership,
+  ListSection,
+  Purpose,
+  Standing,
+  Work,
+  WorkInput,
+  WorkWithContainer,
+} from '@/lib/types';
+
+const COLS = `
+  id, title, subtitle, author, translator, editor, publisher, place, year,
+  edition, language, kind, container_id, first_page, last_page,
+  isbn, volume, series, original_year, url, doi, accessed,
+  status, purpose, standing, standing_note, source_format, source_path,
+  r2_pages_key, page_offset, vivarium_item_id, notes_internal,
+  created_at, updated_at
+`;
+
+export async function listWorks(): Promise<Work[]> {
+  const sql = db();
+  const rows = await sql`
+    select id, title, subtitle, author, translator, editor, publisher, place, year,
+           edition, language, kind, container_id, first_page, last_page,
+           isbn, volume, series, original_year, url, doi, accessed,
+           status, purpose, standing, standing_note, source_format, source_path,
+           r2_pages_key, page_offset, vivarium_item_id, notes_internal,
+           created_at, updated_at
+    from works
+    order by coalesce(author, title), year nulls last
+  `;
+  return rows as Work[];
+}
+
+export async function getWork(id: string): Promise<Work | null> {
+  const sql = db();
+  const rows = (await sql`
+    select id, title, subtitle, author, translator, editor, publisher, place, year,
+           edition, language, kind, container_id, first_page, last_page,
+           isbn, volume, series, original_year, url, doi, accessed,
+           status, purpose, standing, standing_note, source_format, source_path,
+           r2_pages_key, page_offset, vivarium_item_id, notes_internal,
+           created_at, updated_at
+    from works
+    where id = ${id}
+  `) as Work[];
+  return rows[0] ?? null;
+}
+
+// A work with its container resolved. An essay's citation draws its title and
+// page range from the child and the imprint from the parent, so both records
+// have to arrive together — one query rather than two round trips.
+export async function getWorkWithContainer(
+  id: string,
+): Promise<WorkWithContainer | null> {
+  const work = await getWork(id);
+  if (!work) return null;
+  const container = work.container_id ? await getWork(work.container_id) : null;
+  return { ...work, container };
+}
+
+// The essays and chapters inside a volume, in page order.
+export async function listContents(containerId: string): Promise<Work[]> {
+  const sql = db();
+  const rows = await sql`
+    select id, title, subtitle, author, translator, editor, publisher, place, year,
+           edition, language, kind, container_id, first_page, last_page,
+           isbn, volume, series, original_year, url, doi, accessed,
+           status, purpose, standing, standing_note, source_format, source_path,
+           r2_pages_key, page_offset, vivarium_item_id, notes_internal,
+           created_at, updated_at
+    from works
+    where container_id = ${containerId}
+    order by first_page nulls last, title
+  `;
+  return rows as Work[];
+}
+
+export async function listExamLists(): Promise<ExamList[]> {
+  const sql = db();
+  const rows = await sql`
+    select id, name, description, examinable, sort from exam_lists order by sort
+  `;
+  return rows as ExamList[];
+}
+
+export async function listSections(listId?: string): Promise<ListSection[]> {
+  const sql = db();
+  const rows = listId
+    ? await sql`
+        select id, list_id, letter, title, kind, sort
+        from list_sections where list_id = ${listId} order by sort
+      `
+    : await sql`
+        select id, list_id, letter, title, kind, sort
+        from list_sections order by list_id, sort
+      `;
+  return rows as ListSection[];
+}
+
+// Which lists a work sits on, and where in each. Used on the work page.
+export async function membershipsFor(workId: string): Promise<ListMembership[]> {
+  const sql = db();
+  const rows = await sql`
+    select el.id, el.name, el.description, el.examinable, el.sort,
+           ls.id as section_id, ls.title as section_title,
+           ls.letter as section_letter, ls.kind as section_kind,
+           li.rationale, li.ordinal
+    from list_items li
+    join exam_lists el on el.id = li.list_id
+    left join list_sections ls on ls.id = li.section_id
+    where li.work_id = ${workId}
+    order by el.sort, ls.sort
+  `;
+  return rows as ListMembership[];
+}
+
+// Every membership at once, for the catalogue and the CSV export. Calling
+// membershipsFor per work would be one HTTP round trip per row.
+export async function allMemberships(): Promise<
+  { work_id: string; list: string; section: string | null; kind: string | null }[]
+> {
+  const sql = db();
+  const rows = await sql`
+    select li.work_id, el.name as list, ls.title as section, ls.kind
+    from list_items li
+    join exam_lists el on el.id = li.list_id
+    left join list_sections ls on ls.id = li.section_id
+    order by el.sort, ls.sort, li.ordinal
+  `;
+  return rows as { work_id: string; list: string; section: string | null; kind: string | null }[];
+}
+
+export async function listWorksInList(listId: string): Promise<Work[]> {
+  const sql = db();
+  const rows = await sql`
+    select w.id, w.title, w.subtitle, w.author, w.translator, w.editor,
+           w.publisher, w.place, w.year, w.edition, w.language, w.kind,
+           w.container_id, w.first_page, w.last_page,
+           w.isbn, w.volume, w.series, w.original_year, w.url, w.doi, w.accessed,
+           w.status, w.purpose, w.standing, w.standing_note, w.source_format,
+           w.source_path, w.r2_pages_key, w.page_offset, w.vivarium_item_id,
+           w.notes_internal, w.created_at, w.updated_at
+    from works w
+    join list_items li on li.work_id = w.id
+    left join list_sections ls on ls.id = li.section_id
+    where li.list_id = ${listId}
+    order by ls.sort nulls last, li.ordinal nulls last, coalesce(w.author, w.title)
+  `;
+  return rows as Work[];
+}
+
+// Examinable is derived, never stored: a work counts if it is on an examinable
+// list, or if its container is. A stored flag would be a second source of truth
+// and would drift the first time an item moved between lists.
+export async function examinableIds(): Promise<Set<string>> {
+  const sql = db();
+  const rows = (await sql`select id from examinable_works`) as { id: string }[];
+  return new Set(rows.map((r) => r.id));
+}
+
+export async function upsertWork(input: WorkInput): Promise<Work> {
+  const sql = db();
+  const w = input;
+
+  const rows = (await sql`
+    insert into works (
+      id, title, subtitle, author, translator, editor, publisher, place, year,
+      edition, language, kind, container_id, first_page, last_page,
+      isbn, volume, series, original_year, url, doi, accessed,
+      status, purpose, standing, standing_note, source_format, source_path,
+      r2_pages_key, page_offset, vivarium_item_id, notes_internal, updated_at
+    ) values (
+      ${w.id}, ${w.title}, ${w.subtitle ?? null}, ${w.author ?? null},
+      ${w.translator ?? null}, ${w.editor ?? null}, ${w.publisher ?? null},
+      ${w.place ?? null}, ${w.year ?? null}, ${w.edition ?? null},
+      ${w.language ?? null}, ${w.kind ?? 'monograph'}, ${w.container_id ?? null},
+      ${w.first_page ?? null}, ${w.last_page ?? null},
+      ${w.isbn ?? null}, ${w.volume ?? null}, ${w.series ?? null},
+      ${w.original_year ?? null}, ${w.url ?? null}, ${w.doi ?? null},
+      ${w.accessed ?? null},
+      ${w.status ?? 'unread'}, ${w.purpose ?? 'unassigned'},
+      ${w.standing ?? 'assigned'}, ${w.standing_note ?? null},
+      ${w.source_format ?? 'none'}, ${w.source_path ?? null},
+      ${w.r2_pages_key ?? null}, ${w.page_offset ?? 0},
+      ${w.vivarium_item_id ?? null}, ${w.notes_internal ?? null}, now()
+    )
+    on conflict (id) do update set
+      title = excluded.title, subtitle = excluded.subtitle,
+      author = excluded.author, translator = excluded.translator,
+      editor = excluded.editor, publisher = excluded.publisher,
+      place = excluded.place, year = excluded.year, edition = excluded.edition,
+      language = excluded.language, kind = excluded.kind,
+      container_id = excluded.container_id, first_page = excluded.first_page,
+      last_page = excluded.last_page, isbn = excluded.isbn,
+      volume = excluded.volume, series = excluded.series,
+      original_year = excluded.original_year, url = excluded.url,
+      doi = excluded.doi, accessed = excluded.accessed,
+      status = excluded.status, purpose = excluded.purpose,
+      standing = excluded.standing, standing_note = excluded.standing_note,
+      source_format = excluded.source_format, source_path = excluded.source_path,
+      r2_pages_key = excluded.r2_pages_key, page_offset = excluded.page_offset,
+      vivarium_item_id = excluded.vivarium_item_id,
+      notes_internal = excluded.notes_internal, updated_at = now()
+    returning *
+  `) as Work[];
+
+  return rows[0];
+}
+
+export async function setStatus(id: string, status: Work['status']): Promise<void> {
+  const sql = db();
+  await sql`update works set status = ${status}, updated_at = now() where id = ${id}`;
+}
+
+export async function setPageOffset(id: string, offset: number): Promise<void> {
+  const sql = db();
+  await sql`update works set page_offset = ${offset}, updated_at = now() where id = ${id}`;
+}
+
+export async function updateImprint(
+  id: string,
+  fields: {
+    author: string | null;
+    publisher: string | null;
+    place: string | null;
+    year: number | null;
+  },
+): Promise<void> {
+  const sql = db();
+  await sql`
+    update works set
+      author = ${fields.author}, publisher = ${fields.publisher},
+      place = ${fields.place}, year = ${fields.year}, updated_at = now()
+    where id = ${id}
+  `;
+}
+
+export async function characterizeWorks(
+  ids: string[],
+  fields: { purpose?: Purpose; standing?: Standing },
+): Promise<number> {
+  if (ids.length === 0) return 0;
+  if (!fields.purpose && !fields.standing) return 0;
+
+  const sql = db();
+  const rows = (await sql`
+    update works set
+      purpose  = coalesce(${fields.purpose ?? null}, purpose),
+      standing = coalesce(${fields.standing ?? null}, standing),
+      updated_at = now()
+    where id = any(${ids})
+    returning id
+  `) as { id: string }[];
+  return rows.length;
+}
+
+export async function setStandingNote(id: string, note: string | null): Promise<void> {
+  const sql = db();
+  await sql`update works set standing_note = ${note}, updated_at = now() where id = ${id}`;
+}
+
+export async function addToList(
+  listId: string,
+  workId: string,
+  sectionId?: string | null,
+  rationale?: string | null,
+  ordinal?: number | null,
+): Promise<void> {
+  const sql = db();
+  await sql`
+    insert into list_items (list_id, work_id, section_id, rationale, ordinal)
+    values (${listId}, ${workId}, ${sectionId ?? null}, ${rationale ?? null}, ${ordinal ?? null})
+    on conflict (list_id, work_id) do update set
+      section_id = excluded.section_id,
+      rationale  = excluded.rationale,
+      ordinal    = excluded.ordinal
+  `;
+}
+
+export async function removeFromList(listId: string, workId: string): Promise<void> {
+  const sql = db();
+  await sql`delete from list_items where list_id = ${listId} and work_id = ${workId}`;
+}
+
+// The fields a citation needs. language and source_format describe the file
+// rather than the entry, so they are deliberately absent. An essay is judged on
+// its container's imprint, not its own.
+export async function incompleteWorks(): Promise<{ work: Work; missing: string[] }[]> {
+  const works = await listWorks();
+  const byId = new Map(works.map((w) => [w.id, w]));
+
+  return works
+    .map((work) => {
+      const imprint = work.container_id ? byId.get(work.container_id) ?? work : work;
+      const missing: string[] = [];
+      if (!work.author && !work.editor && !imprint.editor) missing.push('author');
+      if (!imprint.publisher) missing.push('publisher');
+      if (!imprint.place) missing.push('place');
+      if (imprint.year === null) missing.push('year');
+      return { work, missing };
+    })
+    .filter((entry) => entry.missing.length > 0);
+}
+
+export async function worksWithoutSource(): Promise<Work[]> {
+  const sql = db();
+  const rows = await sql`
+    select id, title, subtitle, author, translator, editor, publisher, place, year,
+           edition, language, kind, container_id, first_page, last_page,
+           isbn, volume, series, original_year, url, doi, accessed,
+           status, purpose, standing, standing_note, source_format, source_path,
+           r2_pages_key, page_offset, vivarium_item_id, notes_internal,
+           created_at, updated_at
+    from works
+    where source_format = 'none' and container_id is null
+    order by coalesce(author, title)
+  `;
+  return rows as Work[];
+}

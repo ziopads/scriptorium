@@ -1,23 +1,20 @@
-// Chicago 17th edition, formatted from one book record.
+// Citation, formatted from the record.
 //
-// The point of this file is that a citation is generated from the catalogue
-// rather than retyped, so a correction to a book record propagates everywhere
-// at once. Citation accuracy is a stated priority in her own practice, which is
-// why these functions report what is missing instead of filling a gap with
-// something plausible.
+// Which style the department wants is a formatting decision and can change. What
+// cannot be recovered on the morning of an exam is a field nobody recorded — so
+// the record holds a superset, and each style is a function over it.
 //
-// Known limits, all deliberate:
+// An essay cites through two records: title, original year, page range and any
+// essay-level translator from the child; volume title, editors, translator,
+// edition and imprint from the container. Hence (work, container) on every
+// formatter rather than (work).
 //
-//   - One author field. Multiple authors are stored as she typed them and are
-//     emitted unchanged in the bibliography form; the note form inverts only a
-//     single "Last, First".
-//   - Translator and editor are emitted in that order. Chicago follows the
-//     title page, so a volume that lists the editor first needs the two swapped
-//     by hand.
-//   - Nothing is abbreviated to n.p. or n.d. A missing publisher is reported as
-//     missing, not papered over.
+// Nothing is invented. A missing publisher is reported as missing rather than
+// rendered n.p., because a plausible-looking guess is worse than a visible gap.
 
-import type { Book } from '@/lib/types';
+import type { Work, WorkWithContainer } from '@/lib/types';
+
+export type Style = 'chicago' | 'mla';
 
 export interface Citation {
   text: string;
@@ -31,107 +28,222 @@ export function uninvert(name: string): string {
   const parts = name.split(',');
   if (parts.length !== 2) return name.trim();
   const [last, first] = parts.map((p) => p.trim());
-  if (!first) return last;
-  return `${first} ${last}`;
+  return first ? `${first} ${last}` : last;
 }
 
-function fullTitle(book: Book): string {
-  return book.subtitle ? `${book.title}: ${book.subtitle}` : book.title;
+function fullTitle(work: Work): string {
+  return work.subtitle ? `${work.title}: ${work.subtitle}` : work.title;
 }
 
-function missingFields(book: Book): string[] {
+// Kinds whose titles are quoted rather than italicised: a part of something,
+// whether or not the something is recorded. "Counter Mapping" is an essay with
+// no container — a web feature — and both styles still quote it. Keying this off
+// container presence rather than kind put it in italics.
+const QUOTED: ReadonlySet<string> = new Set(['essay', 'chapter', 'poem']);
+
+// The terminator goes INSIDE the closing quotation mark, which is why it is a
+// parameter rather than something the caller appends: "Lo ominoso." and not
+// "Lo ominoso". Both styles agree on this and it is the sort of thing a reader
+// notices immediately.
+function titleOf(work: Work, end = ''): string {
+  const title = fullTitle(work);
+  return QUOTED.has(work.kind) ? `"${title}${end}"` : `*${title}*${end}`;
+}
+
+// Append a full stop unless the value already ends in one. Several fields
+// arrive pre-terminated — "2 vols.", "2.ª ed.", "1a ed." — and blindly adding a
+// period produced "2 vols.." in the fixtures.
+function stop(value: string): string {
+  return /[.!?]$/.test(value.trim()) ? value.trim() : `${value.trim()}.`;
+}
+
+// The same, for MLA's comma-separated positions. Only a trailing comma is
+// removed: the period in "2 vols." is part of the abbreviation and MLA prints
+// "2 vols.,". Stripping it gave "2 vols,".
+function comma(value: string): string {
+  return `${value.trim().replace(/,$/, '')},`;
+}
+
+function pages(work: Work): string | null {
+  if (work.first_page === null) return null;
+  return work.last_page === null
+    ? `${work.first_page}`
+    : `${work.first_page}–${work.last_page}`;
+}
+
+// The record a citation's imprint comes from: an essay borrows its container's.
+function imprintOf(work: Work, container: Work | null): Work {
+  return container ?? work;
+}
+
+function missingFields(work: Work, container: Work | null): string[] {
+  const im = imprintOf(work, container);
   const missing: string[] = [];
-  if (!book.author && !book.editor) missing.push('author');
-  if (!book.publisher) missing.push('publisher');
-  if (!book.place) missing.push('place');
-  if (book.year === null) missing.push('year');
+  if (!work.author && !work.editor && !im.editor) missing.push('author');
+  if (work.kind !== 'film') {
+    if (!im.publisher) missing.push('publisher');
+    if (im.year === null) missing.push('year');
+  }
+  if (work.url && !work.accessed) missing.push('access date');
   return missing;
 }
 
-// Bibliography entry:
-//   Last, First. Title: Subtitle. Translated by X. Edited by Y. 2nd ed.
-//   Place: Publisher, Year.
-//
-// Title is returned in Markdown italics, since every surface that renders these
-// already renders Markdown. Strip the asterisks for a plain-text export.
-export function formatBibliography(book: Book): Citation {
-  const segments: string[] = [];
+function imprint(work: Work, container: Work | null, style: Style): string {
+  const im = imprintOf(work, container);
+  const place = im.place?.trim();
+  const publisher = im.publisher?.trim();
+  const year = im.year;
 
-  if (book.author) {
-    segments.push(`${book.author.trim()}.`);
-  } else if (book.editor) {
-    segments.push(`${book.editor.trim()}, ed.`);
+  // Chicago prints place; MLA dropped it in the 8th edition.
+  const house =
+    style === 'chicago' && place && publisher
+      ? `${place}: ${publisher}`
+      : publisher || (style === 'chicago' ? place ?? '' : '');
+
+  if (house && year !== null) {
+    return style === 'chicago' ? `${house}, ${year}` : `${house}, ${year}`;
   }
-
-  segments.push(`*${fullTitle(book)}*.`);
-
-  if (book.translator) segments.push(`Translated by ${uninvert(book.translator)}.`);
-  if (book.editor && book.author) segments.push(`Edited by ${uninvert(book.editor)}.`);
-  if (book.edition) segments.push(`${book.edition.trim()}.`);
-
-  const imprint = formatImprint(book);
-  if (imprint) segments.push(`${imprint}.`);
-
-  return { text: segments.join(' '), missing: missingFields(book) };
-}
-
-// Note form, for a footnote:
-//   First Last, Title: Subtitle, trans. X (Place: Publisher, Year), 45.
-export function formatNote(book: Book, page?: number | null): Citation {
-  const segments: string[] = [];
-
-  if (book.author) {
-    segments.push(uninvert(book.author));
-  } else if (book.editor) {
-    segments.push(`${uninvert(book.editor)}, ed.`);
-  }
-
-  segments.push(`*${fullTitle(book)}*`);
-
-  if (book.translator) segments.push(`trans. ${uninvert(book.translator)}`);
-  if (book.edition) segments.push(book.edition.trim());
-
-  const imprint = formatImprint(book);
-  if (imprint) segments.push(`(${imprint})`);
-
-  const head = segments.join(', ');
-  const text = page === null || page === undefined ? `${head}.` : `${head}, ${page}.`;
-
-  return { text, missing: missingFields(book) };
-}
-
-// "Place: Publisher, Year", degrading gracefully as pieces go missing rather
-// than emitting a stray colon or a dangling comma.
-function formatImprint(book: Book): string {
-  const place = book.place?.trim();
-  const publisher = book.publisher?.trim();
-  const year = book.year;
-
-  const house = [place, publisher].filter(Boolean).join(': ');
-
-  if (house && year !== null) return `${house}, ${year}`;
   if (house) return house;
-  if (year !== null) return String(year);
-  return '';
+  return year === null ? '' : String(year);
 }
 
-// A note's citation, ready to paste into a draft chapter (N-7). The quotation
-// comes first because that is what she is quoting; the citation follows it.
-export function formatNoteExport(
-  book: Book,
-  note: { quote: string | null; body: string; printed_page: number | null; origin: string; reviewed: boolean },
-): string {
-  const lines: string[] = [];
+// Chicago 17th, bibliography form. Titles come back in Markdown italics; strip
+// the asterisks for plain text.
+function chicago(work: Work, container: Work | null): string {
+  const parts: string[] = [];
 
-  if (note.quote) lines.push(`> ${note.quote}`, '');
-  lines.push(note.body, '');
-  lines.push(formatNote(book, note.printed_page).text);
-
-  // N-6: an export has to say whether she wrote it, edited it, or has not read
-  // it yet. Silence here would let an unreviewed draft pass as her own.
-  if (note.origin === 'assistant') {
-    lines.push(note.reviewed ? '[assistant draft, reviewed]' : '[assistant draft, UNREVIEWED]');
+  if (work.kind === 'film') {
+    if (work.author) parts.push(`${work.author.trim()}, dir.`);
+    parts.push(`*${fullTitle(work)}*.`);
+    if (work.year !== null) parts.push(`${work.year}.`);
+    return parts.join(' ');
   }
 
-  return lines.join('\n');
+  if (work.author) parts.push(stop(work.author));
+  else if (work.editor) parts.push(`${work.editor.trim()}, ed.`);
+
+  if (container) {
+    parts.push(titleOf(work, '.'));
+    if (work.original_year !== null) parts.push(`${work.original_year}.`);
+    parts.push(`In *${fullTitle(container)}*,`);
+    if (container.editor) parts.push(`edited by ${uninvert(container.editor)},`);
+    if (container.translator) parts.push(`translated by ${uninvert(container.translator)},`);
+    const span = pages(work);
+    if (span) parts.push(`${span}.`);
+    if (container.volume) parts.push(stop(container.volume));
+  } else {
+    parts.push(titleOf(work, '.'));
+    if (work.original_year !== null) parts.push(`${work.original_year}.`);
+    if (work.translator) parts.push(`Translated by ${uninvert(work.translator)}.`);
+    if (work.editor && work.author) parts.push(`Edited by ${uninvert(work.editor)}.`);
+    if (work.edition) parts.push(stop(work.edition));
+    if (work.volume) parts.push(stop(work.volume));
+    if (work.series) parts.push(stop(work.series));
+  }
+
+  const house = imprint(work, container, 'chicago');
+  if (house) parts.push(`${house}.`);
+  if (work.url) {
+    parts.push(work.accessed ? `Accessed ${work.accessed}. ${work.url}.` : `${work.url}.`);
+  }
+
+  return parts.join(' ');
+}
+
+// MLA 9th, works-cited form. Container title after the essay title, contributors
+// after that, no place of publication.
+function mla(work: Work, container: Work | null): string {
+  const parts: string[] = [];
+
+  if (work.kind === 'film') {
+    parts.push(`*${fullTitle(work)}*.`);
+    if (work.author) parts.push(`Directed by ${uninvert(work.author)},`);
+    if (work.year !== null) parts.push(`${work.year}.`);
+    return parts.join(' ');
+  }
+
+  if (work.author) parts.push(stop(work.author));
+  else if (work.editor) parts.push(`${work.editor.trim()}, editor.`);
+
+  if (container) {
+    parts.push(titleOf(work, '.'));
+    parts.push(`*${fullTitle(container)}*,`);
+    if (container.editor) parts.push(`edited by ${uninvert(container.editor)},`);
+    if (container.translator) parts.push(`translated by ${uninvert(container.translator)},`);
+    if (container.edition) parts.push(comma(container.edition));
+    if (container.volume) parts.push(comma(container.volume));
+  } else {
+    parts.push(titleOf(work, '.'));
+    if (work.translator) parts.push(`Translated by ${uninvert(work.translator)},`);
+    if (work.editor && work.author) parts.push(`edited by ${uninvert(work.editor)},`);
+    if (work.edition) parts.push(comma(work.edition));
+    if (work.volume) parts.push(comma(work.volume));
+  }
+
+  const house = imprint(work, container, 'mla');
+  if (house) parts.push(`${house},`);
+
+  const span = pages(work);
+  if (container && span) parts.push(`pp. ${span},`);
+
+  let text = parts.join(' ').replace(/,$/, '.');
+  if (work.url) {
+    text += ` ${work.url}.`;
+    if (work.accessed) text += ` Accessed ${work.accessed}.`;
+  }
+  return text;
+}
+
+export function formatBibliography(
+  work: Work,
+  container: Work | null = null,
+  style: Style = 'chicago',
+): Citation {
+  return {
+    text: style === 'mla' ? mla(work, container) : chicago(work, container),
+    missing: missingFields(work, container),
+  };
+}
+
+// Note form, for a footnote. Chicago only — MLA uses parenthetical citation,
+// which is a different thing and belongs with the passage, not here.
+export function formatNote(
+  work: Work,
+  container: Work | null = null,
+  page?: number | null,
+): Citation {
+  const parts: string[] = [];
+
+  if (work.author) parts.push(uninvert(work.author));
+  else if (work.editor) parts.push(`${uninvert(work.editor)}, ed.`);
+
+  if (container) {
+    parts.push(`${titleOf(work, ',')} in *${fullTitle(container)}*`);
+    if (container.translator) parts.push(`trans. ${uninvert(container.translator)}`);
+  } else {
+    parts.push(titleOf(work));
+    if (work.translator) parts.push(`trans. ${uninvert(work.translator)}`);
+    if (work.edition) parts.push(work.edition.trim());
+  }
+
+  const house = imprint(work, container, 'chicago');
+  if (house) parts.push(`(${house})`);
+
+  const head = parts.join(', ');
+  return {
+    text: page === null || page === undefined ? `${head}.` : `${head}, ${page}.`,
+    missing: missingFields(work, container),
+  };
+}
+
+export function plain(text: string): string {
+  return text.replaceAll('*', '');
+}
+
+// Convenience for a work already carrying its container.
+export function citeWork(
+  work: WorkWithContainer,
+  style: Style = 'chicago',
+): Citation {
+  return formatBibliography(work, work.container, style);
 }

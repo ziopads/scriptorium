@@ -6,16 +6,15 @@ import { day as localDay, readableDay } from '@/lib/dates';
 import {
   allTags,
   listAllNotes,
+  listConnections,
   listNotesByTag,
   listUnreviewedNotes,
   searchNotes,
 } from '@/lib/notes';
-import type { NoteWithBook } from '@/lib/types';
+import type { NoteWithAnchors } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
-// Notes across the whole corpus. This never touches chunks — it is the
-// September half of retrieval, and it works with no books extracted at all.
 export default async function NotesPage({
   searchParams,
 }: {
@@ -25,22 +24,22 @@ export default async function NotesPage({
 
   const { tag, q, filter, day } = await searchParams;
 
-  // One query and derive the rest. At a few hundred notes the day index and the
-  // day filter are cheaper computed here than as extra round trips.
   const everything = await listAllNotes();
 
-  const notes: NoteWithBook[] =
+  const notes: NoteWithAnchors[] =
     filter === 'unreviewed'
       ? await listUnreviewedNotes()
-      : filter === 'untagged'
-        ? everything.filter((n) => n.tags.length === 0)
-        : tag
-          ? await listNotesByTag(tag)
-          : q
-            ? await searchNotes(q)
-            : day
-              ? everything.filter((n) => localDay(n.created_at) === day)
-              : everything;
+      : filter === 'connections'
+        ? await listConnections()
+        : filter === 'untagged'
+          ? everything.filter((n) => n.tags.length === 0)
+          : tag
+            ? await listNotesByTag(tag)
+            : q
+              ? await searchNotes(q)
+              : day
+                ? everything.filter((n) => localDay(n.created_at) === day)
+                : everything;
 
   const tags = await allTags();
 
@@ -51,10 +50,12 @@ export default async function NotesPage({
   }
   const dayList = [...days.entries()].sort((a, b) => b[0].localeCompare(a[0]));
 
-  // Grouped by the day the note was written, but only in the unfiltered view —
-  // inside a tag or a search the grouping would fragment the result.
+  const connectionCount = everything.filter((n) => n.anchors.length > 1).length;
+
+  // Grouped by the day written, but only in the unfiltered view — inside a tag
+  // or a search the grouping would fragment the result.
   const grouped = !tag && !q && !filter && !day;
-  const byDay = new Map<string, NoteWithBook[]>();
+  const byDay = new Map<string, NoteWithAnchors[]>();
   if (grouped) {
     for (const note of notes) {
       const key = localDay(note.created_at);
@@ -108,9 +109,7 @@ export default async function NotesPage({
       <nav className="flex flex-wrap gap-x-3 gap-y-1 text-sm">
         <Link
           href="/notes"
-          className={
-            !tag && !q && !filter && !day ? 'text-accent' : 'text-muted hover:text-accent'
-          }
+          className={!tag && !q && !filter && !day ? 'text-accent' : 'text-muted hover:text-accent'}
         >
           All
         </Link>
@@ -127,19 +126,20 @@ export default async function NotesPage({
         ))}
 
         <Link
+          href="/notes?filter=connections"
+          className={filter === 'connections' ? 'text-accent' : 'text-muted hover:text-accent'}
+        >
+          connections ({connectionCount})
+        </Link>
+        <Link
           href="/notes?filter=untagged"
-          className={
-            filter === 'untagged' ? 'text-accent' : 'text-muted hover:text-accent'
-          }
+          className={filter === 'untagged' ? 'text-accent' : 'text-muted hover:text-accent'}
         >
           untagged
         </Link>
-
         <Link
           href="/notes?filter=unreviewed"
-          className={
-            filter === 'unreviewed' ? 'text-accent' : 'text-muted hover:text-accent'
-          }
+          className={filter === 'unreviewed' ? 'text-accent' : 'text-muted hover:text-accent'}
         >
           unreviewed
         </Link>
@@ -173,9 +173,9 @@ export default async function NotesPage({
                 </Link>
               </h2>
               <ul className="divide-y divide-rule border-y border-rule">
-                {dayNotes.map((note) => (
-                  <NoteCard key={note.id} note={note} showBook />
-                ))}
+                {notes.length > 0
+                  ? dayNotes.map((note) => <NoteCard key={note.id} note={note} />)
+                  : null}
               </ul>
             </section>
           ))}
@@ -183,7 +183,7 @@ export default async function NotesPage({
       ) : (
         <ul className="divide-y divide-rule border-y border-rule">
           {notes.map((note) => (
-            <NoteCard key={note.id} note={note} showBook />
+            <NoteCard key={note.id} note={note} />
           ))}
         </ul>
       )}

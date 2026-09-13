@@ -1,101 +1,134 @@
-// Notes. The half of the September slice that needs no extracted text.
+// Notes and the anchors that place them.
 //
-// A note anchors to (book_id, printed_page, quote) and never to a chunk id.
-// Chunks are a derived cache that gets rebuilt; a chunk-anchored note is
-// orphaned by the first re-chunk (N-8). The same property is what lets a note
-// be written against a book that has not been extracted yet: the quotation is
-// typed by hand now and re-locates itself later by searching for its own text
-// (N-9).
+// A note points at one or more passages. One anchor is an ordinary note; two or
+// more is a connection between works, and both works show it — anchors are
+// unordered peers rather than source and target, so no reciprocal bookkeeping
+// exists and none is needed.
+//
+// An anchor is (work_id, printed_page, quote) and never a chunk id. Chunks are a
+// derived cache that gets rebuilt; a chunk-anchored note is orphaned by the
+// first re-chunk. Anchoring to a quotation also means a note can be written
+// against a work that has not been extracted yet and still attach later.
 
 import { db } from '@/lib/db';
-import type { Note, NoteInput, NoteRevision, NoteWithBook } from '@/lib/types';
+import type {
+  AnchorWithWork,
+  Note,
+  NoteInput,
+  NoteRevision,
+  NoteWithAnchors,
+} from '@/lib/types';
 
-export async function listNotesForBook(bookId: string): Promise<Note[]> {
-  const sql = db();
-  const rows = await sql`
-    select id, book_id, printed_page, quote, body, tags, origin, reviewed,
-           created_at, updated_at
-    from notes
-    where book_id = ${bookId}
-    order by printed_page nulls last, created_at
-  `;
-  return rows as Note[];
-}
+type AnchorRow = AnchorWithWork;
 
-// Everything, newest first. The default view of /notes — a notes page that shows
-// nothing until you pick a filter is a filing cabinet you cannot open.
-export async function listAllNotes(): Promise<NoteWithBook[]> {
-  const sql = db();
-  const rows = await sql`
-    select n.id, n.book_id, n.printed_page, n.quote, n.body, n.tags,
-           n.origin, n.reviewed, n.created_at, n.updated_at,
-           b.title as book_title, b.author as book_author
-    from notes n
-    join books b on b.id = n.book_id
-    order by n.updated_at desc
-  `;
-  return rows as NoteWithBook[];
-}
+// Anchors for a set of notes, in one query. Fetching per note would be one HTTP
+// round trip each.
+async function anchorsFor(noteIds: number[]): Promise<Map<number, AnchorWithWork[]>> {
+  if (noteIds.length === 0) return new Map();
 
-export async function getNote(id: number): Promise<Note | null> {
   const sql = db();
   const rows = (await sql`
-    select id, book_id, printed_page, quote, body, tags, origin, reviewed,
-           created_at, updated_at
-    from notes
-    where id = ${id}
-  `) as Note[];
-  return rows[0] ?? null;
+    select na.note_id, na.ordinal, na.work_id, na.printed_page, na.quote,
+           w.title as work_title, w.author as work_author
+    from note_anchors na
+    join works w on w.id = na.work_id
+    where na.note_id = any(${noteIds})
+    order by na.note_id, na.ordinal
+  `) as AnchorRow[];
+
+  const map = new Map<number, AnchorWithWork[]>();
+  for (const row of rows) {
+    const existing = map.get(row.note_id);
+    if (existing) existing.push(row);
+    else map.set(row.note_id, [row]);
+  }
+  return map;
 }
 
-// One query with a join rather than two convenient ones, because each call is
-// its own HTTP round trip.
-export async function listNotesByTag(tag: string): Promise<NoteWithBook[]> {
+async function withAnchors(notes: Note[]): Promise<NoteWithAnchors[]> {
+  const map = await anchorsFor(notes.map((n) => n.id));
+  return notes.map((note) => ({ ...note, anchors: map.get(note.id) ?? [] }));
+}
+
+export async function listNotesForWork(workId: string): Promise<NoteWithAnchors[]> {
   const sql = db();
-  const rows = await sql`
-    select n.id, n.book_id, n.printed_page, n.quote, n.body, n.tags,
-           n.origin, n.reviewed, n.created_at, n.updated_at,
-           b.title as book_title, b.author as book_author
+  const notes = (await sql`
+    select distinct n.id, n.body, n.tags, n.origin, n.reviewed,
+           n.created_at, n.updated_at
     from notes n
-    join books b on b.id = n.book_id
-    where ${tag} = any(n.tags)
-    order by b.author nulls last, n.printed_page nulls last
-  `;
-  return rows as NoteWithBook[];
+    join note_anchors na on na.note_id = n.id
+    where na.work_id = ${workId}
+    order by n.created_at
+  `) as Note[];
+  return withAnchors(notes);
 }
 
-// Plain substring search over her own writing and the passages she anchored to.
-// This is deliberately not the corpus search from §4.4 — it never touches
-// chunks, and it works in September when there are no chunks to touch.
-export async function searchNotes(query: string): Promise<NoteWithBook[]> {
+export async function listAllNotes(): Promise<NoteWithAnchors[]> {
+  const sql = db();
+  const notes = (await sql`
+    select id, body, tags, origin, reviewed, created_at, updated_at
+    from notes order by updated_at desc
+  `) as Note[];
+  return withAnchors(notes);
+}
+
+export async function getNote(id: number): Promise<NoteWithAnchors | null> {
+  const sql = db();
+  const notes = (await sql`
+    select id, body, tags, origin, reviewed, created_at, updated_at
+    from notes where id = ${id}
+  `) as Note[];
+  if (!notes[0]) return null;
+  return (await withAnchors(notes))[0];
+}
+
+export async function listNotesByTag(tag: string): Promise<NoteWithAnchors[]> {
+  const sql = db();
+  const notes = (await sql`
+    select id, body, tags, origin, reviewed, created_at, updated_at
+    from notes where ${tag} = any(tags) order by updated_at desc
+  `) as Note[];
+  return withAnchors(notes);
+}
+
+// Substring search over her own writing and the passages she anchored to.
+// Deliberately not the corpus search: it never touches chunks, and it works
+// with nothing extracted.
+export async function searchNotes(query: string): Promise<NoteWithAnchors[]> {
   const sql = db();
   const pattern = `%${query}%`;
-  const rows = await sql`
-    select n.id, n.book_id, n.printed_page, n.quote, n.body, n.tags,
-           n.origin, n.reviewed, n.created_at, n.updated_at,
-           b.title as book_title, b.author as book_author
+  const notes = (await sql`
+    select distinct n.id, n.body, n.tags, n.origin, n.reviewed,
+           n.created_at, n.updated_at
     from notes n
-    join books b on b.id = n.book_id
-    where n.body ilike ${pattern} or n.quote ilike ${pattern}
+    left join note_anchors na on na.note_id = n.id
+    where n.body ilike ${pattern} or na.quote ilike ${pattern}
     order by n.updated_at desc
-  `;
-  return rows as NoteWithBook[];
+  `) as Note[];
+  return withAnchors(notes);
 }
 
-// Notes the assistant drafted that she has not yet read (N-6). The partial
-// index on reviewed exists for this.
-export async function listUnreviewedNotes(): Promise<NoteWithBook[]> {
+export async function listUnreviewedNotes(): Promise<NoteWithAnchors[]> {
   const sql = db();
-  const rows = await sql`
-    select n.id, n.book_id, n.printed_page, n.quote, n.body, n.tags,
-           n.origin, n.reviewed, n.created_at, n.updated_at,
-           b.title as book_title, b.author as book_author
+  const notes = (await sql`
+    select id, body, tags, origin, reviewed, created_at, updated_at
+    from notes where reviewed = false order by created_at desc
+  `) as Note[];
+  return withAnchors(notes);
+}
+
+// Notes with more than one anchor: the connections.
+export async function listConnections(): Promise<NoteWithAnchors[]> {
+  const sql = db();
+  const notes = (await sql`
+    select n.id, n.body, n.tags, n.origin, n.reviewed, n.created_at, n.updated_at
     from notes n
-    join books b on b.id = n.book_id
-    where n.reviewed = false
-    order by n.created_at desc
-  `;
-  return rows as NoteWithBook[];
+    join note_anchors na on na.note_id = n.id
+    group by n.id
+    having count(na.ordinal) > 1
+    order by n.updated_at desc
+  `) as Note[];
+  return withAnchors(notes);
 }
 
 export async function allTags(): Promise<{ tag: string; count: number }[]> {
@@ -103,119 +136,118 @@ export async function allTags(): Promise<{ tag: string; count: number }[]> {
   const rows = await sql`
     select tag, count(*)::int as count
     from notes, unnest(tags) as tag
-    group by tag
-    order by count desc, tag
+    group by tag order by count desc, tag
   `;
   return rows as { tag: string; count: number }[];
 }
 
-// origin defaults to 'human', and a human note is reviewed on arrival because
-// writing one is reviewing it. The draft_note tool passes origin: 'assistant',
-// which flips reviewed to false.
+// A human note is reviewed on arrival, because writing one is reviewing it.
+// draft_note will pass origin 'assistant', which flips reviewed to false.
 export async function createNote(input: NoteInput): Promise<Note> {
+  if (input.anchors.length === 0) {
+    throw new Error('A note needs at least one anchor.');
+  }
+
   const sql = db();
   const origin = input.origin ?? 'human';
 
   const rows = (await sql`
-    insert into notes (book_id, printed_page, quote, body, tags, origin, reviewed)
-    values (
-      ${input.book_id},
-      ${input.printed_page ?? null},
-      ${input.quote ?? null},
-      ${input.body},
-      ${input.tags ?? []},
-      ${origin},
-      ${origin === 'human'}
-    )
+    insert into notes (body, tags, origin, reviewed)
+    values (${input.body}, ${input.tags ?? []}, ${origin}, ${origin === 'human'})
     returning *
   `) as Note[];
-  return rows[0];
+
+  const note = rows[0];
+
+  for (const [index, anchor] of input.anchors.entries()) {
+    await sql`
+      insert into note_anchors (note_id, ordinal, work_id, printed_page, quote)
+      values (${note.id}, ${index + 1}, ${anchor.work_id},
+              ${anchor.printed_page ?? null}, ${anchor.quote ?? null})
+    `;
+  }
+
+  return note;
 }
 
-// A full replacement of the editable fields rather than a patch. Building an
-// update from whichever keys were passed turns a typo into a field that
-// silently keeps its old value.
+// A full replacement of the editable fields. The previous state is copied into
+// note_revisions by a data-modifying CTE in the same statement — the HTTP driver
+// gives no transaction across two calls, so a read-then-write would leave a
+// window where an edit lands with no history. The `is distinct from` guard means
+// opening the form and pressing Save writes no revision.
 //
-// Editing always sets reviewed and leaves origin alone, so the record of where
-// a sentence came from survives the edit while its status changes.
-//
-// The previous state is copied into note_revisions in the same statement. A
-// data-modifying common table expression and the outer update both read the
-// same snapshot, so the CTE sees the row as it was before the update — which is
-// what makes this safe over the HTTP driver, where two separate calls would not
-// share a transaction.
-//
-// The `where` inside the CTE means an edit that changes nothing writes no
-// revision. Opening the edit form and pressing Save should not manufacture
-// history.
+// The revision carries the first anchor's page and quote. Anchors themselves are
+// not versioned; see the note in migration 004.
 export async function updateNote(
   id: number,
-  fields: {
-    body: string;
-    quote: string | null;
-    printed_page: number | null;
-    tags: string[];
-  },
+  fields: { body: string; tags: string[] },
 ): Promise<Note> {
   const sql = db();
   const rows = (await sql`
     with previous as (
       insert into note_revisions
         (note_id, body, quote, printed_page, tags, origin, reviewed, written_at)
-      select id, body, quote, printed_page, tags, origin, reviewed, updated_at
-      from notes
-      where id = ${id}
-        and (
-          body is distinct from ${fields.body}
-          or quote is distinct from ${fields.quote}
-          or printed_page is distinct from ${fields.printed_page}
-          or tags is distinct from ${fields.tags}
-        )
+      select n.id, n.body, a.quote, a.printed_page, n.tags, n.origin, n.reviewed,
+             n.updated_at
+      from notes n
+      left join note_anchors a on a.note_id = n.id and a.ordinal = 1
+      where n.id = ${id}
+        and (n.body is distinct from ${fields.body}
+             or n.tags is distinct from ${fields.tags})
       returning note_id
     )
     update notes set
-      body         = ${fields.body},
-      quote        = ${fields.quote},
-      printed_page = ${fields.printed_page},
-      tags         = ${fields.tags},
-      reviewed     = true,
-      updated_at   = now()
+      body = ${fields.body}, tags = ${fields.tags},
+      reviewed = true, updated_at = now()
     where id = ${id}
     returning *
   `) as Note[];
   return rows[0];
 }
 
-// The superseded states of one note, newest first. Read on demand rather than
-// joined into every note query — most notes will never have been edited.
+export async function setAnchor(
+  noteId: number,
+  ordinal: number,
+  fields: { work_id: string; printed_page: number | null; quote: string | null },
+): Promise<void> {
+  const sql = db();
+  await sql`
+    insert into note_anchors (note_id, ordinal, work_id, printed_page, quote)
+    values (${noteId}, ${ordinal}, ${fields.work_id}, ${fields.printed_page}, ${fields.quote})
+    on conflict (note_id, ordinal) do update set
+      work_id = excluded.work_id,
+      printed_page = excluded.printed_page,
+      quote = excluded.quote
+  `;
+}
+
+export async function removeAnchor(noteId: number, ordinal: number): Promise<void> {
+  const sql = db();
+  await sql`delete from note_anchors where note_id = ${noteId} and ordinal = ${ordinal}`;
+}
+
+export async function nextAnchorOrdinal(noteId: number): Promise<number> {
+  const sql = db();
+  const rows = (await sql`
+    select coalesce(max(ordinal), 0) + 1 as next from note_anchors where note_id = ${noteId}
+  `) as { next: number }[];
+  return rows[0].next;
+}
+
+// Deletion lives here and has no counterpart on the MCP server. Removing her own
+// writing stays in the application, where an accidental tool call cannot reach it.
+export async function deleteNote(id: number): Promise<void> {
+  const sql = db();
+  await sql`delete from notes where id = ${id}`;
+}
+
 export async function listRevisions(noteId: number): Promise<NoteRevision[]> {
   const sql = db();
   const rows = await sql`
     select id, note_id, body, quote, printed_page, tags, origin, reviewed,
            written_at, superseded_at
-    from note_revisions
-    where note_id = ${noteId}
+    from note_revisions where note_id = ${noteId}
     order by superseded_at desc
   `;
   return rows as NoteRevision[];
-}
-
-// How many times each note has been edited, for the whole page at once. One
-// query rather than one per note.
-export async function revisionCounts(): Promise<Map<number, number>> {
-  const sql = db();
-  const rows = (await sql`
-    select note_id, count(*)::int as count
-    from note_revisions
-    group by note_id
-  `) as { note_id: number; count: number }[];
-  return new Map(rows.map((r) => [r.note_id, r.count]));
-}
-
-// Deletion lives here and has no counterpart on the MCP route. Correction and
-// removal of her own writing stay in the application, where an accidental tool
-// call cannot reach them.
-export async function deleteNote(id: number): Promise<void> {
-  const sql = db();
-  await sql`delete from notes where id = ${id}`;
 }

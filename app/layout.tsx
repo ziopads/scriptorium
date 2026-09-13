@@ -23,12 +23,18 @@ export const dynamic = 'force-dynamic';
 
 const NAV = [
   { href: '/', label: 'Lists' },
-  { href: '/books', label: 'Catalogue' },
+  { href: '/works', label: 'Catalogue' },
   { href: '/notes', label: 'Notes' },
   { href: '/gaps', label: 'Gaps' },
 ];
 
-export default async function RootLayout({ children }: LayoutProps<'/'>) {
+// Typed explicitly rather than with Next's generated LayoutProps global, which
+// lives in .next/types and vanishes whenever that directory is cleared.
+export default async function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   // Display only. The guard that matters runs in each page and each Server
   // Action; this just decides whether to show a name and a sign-out button.
   const user = await getAllowedUser();
