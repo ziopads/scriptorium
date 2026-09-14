@@ -114,6 +114,46 @@ textarea.reading {
   color: #5e2214;
 }
 
+/* A page of a book, reflowed into paragraphs. Justified with hyphenation on,
+   which is the only way justification is readable at this measure — the lang
+   attribute on the container is what picks the dictionary, so it is set from
+   works.language. Indents mark paragraphs after the first, in place of the
+   space between them; that is how the books themselves are set, and it saves
+   the vertical room a page of text needs. Revert by dropping text-align and
+   text-indent here. */
+.page-text p {
+  text-align: justify;
+  text-justify: inter-word;
+  hyphens: auto;
+  -webkit-hyphens: auto;
+  margin: 0;
+  orphans: 2;
+  widows: 2;
+}
+
+.page-text p + p {
+  text-indent: 1.4em;
+}
+
+/* A chapter title or section rubric standing at the head of the page. Set
+   apart rather than run into the prose beneath it. Uppercased because the
+   extractor lowercases the small caps most running heads are set in, and a
+   bare "overview" above a paragraph reads as a stray word. */
+.page-text .page-heading {
+  text-align: left;
+  text-indent: 0;
+  margin-bottom: 1.15rem;
+  font-family: var(--font-geist-sans);
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.page-text .page-heading + p {
+  text-indent: 0;
+}
+
 /* The preview scrubber: a hairline track with a small accent thumb, so that
    crossing a four-hundred-page book in one drag does not put a piece of
    system chrome in the middle of a paper-coloured page. */

@@ -202,7 +202,12 @@ export async function CenterPane({ params }: { params: WorkbenchParams }) {
 
       {view === 'preview' ? (
         preview ? (
-          <PageView params={params} page={preview.page} bounds={preview.bounds} />
+          <PageView
+            params={params}
+            page={preview.page}
+            bounds={preview.bounds}
+            language={work.language}
+          />
         ) : (
           <div className="space-y-2 text-sm text-muted">
             {work.source_format === 'none' ? (

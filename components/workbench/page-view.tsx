@@ -1,8 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
+import { htmlLang, toBlocks } from '@/lib/page-text';
 import type { PageBounds, PageText } from '@/lib/pages';
 import { MAX_QUOTE_CHARS, normalizeQuotation } from '@/lib/quotation';
 import { href, type WorkbenchParams } from '@/lib/workbench-url';
@@ -13,29 +14,37 @@ import { href, type WorkbenchParams } from '@/lib/workbench-url';
 // A selection that crossed a page break would have no single folio, which is
 // the thing this is here to supply, so the pane shows one page at a time. The
 // ways off it: left and right arrow keys, the two chevrons, a folio typed into
-// the field, and the scrubber for crossing a long book in one drag.
+// the field, and the scrubber for crossing a long book in one drag. The
+// scrubber moves a local number while dragging and navigates once on release,
+// because navigating per pixel would be a server round trip per pixel.
 //
-// The scrubber moves a local number while dragging and navigates once on
-// release. Navigating per pixel would be a server round trip per pixel.
+// The text is reflowed into paragraphs for reading (lib/page-text.ts) while
+// pages.text stays verbatim in the database, which is what verify_quotation
+// will be checked against.
 //
-// The page text is rendered verbatim, breaks and all, because pages.text is
-// what verify_quotation will be checked against. The passage is cleaned on its
-// way to the form, not on its way to the screen (lib/quotation.ts).
+// The capture button normally lives beside the Quotation field in the note
+// form, where she is about to type. It only appears here when the note pane is
+// collapsed and there is therefore nowhere else for it to be.
 
 export function PageView({
   params,
   page,
   bounds,
+  language,
 }: {
   params: WorkbenchParams;
   page: PageText;
   bounds: PageBounds;
+  language: string | null;
 }) {
   const router = useRouter();
-  const bodyRef = useRef<HTMLDivElement>(null);
   const [selection, setSelection] = useState('');
   const [scrub, setScrub] = useState<number | null>(null);
   const [folioField, setFolioField] = useState(String(page.printed_page));
+
+  const blocks = useMemo(() => toBlocks(page.text), [page.text]);
+  const lang = htmlLang(language);
+  const paneHidden = params.r === '0';
 
   useEffect(() => {
     setFolioField(String(page.printed_page));
@@ -50,28 +59,24 @@ export function PageView({
     [bounds.first, bounds.last, params, router],
   );
 
-  // What is selected, whenever it changes, provided it is inside the page.
+  // Watched only to know whether to offer the fallback button below; the
+  // capture itself is the note form's business.
   useEffect(() => {
+    if (!paneHidden) return;
     function onSelectionChange() {
+      const body = document.getElementById('preview-body');
       const sel = document.getSelection();
-      const body = bodyRef.current;
-      if (!sel || sel.isCollapsed || !body) {
-        setSelection('');
-        return;
-      }
-      if (!body.contains(sel.anchorNode) || !body.contains(sel.focusNode)) {
-        setSelection('');
-        return;
-      }
+      if (!body || !sel || sel.isCollapsed) return setSelection('');
+      if (!body.contains(sel.anchorNode) || !body.contains(sel.focusNode)) return setSelection('');
       setSelection(normalizeQuotation(sel.toString()));
     }
     document.addEventListener('selectionchange', onSelectionChange);
     return () => document.removeEventListener('selectionchange', onSelectionChange);
-  }, []);
+  }, [paneHidden]);
 
   // Left and right turn the page. Guarded so they still move the caret inside
-  // a field, and so the left pane's own arrow handling is untouched (it uses
-  // up and down).
+  // a field, and so the left pane's own arrow handling (up and down) is
+  // untouched.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
@@ -90,18 +95,10 @@ export function PageView({
   }, [bounds.first, bounds.last, go, page.printed_page]);
 
   const shown = scrub ?? page.printed_page;
-  const tooLong = selection.length > MAX_QUOTE_CHARS;
 
   // The offset check: folio is the number read off the page, printed_page is
   // page_index + works.page_offset. A disagreement means the offset is wrong.
   const offsetOff = page.folio !== null && page.folio !== page.printed_page;
-
-  function useAsQuotation() {
-    if (!selection || tooLong) return;
-    // r: null opens the note pane if it was hidden — the quotation lands in a
-    // field she would otherwise not be able to see.
-    router.push(href(params, { quote: selection, p: String(page.printed_page), r: null }));
-  }
 
   return (
     <div className="space-y-3">
@@ -111,7 +108,7 @@ export function PageView({
             type="button"
             onClick={() => go(page.printed_page - 1)}
             disabled={page.printed_page <= bounds.first}
-            className="px-1 text-base leading-none disabled:opacity-30 hover:text-accent"
+            className="px-1 text-base leading-none hover:text-accent disabled:opacity-30"
             aria-label="Previous page"
           >
             ‹
@@ -134,7 +131,7 @@ export function PageView({
             type="button"
             onClick={() => go(page.printed_page + 1)}
             disabled={page.printed_page >= bounds.last}
-            className="px-1 text-base leading-none disabled:opacity-30 hover:text-accent"
+            className="px-1 text-base leading-none hover:text-accent disabled:opacity-30"
             aria-label="Next page"
           >
             ›
@@ -169,35 +166,38 @@ export function PageView({
         <p className="text-xs text-accent">p. {scrub} — release to go</p>
       ) : null}
 
-      <div className="flex min-h-6 items-baseline gap-3">
-        {selection ? (
-          <>
-            <button
-              type="button"
-              onClick={useAsQuotation}
-              disabled={tooLong}
-              className="border border-accent px-3 py-1 text-xs text-accent hover:bg-accent hover:text-background disabled:opacity-40"
-            >
-              Use as quotation
-            </button>
-            <span className="text-xs text-muted">
-              {tooLong
-                ? `${selection.length.toLocaleString()} characters is too long for one quotation`
-                : `${selection.length.toLocaleString()} characters · p. ${page.printed_page}`}
-            </span>
-          </>
-        ) : (
-          <span className="text-xs text-muted">
-            Select a passage to use it as the quotation. ← and → turn the page.
-          </span>
-        )}
-      </div>
+      {paneHidden && selection ? (
+        <button
+          type="button"
+          disabled={selection.length > MAX_QUOTE_CHARS}
+          onClick={() =>
+            router.push(href(params, { quote: selection, p: String(page.printed_page), r: null }))
+          }
+          className="border border-accent px-3 py-1 text-xs text-accent hover:bg-accent hover:text-background disabled:opacity-40"
+        >
+          Use as quotation — opens the note pane
+        </button>
+      ) : (
+        <p className="text-xs text-muted">
+          ← and → turn the page. Select a passage and use it beside the Quotation field.
+        </p>
+      )}
 
       <div
-        ref={bodyRef}
-        className="reading max-w-[36rem] whitespace-pre-wrap border-t border-rule pt-4 selection:bg-accent/15"
+        id="preview-body"
+        data-printed-page={page.printed_page}
+        lang={lang}
+        className="page-text reading max-w-[36rem] border-t border-rule pt-5 selection:bg-accent/15"
       >
-        {page.text}
+        {blocks.map((b, i) =>
+          b.kind === 'heading' ? (
+            <p key={i} className="page-heading">
+              {b.text}
+            </p>
+          ) : (
+            <p key={i}>{b.text}</p>
+          ),
+        )}
       </div>
     </div>
   );

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import Link from 'next/link';
 
 import { AttributionFields } from '@/components/attribution-fields';
@@ -34,6 +35,7 @@ export function NoteForm({
   defaultQuote,
   defaultPage,
   clearQuoteHref,
+  captureSlot,
 }: {
   workId?: string;
   works?: AttachedWork[];
@@ -42,6 +44,7 @@ export function NoteForm({
   defaultQuote?: string;
   defaultPage?: string;
   clearQuoteHref?: string;
+  captureSlot?: ReactNode; // "Use selection", when a page is open beside this
 }) {
   const attached = works ?? [];
 
@@ -112,10 +115,11 @@ export function NoteForm({
         <span className="flex items-baseline gap-2 text-sm">
           Quotation
           {defaultQuote && clearQuoteHref ? (
-            <Link href={clearQuoteHref} className="ml-auto text-xs text-muted hover:text-accent">
+            <Link href={clearQuoteHref} className="text-xs text-muted hover:text-accent">
               clear
             </Link>
           ) : null}
+          {captureSlot}
         </span>
         <textarea
           key={`quote:${defaultQuote ?? ''}`}

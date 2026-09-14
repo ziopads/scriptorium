@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { AttributionFields } from '@/components/attribution-fields';
 import { NoteCard } from '@/components/note-card';
 import { NoteForm, type AttachedWork } from '@/components/note-form';
+import { QuoteCapture } from '@/components/workbench/quote-capture';
 import { addFicha } from '@/lib/actions';
 import { getNote } from '@/lib/notes';
 import type { WorkbenchRow } from '@/lib/works';
@@ -131,6 +132,7 @@ export async function RightPane({ params, rows }: { params: WorkbenchParams; row
         defaultQuote={params.quote}
         defaultPage={params.quote ? params.p : undefined}
         clearQuoteHref={href(params, { quote: null })}
+        captureSlot={params.view === 'preview' ? <QuoteCapture params={params} /> : null}
       />
     </div>
   );

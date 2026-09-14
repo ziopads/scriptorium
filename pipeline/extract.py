@@ -55,6 +55,20 @@ PAGES = PIPELINE / "pages"
 HEADER_SHARE = 0.25
 HEADER_MIN_PAGES = 12
 
+# The share rule catches a head that runs the length of the book. It misses a
+# head that changes at every chapter, because a chapter is a small fraction of
+# a book: Adorno's "overview" sits at the top of about twenty of 449 pages, or
+# four per cent, and survived into the reading pane as a word before the first
+# sentence of every page of that chapter.
+#
+# So a second rule, on absolute count rather than share. A short line, with no
+# sentence-ending punctuation, standing first or last on this many pages, is
+# furniture. Prose does not repeat a line verbatim eight times in the same
+# position. Every removal is printed at the end of the run — read that list
+# before loading, because this rule is the one that could take a real line.
+CHAPTER_HEAD_MIN = 8
+CHAPTER_HEAD_MAX_CHARS = 60
+
 LIGATURES = {
     "\ufb00": "ff",
     "\ufb01": "fi",
@@ -121,11 +135,19 @@ def find_running_heads(pages: list[str]) -> set[str]:
             counts[mask_folios(lines[-1])] += 1
 
     threshold = len(pages) * HEADER_SHARE
-    return {
-        line
-        for line, count in counts.items()
-        if count >= threshold and line and len(line) < 120
-    }
+    heads = set()
+    for line, count in counts.items():
+        if not line or len(line) >= 120:
+            continue
+        if count >= threshold:
+            heads.add(line)
+        elif (
+            count >= CHAPTER_HEAD_MIN
+            and len(line) <= CHAPTER_HEAD_MAX_CHARS
+            and not line.rstrip().endswith((".", "!", "?", ":", ";", ","))
+        ):
+            heads.add(line)
+    return heads
 
 
 def strip_running_heads(text: str, heads: set[str]) -> str:
