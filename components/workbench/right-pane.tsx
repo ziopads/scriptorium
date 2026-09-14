@@ -12,6 +12,11 @@ import { attached, href, withAttached, type WorkbenchParams } from '@/lib/workbe
 // axis, or the new-note form. The works it writes about come from the URL
 // (ws, attached by clicking rows) or, failing that, the selected work; ids are
 // never typed.
+//
+// A passage selected in the Preview tab arrives the same way, as quote, and
+// brings p with it. The page defaults only when there is a quotation: reading
+// page 300 and writing a note about the book as a whole should not silently
+// anchor that note to page 300.
 
 function label(r: WorkbenchRow | undefined, id: string): string {
   if (!r) return id;
@@ -29,8 +34,9 @@ export async function RightPane({ params, rows }: { params: WorkbenchParams; row
     label: label(byId.get(id), id),
     removeHref: ws.length > 0 ? href(params, { ws: withAttached(params, ws.filter((x) => x !== id)) }) : undefined,
   }));
-  // After saving, come back here with the attachments cleared.
-  const here = href(params, { ws: null });
+  // After saving, come back here with the attachments and the captured
+  // passage cleared, and the page still open where she left it.
+  const here = href(params, { ws: null, quote: null });
 
   // A note under review.
   if (params.n) {
@@ -118,7 +124,14 @@ export async function RightPane({ params, rows }: { params: WorkbenchParams; row
   return (
     <div className="space-y-3">
       <p className="text-xs text-muted">New note</p>
-      <NoteForm works={works} returnTo={here} compact />
+      <NoteForm
+        works={works}
+        returnTo={here}
+        compact
+        defaultQuote={params.quote}
+        defaultPage={params.quote ? params.p : undefined}
+        clearQuoteHref={href(params, { quote: null })}
+      />
     </div>
   );
 }

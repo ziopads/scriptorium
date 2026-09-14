@@ -8,12 +8,17 @@
 //   ws    comma-separated works attached to the note being written
 //   pane  left pane tab: catalogue | notes | axes
 //   view  centre tab: meta | preview | dossier | notes | axes
-//   p     preview page (reserved)
+//   p     preview page, as the printed folio
+//   quote a passage captured in the preview, already normalized, which the
+//         note form takes as the quotation's default
 //   r     right pane: 0 hides it, giving the centre the room
+//
+// quote rather than q because q reads as a search, and the left pane's filter
+// is the other thing that would want that letter.
 
 export type WorkbenchParams = Record<string, string | undefined>;
 
-export const WB_KEYS = ['w', 'n', 'a', 'ws', 'pane', 'view', 'p', 'r'] as const;
+export const WB_KEYS = ['w', 'n', 'a', 'ws', 'pane', 'view', 'p', 'quote', 'r'] as const;
 
 export function pick(searchParams: Record<string, string | string[] | undefined>): WorkbenchParams {
   const out: WorkbenchParams = {};

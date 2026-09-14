@@ -114,6 +114,52 @@ textarea.reading {
   color: #5e2214;
 }
 
+/* The preview scrubber: a hairline track with a small accent thumb, so that
+   crossing a four-hundred-page book in one drag does not put a piece of
+   system chrome in the middle of a paper-coloured page. */
+.scrubber {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 1rem;
+  background: transparent;
+  cursor: pointer;
+}
+
+.scrubber::-webkit-slider-runnable-track {
+  height: 2px;
+  background: var(--rule);
+}
+
+.scrubber::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 11px;
+  height: 11px;
+  margin-top: -4.5px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.scrubber::-moz-range-track {
+  height: 2px;
+  background: var(--rule);
+}
+
+.scrubber::-moz-range-thumb {
+  width: 11px;
+  height: 11px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.scrubber:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 input:focus,
 select:focus,
 textarea:focus {

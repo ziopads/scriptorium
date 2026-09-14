@@ -26,9 +26,9 @@ export const dynamic = 'force-dynamic';
 //
 // The reason it exists is that a note is written by pointing at things rather
 // than typing identifiers: the selected work is attached, other rows are
-// attached with +, and (once page text is exposed) a selected passage becomes
-// the quotation. The old note form at the foot of each work page stays until
-// this has been used for a while.
+// attached with +, and a passage selected in the centre pane's Preview becomes
+// the quotation, carrying its printed page with it. The old note form at the
+// foot of each work page stays until this has been used for a while.
 
 const SHORT: Record<string, string> = {
   theory: 'I',

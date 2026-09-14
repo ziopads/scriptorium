@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { Tabs } from '@/components/workbench/tabs';
 import type { WorkbenchRow } from '@/lib/works';
 import { attached, href, withAttached, type WorkbenchParams } from '@/lib/workbench-url';
 
@@ -87,17 +88,15 @@ export function LeftPane({
 
   return (
     <div className="flex h-full flex-col" onKeyDown={onKey}>
-      <nav className="flex gap-3 border-b border-rule pb-2 text-sm">
-        {PANES.map((p) => (
-          <Link
-            key={p.id}
-            href={href(params, { pane: p.id === 'catalogue' ? null : p.id })}
-            className={pane === p.id ? 'text-accent' : 'text-muted hover:text-accent'}
-          >
-            {p.label}
-          </Link>
-        ))}
-      </nav>
+      <Tabs
+        label="Left pane"
+        activeId={pane}
+        items={PANES.map((p) => ({
+          id: p.id,
+          label: p.label,
+          href: href(params, { pane: p.id === 'catalogue' ? null : p.id }),
+        }))}
+      />
 
       {pane === 'catalogue' ? (
         <>

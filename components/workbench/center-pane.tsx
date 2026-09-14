@@ -1,15 +1,18 @@
 import Link from 'next/link';
 
 import { NoteCard } from '@/components/note-card';
+import { PageView } from '@/components/workbench/page-view';
+import { Tabs } from '@/components/workbench/tabs';
 import { formatBibliography, formatNote, plain } from '@/lib/citation';
 import { getAxisTree, listAxesForWork, listNotesForWork } from '@/lib/notes';
+import { getPage, pageBounds } from '@/lib/pages';
 import { getWorkWithContainer, listContents, membershipsFor } from '@/lib/works';
 import { href, type WorkbenchParams } from '@/lib/workbench-url';
 import { KIND_LABEL, PURPOSE_LABEL, STANDING_LABEL } from '@/lib/types';
 
 // The centre pane: whatever is selected on the left, in full. A work has tabs
-// (Meta, Preview, Dossier, Notes, Axes); an axis shows its tree. Preview and
-// Dossier are placeholders until the page text and the dossiers exist.
+// (Meta, Preview, Dossier, Notes, Axes); an axis shows its tree. Dossier is a
+// placeholder until there are dossiers.
 
 const VIEWS = [
   { id: 'meta', label: 'Meta' },
@@ -25,6 +28,20 @@ const SOURCE_LABEL: Record<string, string> = {
   epub: 'EPUB — locatable, not citable',
   none: 'no file held',
 };
+
+// Only five works have been through the pipeline, so most of the catalogue
+// reaches the first branch. source_format on the work says a file is held,
+// which is a different claim from pages having been loaded.
+async function loadPreview(workId: string, p: string | undefined) {
+  const bounds = await pageBounds(workId);
+  if (!bounds) return null;
+  const asked = Number.parseInt(p ?? '', 10);
+  const wanted = Number.isNaN(asked)
+    ? bounds.first
+    : Math.min(Math.max(asked, bounds.first), bounds.last);
+  const page = await getPage(workId, wanted);
+  return page ? { bounds, page } : null;
+}
 
 function Field({ label, value }: { label: string; value: string | number | null }) {
   if (value === null || value === '') return null;
@@ -102,6 +119,8 @@ export async function CenterPane({ params }: { params: WorkbenchParams }) {
     listContents(work.id),
   ]);
 
+  const preview = view === 'preview' ? await loadPreview(work.id, params.p) : null;
+
   const chicago = formatBibliography(work, work.container, 'chicago');
   const note = formatNote(work, work.container, null);
 
@@ -129,19 +148,16 @@ export async function CenterPane({ params }: { params: WorkbenchParams }) {
         </p>
       </header>
 
-      <nav className="flex gap-3 border-b border-rule pb-2 text-sm">
-        {VIEWS.map((v) => (
-          <Link
-            key={v.id}
-            href={href(params, { view: v.id === 'meta' ? null : v.id })}
-            className={view === v.id ? 'text-accent' : 'text-muted hover:text-accent'}
-          >
-            {v.label}
-            {v.id === 'notes' && notes.length > 0 ? <span className="text-muted"> {notes.length}</span> : null}
-            {v.id === 'axes' && axes.length > 0 ? <span className="text-muted"> {axes.length}</span> : null}
-          </Link>
-        ))}
-      </nav>
+      <Tabs
+        label="Work"
+        activeId={view}
+        items={VIEWS.map((v) => ({
+          id: v.id,
+          label: v.label,
+          href: href(params, { view: v.id === 'meta' ? null : v.id }),
+          badge: v.id === 'notes' ? notes.length : v.id === 'axes' ? axes.length : undefined,
+        }))}
+      />
 
       {view === 'meta' ? (
         <div className="space-y-4 text-sm">
@@ -185,17 +201,20 @@ export async function CenterPane({ params }: { params: WorkbenchParams }) {
       ) : null}
 
       {view === 'preview' ? (
-        <div className="space-y-2 text-sm text-muted">
-          {work.source_format === 'none' ? (
-            <p>No file is held for this work, so there is no page text to show.</p>
-          ) : (
-            <p>
-              Page text will appear here once the extracted pages are exposed to the
-              application. Selecting a passage will fill the quotation and page on
-              the right.
-            </p>
-          )}
-        </div>
+        preview ? (
+          <PageView params={params} page={preview.page} bounds={preview.bounds} />
+        ) : (
+          <div className="space-y-2 text-sm text-muted">
+            {work.source_format === 'none' ? (
+              <p>No file is held for this work, so there is no page text to show.</p>
+            ) : (
+              <p>
+                A file is held for this work, but its pages have not been extracted and
+                loaded yet. Five books have been through the pipeline so far.
+              </p>
+            )}
+          </div>
+        )
       ) : null}
 
       {view === 'dossier' ? (

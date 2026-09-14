@@ -13,6 +13,12 @@ import { addNote } from '@/lib/actions';
 // Same fields either way, so the instructions describe one form. With a quote
 // or a page the first attached work carries the anchor; the rest are
 // whole-work relations.
+//
+// defaultQuote and defaultPage arrive from a passage selected in the Preview
+// tab, carried in the URL. The key on those two fields is what makes that
+// work: changing defaultValue on a mounted uncontrolled input does nothing, so
+// the field has to be remounted. Keyed narrowly, on the quotation and the page
+// alone, so a note body already typed survives the capture.
 
 export interface AttachedWork {
   id: string;
@@ -25,11 +31,17 @@ export function NoteForm({
   works,
   returnTo,
   compact = false,
+  defaultQuote,
+  defaultPage,
+  clearQuoteHref,
 }: {
   workId?: string;
   works?: AttachedWork[];
   returnTo?: string;
   compact?: boolean;
+  defaultQuote?: string;
+  defaultPage?: string;
+  clearQuoteHref?: string;
 }) {
   const attached = works ?? [];
 
@@ -97,8 +109,21 @@ export function NoteForm({
       <AttributionFields />
 
       <label className="block space-y-1">
-        <span className="text-sm">Quotation</span>
-        <textarea name="quote" rows={3} className="reading" />
+        <span className="flex items-baseline gap-2 text-sm">
+          Quotation
+          {defaultQuote && clearQuoteHref ? (
+            <Link href={clearQuoteHref} className="ml-auto text-xs text-muted hover:text-accent">
+              clear
+            </Link>
+          ) : null}
+        </span>
+        <textarea
+          key={`quote:${defaultQuote ?? ''}`}
+          name="quote"
+          rows={defaultQuote ? 5 : 3}
+          className="reading"
+          defaultValue={defaultQuote}
+        />
         {compact ? null : (
           <span className="block text-xs text-muted">
             Verbatim, in the original language. This is what re-locates the note if the
@@ -116,7 +141,12 @@ export function NoteForm({
       <div className="flex flex-wrap items-end gap-3">
         <label className="w-24 space-y-1">
           <span className="text-sm">Page</span>
-          <input type="number" name="printed_page" />
+          <input
+            key={`page:${defaultPage ?? ''}`}
+            type="number"
+            name="printed_page"
+            defaultValue={defaultPage}
+          />
         </label>
         <label className="min-w-40 flex-1 space-y-1">
           <span className="text-sm">Tags</span>
