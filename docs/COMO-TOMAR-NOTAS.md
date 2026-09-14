@@ -9,9 +9,9 @@ aplicación; se versiona junto con el esquema que describe (`db/005-notes-graph.
 
 ## Hay cuatro cosas que puedes escribir
 
-Una nota o una pregunta se escribe desde la página de la obra (Catálogo → la
-obra → el formulario al final, bajo *Notes*). Una ficha se escribe en la
-página de su eje. Un eje se crea en *Axes*.
+Una nota o una pregunta se escribe en *Notes* (el botón *New note* arriba de la
+lista) o desde la página de la obra (Catálogo → la obra → *Add a note*). Una
+ficha se escribe en la página de su eje. Un eje se crea en *Axes*.
 
 **Nota.** Una idea, una observación, una lectura de un pasaje. Es lo que más
 vas a escribir. Puede tener cita y página o no tenerlas.

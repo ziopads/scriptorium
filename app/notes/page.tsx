@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { NoteCard } from '@/components/note-card';
+import { NoteForm } from '@/components/note-form';
 import { requireAllowedUser } from '@/lib/auth/guard';
 import { day as localDay, readableDay } from '@/lib/dates';
 import {
@@ -118,6 +119,15 @@ export default async function NotesPage({
         </p>
       </div>
 
+      <details open={notes.length === 0} className="border-y border-rule py-3">
+        <summary className="cursor-pointer text-sm text-accent hover:underline">
+          New note
+        </summary>
+        <div className="pt-4">
+          <NoteForm />
+        </div>
+      </details>
+
       <form action="/notes" className="flex gap-3">
         <input
           type="text"
@@ -229,7 +239,7 @@ export default async function NotesPage({
 
       {notes.length === 0 ? (
         <p className="text-sm text-muted">
-          Nothing here yet. Notes are written from a work’s page;{' '}
+          Nothing here yet. Write one above, or from a work’s page;{' '}
           <Link href="/como" className="text-accent hover:underline">how this works</Link>.
         </p>
       ) : grouped ? (

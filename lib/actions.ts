@@ -285,20 +285,24 @@ export async function addStubWork(form: FormData): Promise<void> {
 
 // From a work page. With a quote or a page it is an anchor; with neither it is
 // a note about the whole work, recorded in note_works rather than as an anchor
-// with nothing in it.
+// with nothing in it. From /notes the work is optional: a note about nothing
+// on the list (Leal's periodisation, a definition) is allowed to stand alone.
 export async function addNote(form: FormData): Promise<void> {
   await requireAllowedUser();
 
   const workId = text(form, 'work_id');
   const body = text(form, 'body');
-  if (!workId) throw new Error('addNote called without a work_id.');
   if (!body) throw new Error('A note needs a body.');
+  if (workId && !(await getWork(workId))) {
+    throw new Error(`No work with id ${workId}. Check the identifier on its catalogue page.`);
+  }
 
   const kindRaw = text(form, 'kind');
   const kind: NoteKind = kindRaw === 'question' ? 'question' : 'note';
   const printedPage = number(form, 'printed_page');
   const quote = text(form, 'quote');
   const attr = attribution(form);
+  const passage = printedPage !== null || quote !== null;
 
   await createNote({
     kind,
@@ -306,14 +310,15 @@ export async function addNote(form: FormData): Promise<void> {
     attribution: attr,
     attributed_to: attr === 'other' ? text(form, 'attributed_to') : null,
     tags: tags(form),
-    anchors: printedPage !== null || quote
+    anchors: workId && passage
       ? [{ work_id: workId, printed_page: printedPage, quote, translation: text(form, 'translation') }]
       : [],
-    works: printedPage !== null || quote ? [] : [{ work_id: workId, role: 'about' }],
+    works: workId && !passage ? [{ work_id: workId, role: 'about' }] : [],
   });
 
-  revalidatePath(`/works/${workId}`);
+  if (workId) revalidatePath(`/works/${workId}`);
   revalidatePath('/notes');
+  if (!workId) redirect('/notes');
 }
 
 export async function editNote(form: FormData): Promise<void> {
