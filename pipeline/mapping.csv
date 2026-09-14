@@ -1,24 +1,25 @@
-match,book_id,note
-Catálogo de textos marginados,mendez-catalogo-textos-marginados-1992,
-Cuentos Españoles De Colorado,rael-cuentos-espanoles-1977,
-Cuentos_ Tales from the Hispanic Southwest,anaya-cuentos-hispanic-southwest-1980,
-Diccionario Cobos,cobos-dictionary-nm-spanish-2003,29pp of a much longer dictionary — excerpt
-El camino a Tamazunchale,arias-camino-tamazunchale-1975,
-El laberinto de la soledad,paz-laberinto-soledad-1999,
-Espectros y conjuras,jauregui-espectros-conjuras-2020,
-Estructura Del Texto Artistico,lotman-estructura-texto-artistico-1980,
-Flores - Inquisición,flores-masera-relatos-inquisicion-2010,
-Hablando De Brujas,sagel-hablando-de-brujas-1981,
-Indan given,saldana-portillo-indian-given-2016,chapter 1 of 3 files
-Indian given 2,saldana-portillo-indian-given-2016,chapter 2 of 3 files
-Indian given 3,saldana-portillo-indian-given-2016,chapter 3 of 3 files
-La frontera norte,gerhard-frontera-norte-1996,28pp — excerpt
-La transmigración de los cuerpos,herrera-transmigracion-cuerpos-2013,
-Mal de archivo,derrida-mal-de-archivo-1995,
-Moths-The_Las-palomillas,viramontes-the-moths,13pp — excerpt
-RIVERA GARZA,rivera-garza-muertos-indociles-2013,
-Red_Medicine,gonzales-red-medicine-2012,
-Rolena Adorno,adorno-polemics-possession-2007,
-The corn woman,vigil-corn-woman-1994,
-The extractive zone,gomez-barris-extractive-zone-2017,
-Women%27s_Tales,rebolledo-marquez-womens-tales-wpa-2000,filename says PART_I — likely incomplete
+match,book_id,work_id,note
+Catálogo de textos marginados,mendez-catalogo-textos-marginados-1992,,
+Cuentos Españoles De Colorado,rael-cuentos-espanoles-1977,rael-cuentos-espanoles-de-colorado-y-1977,
+Cuentos_ Tales from the Hispanic Southwest,anaya-cuentos-hispanic-southwest-1980,,
+Diccionario Cobos,cobos-dictionary-nm-spanish-2003,,29pp of a much longer dictionary — excerpt
+El camino a Tamazunchale,arias-camino-tamazunchale-1975,,
+El laberinto de la soledad,paz-laberinto-soledad-1999,,
+Espectros y conjuras,jauregui-espectros-conjuras-2020,,
+Estructura Del Texto Artistico,lotman-estructura-texto-artistico-1980,,
+Flores - Inquisición,flores-masera-relatos-inquisicion-2010,,
+Hablando De Brujas,sagel-hablando-de-brujas-1981,,
+Indan given,saldana-portillo-indian-given-2016,,chapter 1 of 3 files
+Indian given 2,saldana-portillo-indian-given-2016,,chapter 2 of 3 files
+Indian given 3,saldana-portillo-indian-given-2016,,chapter 3 of 3 files
+La frontera norte,gerhard-frontera-norte-1996,,28pp — excerpt
+La transmigración de los cuerpos,herrera-transmigracion-cuerpos-2013,herrera-la-transmigracion-de-los-cuerpos-2013,
+Mal de archivo,derrida-mal-de-archivo-1995,,
+Moths-The_Las-palomillas,viramontes-the-moths,,13pp — excerpt
+RIVERA GARZA,rivera-garza-muertos-indociles-2013,,
+Red_Medicine,gonzales-red-medicine-2012,gonzales-red-medicine-traditional-indigenous-rite-2012,
+Rolena Adorno,adorno-polemics-possession-2007,adorno-the-polemics-of-possession-in-2007,
+Borderlands,anzaldua-borderlands-1987,anzaldua-borderlands-la-frontera-the-new-1987,"1991 printing of the first edition; adjust 'match' to a substring of the actual filename if 'Borderlands' does not hit it"
+The corn woman,vigil-corn-woman-1994,,
+The extractive zone,gomez-barris-extractive-zone-2017,,
+Women%27s_Tales,rebolledo-marquez-womens-tales-wpa-2000,,filename says PART_I — likely incomplete

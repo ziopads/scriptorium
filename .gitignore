@@ -71,6 +71,11 @@ db/seed.sql
 db/seed-books.sql
 db/link-sources.sql
 
+# Her reading notes and mapa de cruces, transcribed as notes and axes. Entirely
+# her prose; the loader pattern lives in the tracked files above.
+db/seed-notas-*.sql
+db/seed-mapa-*.sql
+
 # overrides.csv is a hand-maintained record of judgements about her corpus and
 # is worth keeping tracked — it holds reasoning, not content. Reconsider if it
 # ever starts carrying anything but filenames.
