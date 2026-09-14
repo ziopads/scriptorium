@@ -67,8 +67,9 @@ pipeline/citability.csv
 pipeline/triage.csv
 pipeline/isbns.csv
 pipeline/viability.csv
-pipeline/link-sources.sql
 db/seed.sql
+db/seed-books.sql
+db/link-sources.sql
 
 # overrides.csv is a hand-maintained record of judgements about her corpus and
 # is worth keeping tracked — it holds reasoning, not content. Reconsider if it
