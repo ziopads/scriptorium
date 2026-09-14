@@ -74,8 +74,11 @@ export default async function RootLayout({
         <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-8">{children}</main>
 
         <footer className="border-t border-rule">
-          <div className="mx-auto max-w-5xl px-6 py-4 text-xs text-muted">
-            Reading list, bibliography, and notes
+          <div className="mx-auto flex max-w-5xl items-baseline gap-4 px-6 py-4 text-xs text-muted">
+            <span>Reading list, bibliography, and notes</span>
+            <Link href="/about" className="ml-auto text-[10px] hover:text-accent">
+              why it is built this way
+            </Link>
           </div>
         </footer>
       </body>
