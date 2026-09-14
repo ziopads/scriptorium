@@ -41,12 +41,48 @@ yarn-error.log*
 next-env.d.ts
 .neon
 
-# design record, kept locally rather than in the repo
+# ---------------------------------------------------------------------------
+# Not ours to publish
+# ---------------------------------------------------------------------------
+# Everything below is either Zazil's unpublished scholarly work or a derivative
+# of it. The repo may not stay private, and her dissertation framing should not
+# be the thing that finds out.
+
+# Her working documents and anything transcribed from them
 docs/HANDOFF.md
+docs/NOTES-AND-CONNECTIONS.md
+reference/
+*.docx
+*.doc
+*.odt
+*.rtf
+
+# The reading list and everything derived from it names her exam list, which is
+# hers and not public. The scripts that build these are tracked; their output is
+# not.
+pipeline/list.csv
+pipeline/matches.csv
+pipeline/catalogue.csv
+pipeline/citability.csv
+pipeline/triage.csv
+pipeline/isbns.csv
+pipeline/viability.csv
+pipeline/link-sources.sql
+db/seed.sql
+
+# overrides.csv is a hand-maintained record of judgements about her corpus and
+# is worth keeping tracked — it holds reasoning, not content. Reconsider if it
+# ever starts carrying anything but filenames.
+!pipeline/overrides.csv
 
 # the corpus itself: copyrighted, large, and not ours to distribute
 pipeline/corpus/
 pipeline/.venv/
 pipeline/pages/
+pipeline/chunks/
 *.pdf
 *.epub
+*.azw3
+*.lcpdf
+*.mobi
+*.zip
