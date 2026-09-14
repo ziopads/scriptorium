@@ -228,7 +228,10 @@ export default async function NotesPage({
       ) : null}
 
       {notes.length === 0 ? (
-        <p className="text-sm text-muted">Nothing here yet.</p>
+        <p className="text-sm text-muted">
+          Nothing here yet. Notes are written from a work’s page;{' '}
+          <Link href="/como" className="text-accent hover:underline">how this works</Link>.
+        </p>
       ) : grouped ? (
         <div className="space-y-8">
           {[...byDay.entries()].map(([key, dayNotes]) => (

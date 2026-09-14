@@ -27,6 +27,7 @@ const NAV = [
   { href: '/notes', label: 'Notes' },
   { href: '/axes', label: 'Axes' },
   { href: '/gaps', label: 'Gaps' },
+  { href: '/como', label: 'Cómo' },
 ];
 
 // Typed explicitly rather than with Next's generated LayoutProps global, which
