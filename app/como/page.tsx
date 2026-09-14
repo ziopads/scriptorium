@@ -65,6 +65,15 @@ export default async function ComoPage() {
         </div>
       </dl>
 
+      <p>
+        ¿Nota o eje? Mientras lees, es una nota: una afirmación sobre un pasaje o
+        sobre una obra. Cuando la misma idea ya apareció en tres o cuatro obras y
+        quieres decir qué suman, es un eje, y las notas que ya tienes sobre esas obras
+        son el material de sus fichas. Tus notas de preparación son notas; tu mapa de
+        cruces son ejes. Una nota que crece, nombra más obras y pide una tesis es un
+        eje que empezó como nota; créalo y pasa los párrafos a fichas.
+      </p>
+
       <H>Cada nota responde una pregunta: ¿de quién es esta afirmación?</H>
       <ul className="space-y-2 border-l-2 border-rule pl-3">
         <li>

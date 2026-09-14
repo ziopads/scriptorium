@@ -26,6 +26,13 @@ por ejemplo) si las lees como un solo aporte.
 **Eje.** Un argumento que reúne varias obras. Tiene cuatro partes, que son las
 que ya usas: la tesis, las fichas, cómo se conectan, y el movimiento de examen.
 
+¿Nota o eje? Mientras lees, es una nota: una afirmación sobre un pasaje o sobre
+una obra. Cuando la misma idea ya apareció en tres o cuatro obras y quieres
+decir qué suman, es un eje, y las notas que ya tienes sobre esas obras son el
+material de sus fichas. Tus notas de preparación son notas; tu mapa de cruces
+son ejes. Una nota que crece, nombra más obras y pide una tesis es un eje que
+empezó como nota; créalo y pasa los párrafos a fichas.
+
 ## Cada nota responde una pregunta: ¿de quién es esta afirmación?
 
 - **Lo dice el autor.** Estás reportando lo que el texto dice. Pon la cita y
