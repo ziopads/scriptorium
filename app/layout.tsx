@@ -4,6 +4,7 @@ import { Geist, Geist_Mono, Literata } from 'next/font/google';
 import './globals.css';
 
 import { signOut } from '@/app/auth/sign-in/actions';
+import { Wordmark } from '@/components/wordmark';
 import { getAllowedUser } from '@/lib/auth/guard';
 
 // Two families, one job each. Literata for anything she reads or writes at
@@ -58,9 +59,7 @@ export default async function RootLayout({
       <body className="min-h-full flex flex-col font-sans">
         <header className="border-b border-rule">
           <div className="mx-auto max-w-7xl px-5 py-2.5 flex items-baseline gap-6">
-            <Link href="/" className="text-lg tracking-tight">
-              Scriptorium
-            </Link>
+            <Wordmark />
             <nav className="flex gap-4 text-sm text-muted">
               {NAV.map((item) => (
                 <Link key={item.href} href={item.href} className="hover:text-accent">

@@ -77,6 +77,43 @@ textarea.reading {
   padding: 0.5rem 0.6rem;
 }
 
+/* The wordmark: Literata with a rubricated initial and a drawn section mark.
+   Sized to sit on the nav's baseline without shouting. */
+.wordmark {
+  color: var(--foreground);
+  text-decoration: none;
+}
+
+.wordmark-text {
+  font-family: var(--font-literata), Georgia, serif;
+  font-weight: 500;
+  font-size: 1.25rem;
+  letter-spacing: 0.01em;
+  line-height: 1;
+}
+
+.wordmark-initial {
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 1.45rem;
+  line-height: 1;
+  transition: color 180ms ease;
+}
+
+.wordmark-mark {
+  color: var(--rule);
+  transform: translateY(1px);
+  transition: color 180ms ease;
+}
+
+.wordmark:hover .wordmark-mark {
+  color: var(--accent);
+}
+
+.wordmark:hover .wordmark-initial {
+  color: #5e2214;
+}
+
 input:focus,
 select:focus,
 textarea:focus {
