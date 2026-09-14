@@ -119,7 +119,10 @@ export default async function WorksPage({
             {l.examinable ? null : <span className="text-xs"> (not examinable)</span>}
           </Link>
         ))}
-        <a href="/api/export/works" className="ml-auto text-xs text-muted hover:text-accent">
+        <Link href="/works/new" className="ml-auto text-xs text-muted hover:text-accent">
+          Add a work
+        </Link>
+        <a href="/api/export/works" className="text-xs text-muted hover:text-accent">
           Download CSV
         </a>
       </nav>

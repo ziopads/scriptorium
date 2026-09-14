@@ -8,10 +8,14 @@ import {
   listAllNotes,
   listConnections,
   listNotesByTag,
+  listOpenQuestions,
+  listRejectedNotes,
+  listUnattributedNotes,
   listUnreviewedNotes,
+  listUnsupportedClaims,
   searchNotes,
 } from '@/lib/notes';
-import type { NoteWithAnchors } from '@/lib/types';
+import type { NoteWithRelations } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,22 +30,39 @@ export default async function NotesPage({
 
   const everything = await listAllNotes();
 
-  const notes: NoteWithAnchors[] =
-    filter === 'unreviewed'
+  const notes: NoteWithRelations[] =
+    filter === 'proposals'
       ? await listUnreviewedNotes()
-      : filter === 'connections'
-        ? await listConnections()
-        : filter === 'untagged'
-          ? everything.filter((n) => n.tags.length === 0)
-          : tag
-            ? await listNotesByTag(tag)
-            : q
-              ? await searchNotes(q)
-              : day
-                ? everything.filter((n) => localDay(n.created_at) === day)
-                : everything;
+      : filter === 'rejected'
+        ? await listRejectedNotes()
+        : filter === 'unclassified'
+          ? await listUnattributedNotes()
+          : filter === 'unsupported'
+            ? await listUnsupportedClaims()
+            : filter === 'questions'
+              ? await listOpenQuestions()
+              : filter === 'connections'
+                ? await listConnections()
+                : filter === 'untagged'
+                  ? everything.filter((n) => n.tags.length === 0)
+                  : tag
+                    ? await listNotesByTag(tag)
+                    : q
+                      ? await searchNotes(q)
+                      : day
+                        ? everything.filter((n) => localDay(n.created_at) === day)
+                        : everything;
 
   const tags = await allTags();
+
+  // The review queues are counted on every visit so the counts are visible
+  // before she opens them. Four small queries; the page is not hot.
+  const [proposalCount, unclassifiedCount, unsupportedCount, questionCount] = await Promise.all([
+    listUnreviewedNotes().then((n) => n.length),
+    listUnattributedNotes().then((n) => n.length),
+    listUnsupportedClaims().then((n) => n.length),
+    listOpenQuestions().then((n) => n.length),
+  ]);
 
   const days = new Map<string, number>();
   for (const note of everything) {
@@ -50,12 +71,15 @@ export default async function NotesPage({
   }
   const dayList = [...days.entries()].sort((a, b) => b[0].localeCompare(a[0]));
 
-  const connectionCount = everything.filter((n) => n.anchors.length > 1).length;
+  const connectionCount = everything.filter((n) => {
+    const touched = new Set([...n.anchors.map((a) => a.work_id), ...n.works.map((w) => w.work_id)]);
+    return n.kind !== 'axis' && touched.size > 1;
+  }).length;
 
   // Grouped by the day written, but only in the unfiltered view — inside a tag
   // or a search the grouping would fragment the result.
   const grouped = !tag && !q && !filter && !day;
-  const byDay = new Map<string, NoteWithAnchors[]>();
+  const byDay = new Map<string, NoteWithRelations[]>();
   if (grouped) {
     for (const note of notes) {
       const key = localDay(note.created_at);
@@ -71,9 +95,19 @@ export default async function NotesPage({
       ? `Search: ${q}`
       : day
         ? readableDay(day)
-        : filter
-          ? filter
-          : 'Notes';
+        : filter === 'proposals'
+          ? 'Proposals from Claude, awaiting review'
+          : filter === 'rejected'
+            ? 'Rejected proposals'
+            : filter === 'unclassified'
+              ? 'Whose claim? Not yet answered'
+              : filter === 'unsupported'
+                ? 'Author’s claims with no passage behind them'
+                : filter === 'questions'
+                  ? 'Open questions'
+                  : filter
+                    ? filter
+                    : 'Notes';
 
   return (
     <div className="space-y-6">
@@ -138,10 +172,42 @@ export default async function NotesPage({
           untagged
         </Link>
         <Link
-          href="/notes?filter=unreviewed"
-          className={filter === 'unreviewed' ? 'text-accent' : 'text-muted hover:text-accent'}
+          href="/notes?filter=questions"
+          className={filter === 'questions' ? 'text-accent' : 'text-muted hover:text-accent'}
         >
-          unreviewed
+          open questions ({questionCount})
+        </Link>
+        <Link href="/axes" className="text-muted hover:text-accent">
+          axes →
+        </Link>
+      </nav>
+
+      {/* The three things to check before an exam, kept apart from browsing. */}
+      <nav className="flex flex-wrap gap-x-3 gap-y-1 text-xs">
+        <span className="text-muted">Review:</span>
+        <Link
+          href="/notes?filter=unclassified"
+          className={filter === 'unclassified' ? 'text-accent' : unclassifiedCount > 0 ? 'text-accent hover:underline' : 'text-muted hover:text-accent'}
+        >
+          whose claim? ({unclassifiedCount})
+        </Link>
+        <Link
+          href="/notes?filter=unsupported"
+          className={filter === 'unsupported' ? 'text-accent' : unsupportedCount > 0 ? 'text-accent hover:underline' : 'text-muted hover:text-accent'}
+        >
+          no passage behind it ({unsupportedCount})
+        </Link>
+        <Link
+          href="/notes?filter=proposals"
+          className={filter === 'proposals' ? 'text-accent' : proposalCount > 0 ? 'text-accent hover:underline' : 'text-muted hover:text-accent'}
+        >
+          proposals from Claude ({proposalCount})
+        </Link>
+        <Link
+          href="/notes?filter=rejected"
+          className={filter === 'rejected' ? 'text-accent' : 'text-muted hover:text-accent'}
+        >
+          rejected
         </Link>
       </nav>
 

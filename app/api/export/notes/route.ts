@@ -1,53 +1,115 @@
 import { getAllowedUser } from '@/lib/auth/guard';
 import { formatNote, plain } from '@/lib/citation';
 import { csvResponse, toCsv } from '@/lib/csv';
-import { listAllNotes } from '@/lib/notes';
+import { listAllNotes, getAxisTree } from '@/lib/notes';
 import { listWorks } from '@/lib/works';
+import type { NoteWithRelations } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
-// One row per anchor, not per note. A note with two anchors is a connection, and
-// flattening it to a single row would hide the second half of the thought — the
-// thing the connection exists to record.
+// One row per relation between a note and a work, not per note. A note that
+// touches two works is a connection, and flattening it to one row would hide
+// the second half of the thought. A note that touches no work still gets one
+// row, with the work columns empty.
 //
-// origin and reviewed are columns rather than a footnote. An export that does
-// not say which sentences she wrote is worse than no export, because the
-// ambiguity travels with the file.
+// origin, reviewed and attribution are columns rather than a footnote. An
+// export that does not say which sentences she wrote, and whose claim each
+// one asserts, is worse than no export, because the ambiguity travels with
+// the file. Rejected proposals are not exported.
+//
+// Axes are flattened: each part becomes rows of its own with the axis title in
+// the axis column, so the file reads as her mapa did.
 export async function GET() {
   const user = await getAllowedUser();
   if (!user) return new Response('Not authorized', { status: 401 });
 
-  const [notes, works] = await Promise.all([listAllNotes(), listWorks()]);
+  const [top, works] = await Promise.all([listAllNotes(), listWorks()]);
   const byId = new Map(works.map((w) => [w.id, w]));
 
-  const rows = notes.flatMap((note) => {
+  // Expand axes into their parts.
+  const notes: { note: NoteWithRelations; axis: string | null; part: string }[] = [];
+  for (const note of top) {
+    if (note.kind !== 'axis') {
+      notes.push({ note, axis: null, part: note.kind });
+      continue;
+    }
+    const tree = await getAxisTree(note.id);
+    if (!tree) continue;
+    notes.push({ note: tree.axis, axis: note.title, part: 'thesis' });
+    for (const f of tree.fichas) notes.push({ note: f, axis: note.title, part: 'ficha' });
+    if (tree.synthesis) notes.push({ note: tree.synthesis, axis: note.title, part: 'synthesis' });
+    if (tree.exam_move) notes.push({ note: tree.exam_move, axis: note.title, part: 'exam_move' });
+  }
+
+  const rows = notes.flatMap(({ note, axis, part }) => {
     const provenance =
       note.origin === 'human'
         ? 'written by hand'
         : note.reviewed
-          ? 'assistant draft, reviewed'
-          : 'assistant draft, UNREVIEWED';
+          ? 'found by Claude, confirmed by her'
+          : 'assistant proposal, UNREVIEWED';
 
-    const others = note.anchors.map((a) => a.work_title);
+    const whose =
+      note.attribution === null
+        ? 'UNCLASSIFIED'
+        : note.attribution === 'other'
+          ? `other: ${note.attributed_to ?? '?'}`
+          : note.attribution;
 
-    return note.anchors.map((anchor) => {
-      const work = byId.get(anchor.work_id);
+    const touched = [
+      ...note.anchors.map((a) => ({
+        relation: 'passage',
+        role: '',
+        work_id: a.work_id,
+        work_author: a.work_author,
+        work_title: a.work_title,
+        printed_page: a.printed_page,
+        quote: a.quote,
+        translation: a.translation,
+      })),
+      ...note.works.map((w) => ({
+        relation: 'work',
+        role: w.role,
+        work_id: w.work_id,
+        work_author: w.work_author,
+        work_title: w.work_title,
+        printed_page: null as number | null,
+        quote: null as string | null,
+        translation: null as string | null,
+      })),
+    ];
+    if (touched.length === 0) {
+      touched.push({
+        relation: '', role: '', work_id: '', work_author: null, work_title: '',
+        printed_page: null, quote: null, translation: null,
+      });
+    }
+
+    const also = [...new Set(touched.map((t) => t.work_title).filter(Boolean))];
+
+    return touched.map((t) => {
+      const work = t.work_id ? byId.get(t.work_id) : undefined;
       const container = work?.container_id ? byId.get(work.container_id) ?? null : null;
 
       return {
         note_id: note.id,
-        anchor: anchor.ordinal,
-        anchors_in_note: note.anchors.length,
-        connection: note.anchors.length > 1 ? 'yes' : '',
-        also_anchored_to: others.filter((t) => t !== anchor.work_title),
-        work_id: anchor.work_id,
-        work_author: anchor.work_author,
-        work_title: anchor.work_title,
-        printed_page: anchor.printed_page,
-        quote: anchor.quote,
+        kind: part,
+        axis: axis ?? '',
+        title: note.title ?? '',
+        relation: t.relation,
+        role: t.role,
+        relations_in_note: touched.filter((x) => x.work_id).length,
+        also_touching: also.filter((x) => x !== t.work_title),
+        work_id: t.work_id,
+        work_author: t.work_author,
+        work_title: t.work_title,
+        printed_page: t.printed_page,
+        quote: t.quote,
+        translation: t.translation,
         body: note.body,
+        whose_claim: whose,
         tags: note.tags,
-        citation: work ? plain(formatNote(work, container, anchor.printed_page).text) : '',
+        citation: work ? plain(formatNote(work, container, t.printed_page).text) : '',
         provenance,
         created_at: note.created_at,
         updated_at: note.updated_at,
@@ -56,9 +118,10 @@ export async function GET() {
   });
 
   const columns = [
-    'note_id', 'anchor', 'anchors_in_note', 'connection', 'also_anchored_to',
-    'work_id', 'work_author', 'work_title', 'printed_page', 'quote', 'body',
-    'tags', 'citation', 'provenance', 'created_at', 'updated_at',
+    'note_id', 'kind', 'axis', 'title', 'relation', 'role', 'relations_in_note',
+    'also_touching', 'work_id', 'work_author', 'work_title', 'printed_page',
+    'quote', 'translation', 'body', 'whose_claim', 'tags', 'citation',
+    'provenance', 'created_at', 'updated_at',
   ];
 
   return csvResponse('scriptorium-notes', toCsv(columns, rows));

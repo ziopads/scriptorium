@@ -134,14 +134,87 @@ export interface ListMembership extends ExamList {
   ordinal: number | null;
 }
 
-// A note points at one or more places. One anchor is an ordinary note; two or
-// more is a connection between passages, and both works show it.
+// ---------------------------------------------------------------------------
+// Notes: the graph (migration 005)
+// ---------------------------------------------------------------------------
+// Two node tables, works and notes; three edge tables. A note reaches a work
+// two ways: note_works, an argument-level relation to the whole work with a
+// role, and note_anchors, a passage with page and quote. A note reaches another
+// note through note_links. An axis is a note whose parts are child notes.
+
+// What she can write. synthesis and exam_move are parts of an axis, set by the
+// axis form and never named to her.
+export type NoteKind = 'note' | 'question' | 'ficha' | 'axis' | 'synthesis' | 'exam_move';
+
+export const NOTE_KIND_LABEL: Record<NoteKind, string> = {
+  note: 'Note',
+  question: 'Question',
+  ficha: 'Ficha',
+  axis: 'Axis',
+  synthesis: 'How they connect',
+  exam_move: 'Exam move',
+};
+
+// Whose claim the note asserts. Independent of origin, which records who typed
+// the words. Null means not yet classified and is never defaulted: a wrong
+// default is the misattribution the column exists to prevent.
+export type Attribution = 'author' | 'own' | 'other';
+
+export const ATTRIBUTION_LABEL: Record<Attribution, string> = {
+  author: 'The author says it',
+  own: 'I say it',
+  other: 'Someone else says it',
+};
+
+// The relation between a note and a whole work. about, ficha and yield are set
+// by the form; supports and disputes by accepting a proposal. Nothing picks
+// from this list in a menu.
+export type NoteRole =
+  | 'about'
+  | 'ficha'
+  | 'yield'
+  | 'supports'
+  | 'disputes'
+  | 'applies'
+  | 'introduces';
+
+export const NOTE_ROLE_LABEL: Record<NoteRole, string> = {
+  about: 'about',
+  ficha: 'ficha',
+  yield: 'named in the synthesis',
+  supports: 'supports',
+  disputes: 'disputes',
+  applies: 'applies',
+  introduces: 'introduces',
+};
+
+export type LinkKind = 'bridge' | 'contrast' | 'answers';
+
+export interface Note {
+  id: number;
+  kind: NoteKind;
+  parent_id: number | null;      // the axis this part belongs to
+  ordinal: number | null;        // position among its siblings
+  title: string | null;          // 'Eje 1 — El tecolote y lo ominoso'; axes only
+  body: string;                  // for an axis, the thesis
+  attribution: Attribution | null;
+  attributed_to: string | null;  // the third party, when attribution = 'other'
+  tags: string[];
+  origin: NoteOrigin;
+  reviewed: boolean;
+  rejected_at: Timestamp | null; // a hidden proposal; null for everything live
+  created_at: Timestamp;
+  updated_at: Timestamp;
+}
+
+// A passage: page and quote, with her translation beside the quote.
 export interface NoteAnchor {
   note_id: number;
   ordinal: number;
   work_id: string;
   printed_page: number | null;
   quote: string | null;
+  translation: string | null;
 }
 
 export interface AnchorWithWork extends NoteAnchor {
@@ -149,34 +222,67 @@ export interface AnchorWithWork extends NoteAnchor {
   work_author: string | null;
 }
 
-export interface Note {
-  id: number;
-  body: string;
-  tags: string[];
-  origin: NoteOrigin;
-  reviewed: boolean;
-  created_at: Timestamp;
-  updated_at: Timestamp;
+// An argument-level relation to a whole work.
+export interface NoteWork {
+  note_id: number;
+  work_id: string;
+  role: NoteRole;
+  ordinal: number;
 }
 
-export interface NoteWithAnchors extends Note {
+export interface NoteWorkWithWork extends NoteWork {
+  work_title: string;
+  work_author: string | null;
+}
+
+export interface NoteLink {
+  from_note: number;
+  to_note: number;
+  kind: LinkKind;
+}
+
+// A note with both kinds of work relation resolved. Everything that renders a
+// note reads this shape.
+export interface NoteWithRelations extends Note {
   anchors: AnchorWithWork[];
+  works: NoteWorkWithWork[];
+}
+
+// An axis with its parts. Membership in the map is the union of the parts'
+// works; nothing is stored on the axis row itself.
+export interface AxisTree {
+  axis: NoteWithRelations;
+  fichas: NoteWithRelations[];
+  synthesis: NoteWithRelations | null;
+  exam_move: NoteWithRelations | null;
 }
 
 export type NoteInput = {
+  kind?: NoteKind;
+  parent_id?: number | null;
+  title?: string | null;
   body: string;
+  attribution?: Attribution | null;
+  attributed_to?: string | null;
   tags?: string[];
   origin?: NoteOrigin;
-  anchors: { work_id: string; printed_page?: number | null; quote?: string | null }[];
+  anchors?: {
+    work_id: string;
+    printed_page?: number | null;
+    quote?: string | null;
+    translation?: string | null;
+  }[];
+  works?: { work_id: string; role?: NoteRole }[];
 };
 
-// A superseded state of a note. Versions the writing, not the anchors.
+// A superseded state of a note. Versions the writing; anchors and memberships
+// are not versioned (the known limit recorded in migration 004).
 export interface NoteRevision {
   id: number;
   note_id: number;
+  title: string | null;
   body: string;
-  quote: string | null;
-  printed_page: number | null;
+  attribution: Attribution | null;
   tags: string[];
   origin: NoteOrigin;
   reviewed: boolean;

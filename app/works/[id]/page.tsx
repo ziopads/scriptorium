@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
+import { AttributionFields } from '@/components/attribution-fields';
 import { NoteCard } from '@/components/note-card';
 import { addNote, changeStatus } from '@/lib/actions';
 import { requireAllowedUser } from '@/lib/auth/guard';
@@ -211,21 +212,42 @@ export default async function WorkPage({
           </ul>
         )}
 
-        <form action={addNote} className="space-y-3 border-t border-rule pt-4">
+        <form action={addNote} className="space-y-4 border-t border-rule pt-4">
           <input type="hidden" name="work_id" value={work.id} />
+
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+            <label className="flex items-center gap-1.5">
+              <input type="radio" name="kind" value="note" defaultChecked /> Note
+            </label>
+            <label className="flex items-center gap-1.5">
+              <input type="radio" name="kind" value="question" /> Question
+            </label>
+          </div>
 
           <label className="block space-y-1">
             <span className="text-sm">Note</span>
             <textarea name="body" rows={4} required />
+            <span className="block text-xs text-muted">
+              One claim per note. If this mixes what the author says with what you say,
+              write two.
+            </span>
           </label>
+
+          <AttributionFields />
 
           <label className="block space-y-1">
             <span className="text-sm">Quotation</span>
             <textarea name="quote" rows={2} />
             <span className="block text-xs text-muted">
-              Verbatim. This is what re-locates the note if the work is extracted later,
-              so type it as printed.
+              Verbatim, in the original language. This is what re-locates the note if
+              the work is extracted later, so type it as printed. Leave it empty for a
+              note about the whole work.
             </span>
+          </label>
+
+          <label className="block space-y-1">
+            <span className="text-sm">Your translation</span>
+            <textarea name="translation" rows={2} />
           </label>
 
           <div className="flex flex-wrap items-end gap-3">
@@ -235,7 +257,7 @@ export default async function WorkPage({
             </label>
             <label className="min-w-56 flex-1 space-y-1">
               <span className="text-sm">Tags</span>
-              <input type="text" name="tags" placeholder="comma, separated" />
+              <input type="text" name="tags" placeholder="comma, separated · lugar:abiquiu" />
             </label>
             <button
               type="submit"
@@ -246,8 +268,8 @@ export default async function WorkPage({
           </div>
 
           <p className="text-xs text-muted">
-            The page is the printed folio, not the file page. To connect this passage to
-            another work, add the note here and then use Edit → Connect.
+            The page is the printed folio, not the file page. To add a passage from
+            another work, save the note and then use Edit.
           </p>
         </form>
       </section>

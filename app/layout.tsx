@@ -25,6 +25,7 @@ const NAV = [
   { href: '/', label: 'Lists' },
   { href: '/works', label: 'Catalogue' },
   { href: '/notes', label: 'Notes' },
+  { href: '/axes', label: 'Axes' },
   { href: '/gaps', label: 'Gaps' },
 ];
 
