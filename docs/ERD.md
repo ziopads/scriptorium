@@ -27,8 +27,8 @@ erDiagram
   WORKS ||--o{ NOTE_WORKS : is_argued_about
   NOTES ||--o{ NOTE_ANCHORS : quotes
   WORKS ||--o{ NOTE_ANCHORS : is_quoted
-  NOTES ||--o{ NOTE_LINKS : from
-  NOTES ||--o{ NOTE_LINKS : to
+  NOTES ||--o{ NOTE_LINKS : links_from
+  NOTES ||--o{ NOTE_LINKS : links_to
   NOTES ||--o{ NOTE_REVISIONS : superseded_by
   WORKS ||--o{ CHUNKS : searchable_as
 
