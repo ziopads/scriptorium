@@ -329,3 +329,68 @@ export async function worksWithoutSource(): Promise<Work[]> {
   `;
   return rows as Work[];
 }
+
+// ---------------------------------------------------------------------------
+// The workbench list
+// ---------------------------------------------------------------------------
+
+// One row per work, with what the left pane shows: the list code as she uses
+// it ([II.C.17], Supl. III), which list it sits on, whether a file is held,
+// how many notes touch it, and whether it is examinable. One query; the pane
+// filters the 160 rows in memory. The code is derived here and never stored
+// (migration 004).
+export interface WorkbenchRow {
+  id: string;
+  title: string;
+  author: string | null;
+  year: number | null;
+  kind: string;
+  container_id: string | null;
+  list_id: string | null;
+  code: string | null;
+  has_file: boolean;
+  note_count: number;
+  examinable: boolean;
+  standing: string;
+}
+
+export async function listWorkbenchRows(): Promise<WorkbenchRow[]> {
+  const sql = db();
+  const rows = await sql`
+    select w.id, w.title, w.author, w.year, w.kind, w.container_id, w.standing,
+           m.list_id,
+           m.code,
+           (w.source_format <> 'none') as has_file,
+           (select count(*)::int from (
+              select note_id from note_anchors where work_id = w.id
+              union
+              select note_id from note_works where work_id = w.id
+            ) t
+            join notes n on n.id = t.note_id
+            where n.rejected_at is null) as note_count,
+           exists (select 1 from examinable_works e where e.id = w.id) as examinable
+    from works w
+    left join lateral (
+      select li.list_id,
+             case el.id
+               when 'theory' then 'I' when 'dissertation' then 'II' when 'teaching' then 'III'
+               else null end as roman,
+             case
+               when el.id not in ('theory', 'dissertation', 'teaching') then null
+               when ls.kind = 'supplementary' then
+                 'Supl. ' || case el.id when 'theory' then 'I' when 'dissertation' then 'II' else 'III' end
+               else
+                 case el.id when 'theory' then 'I' when 'dissertation' then 'II' else 'III' end
+                 || '.' || coalesce(ls.letter, '?') || '.' || coalesce(li.ordinal::text, '?')
+             end as code
+      from list_items li
+      join exam_lists el on el.id = li.list_id
+      left join list_sections ls on ls.id = li.section_id
+      where li.work_id = w.id
+      order by el.sort
+      limit 1
+    ) m on true
+    order by coalesce(w.author, w.title), w.year nulls last
+  `;
+  return rows as WorkbenchRow[];
+}

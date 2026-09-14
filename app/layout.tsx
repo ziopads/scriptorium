@@ -22,7 +22,7 @@ export const metadata: Metadata = {
 export const dynamic = 'force-dynamic';
 
 const NAV = [
-  { href: '/', label: 'Lists' },
+  { href: '/lists', label: 'Lists' },
   { href: '/works', label: 'Catalogue' },
   { href: '/notes', label: 'Notes' },
   { href: '/axes', label: 'Axes' },
@@ -48,7 +48,7 @@ export default async function RootLayout({
     >
       <body className="min-h-full flex flex-col font-sans">
         <header className="border-b border-rule">
-          <div className="mx-auto max-w-5xl px-6 py-4 flex items-baseline gap-6">
+          <div className="mx-auto max-w-7xl px-6 py-4 flex items-baseline gap-6">
             <Link href="/" className="text-lg tracking-tight">
               Scriptorium
             </Link>
@@ -71,10 +71,10 @@ export default async function RootLayout({
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-8">{children}</main>
+        <main className="mx-auto w-full max-w-7xl flex-1 px-6 py-6">{children}</main>
 
         <footer className="border-t border-rule">
-          <div className="mx-auto flex max-w-5xl items-baseline gap-4 px-6 py-4 text-xs text-muted">
+          <div className="mx-auto flex max-w-7xl items-baseline gap-4 px-6 py-3 text-xs text-muted">
             <span>Reading list, bibliography, and notes</span>
             <Link href="/about" className="ml-auto text-[10px] hover:text-accent">
               why it is built this way

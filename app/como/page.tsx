@@ -27,12 +27,14 @@ export default async function ComoPage() {
 
       <H>Hay cuatro cosas que puedes escribir</H>
       <p>
-        Una nota o una pregunta se escribe en{' '}
-        <Link href="/notes" className="text-accent hover:underline">Notes</Link> (el
-        botón <em>New note</em> arriba de la lista) o desde la página de la obra (
-        <Link href="/works" className="text-accent hover:underline">Catálogo</Link> → la
-        obra → <em>Add a note</em>). Una ficha se escribe en la página de su eje. Un
-        eje se crea en <Link href="/axes" className="text-accent hover:underline">Axes</Link>.
+        Una nota o una pregunta se escribe en la{' '}
+        <Link href="/" className="text-accent hover:underline">página de inicio</Link>: elige
+        la obra en la lista de la izquierda y escribe en el panel derecho; con el{' '}
+        <em>+</em> de cada fila añades más obras a la misma nota. También desde{' '}
+        <Link href="/notes" className="text-accent hover:underline">Notes</Link> (<em>New note</em>)
+        o desde la página de la obra (<em>Add a note</em>). Una ficha se escribe en el
+        panel derecho con el eje elegido a la izquierda, o en la página del eje. Un eje
+        se crea en <Link href="/axes" className="text-accent hover:underline">Axes</Link>.
       </p>
       <dl className="space-y-3">
         <div>

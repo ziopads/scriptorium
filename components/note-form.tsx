@@ -1,15 +1,68 @@
+import Link from 'next/link';
+
 import { AttributionFields } from '@/components/attribution-fields';
 import { addNote } from '@/lib/actions';
 
-// The note form. On a work page the work is fixed and hidden; on /notes it is
-// an optional catalogue id, so a note about nothing on the list can be written.
-// Same fields either way, so the instructions describe one form.
+// The note form, in three settings.
+//
+//   work page   one fixed work, hidden
+//   /notes      an optional catalogue id typed by hand
+//   workbench   the works attached by clicking rows in the left pane, shown
+//               as chips; the ids never appear in front of her
+//
+// Same fields either way, so the instructions describe one form. With a quote
+// or a page the first attached work carries the anchor; the rest are
+// whole-work relations.
 
-export function NoteForm({ workId }: { workId?: string }) {
+export interface AttachedWork {
+  id: string;
+  label: string;   // "Adorno, The Polemics of Possession"
+  removeHref?: string;
+}
+
+export function NoteForm({
+  workId,
+  works,
+  returnTo,
+  compact = false,
+}: {
+  workId?: string;
+  works?: AttachedWork[];
+  returnTo?: string;
+  compact?: boolean;
+}) {
+  const attached = works ?? [];
+
   return (
     <form action={addNote} className="space-y-4">
+      {returnTo ? <input type="hidden" name="return_to" value={returnTo} /> : null}
+
       {workId ? (
         <input type="hidden" name="work_id" value={workId} />
+      ) : works ? (
+        <div className="space-y-1">
+          <span className="text-sm">Works</span>
+          <input type="hidden" name="work_ids" value={attached.map((w) => w.id).join(',')} />
+          {attached.length === 0 ? (
+            <p className="text-xs text-muted">
+              None attached. Select a work in the list, or press + on a row to add it.
+            </p>
+          ) : (
+            <ul className="flex flex-wrap gap-1.5">
+              {attached.map((w, i) => (
+                <li key={w.id} className="flex items-center gap-1 border border-rule px-2 py-0.5 text-xs">
+                  {i === 0 && attached.length > 1 ? <span className="text-muted">quote in </span> : null}
+                  <span>{w.label}</span>
+                  {w.removeHref ? (
+                    <Link href={w.removeHref} className="text-muted hover:text-accent" aria-label={`Remove ${w.label}`}>
+                      ×
+                    </Link>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       ) : (
         <label className="block space-y-1">
           <span className="text-sm">Work</span>
@@ -32,23 +85,27 @@ export function NoteForm({ workId }: { workId?: string }) {
 
       <label className="block space-y-1">
         <span className="text-sm">Note</span>
-        <textarea name="body" rows={4} required />
-        <span className="block text-xs text-muted">
-          One claim per note. If this mixes what the author says with what you say,
-          write two.
-        </span>
+        <textarea name="body" rows={compact ? 5 : 4} required />
+        {compact ? null : (
+          <span className="block text-xs text-muted">
+            One claim per note. If this mixes what the author says with what you say,
+            write two.
+          </span>
+        )}
       </label>
 
       <AttributionFields />
 
       <label className="block space-y-1">
         <span className="text-sm">Quotation</span>
-        <textarea name="quote" rows={2} />
-        <span className="block text-xs text-muted">
-          Verbatim, in the original language. This is what re-locates the note if the
-          work is extracted later, so type it as printed. Leave it empty for a note
-          about the whole work.
-        </span>
+        <textarea name="quote" rows={3} />
+        {compact ? null : (
+          <span className="block text-xs text-muted">
+            Verbatim, in the original language. This is what re-locates the note if the
+            work is extracted later, so type it as printed. Leave it empty for a note
+            about the whole work.
+          </span>
+        )}
       </label>
 
       <label className="block space-y-1">
@@ -57,11 +114,11 @@ export function NoteForm({ workId }: { workId?: string }) {
       </label>
 
       <div className="flex flex-wrap items-end gap-3">
-        <label className="w-28 space-y-1">
+        <label className="w-24 space-y-1">
           <span className="text-sm">Page</span>
           <input type="number" name="printed_page" />
         </label>
-        <label className="min-w-56 flex-1 space-y-1">
+        <label className="min-w-40 flex-1 space-y-1">
           <span className="text-sm">Tags</span>
           <input type="text" name="tags" placeholder="comma, separated · lugar:abiquiu" />
         </label>
@@ -73,10 +130,12 @@ export function NoteForm({ workId }: { workId?: string }) {
         </button>
       </div>
 
-      <p className="text-xs text-muted">
-        The page is the printed folio, not the file page. To add a passage from
-        another work, save the note and then use Edit.
-      </p>
+      {compact ? null : (
+        <p className="text-xs text-muted">
+          The page is the printed folio, not the file page. To add a passage from
+          another work, save the note and then use Edit.
+        </p>
+      )}
     </form>
   );
 }

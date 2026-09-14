@@ -298,6 +298,20 @@ export async function listAxes(): Promise<
   }));
 }
 
+// The axes that bind a work, through any part, with the part's role.
+export async function listAxesForWork(workId: string): Promise<
+  { axis_id: number; axis_title: string | null; role: string; part_kind: string; reviewed: boolean }[]
+> {
+  const sql = db();
+  const rows = await sql`
+    select distinct on (axis_id) axis_id, axis_title, role, part_kind, reviewed
+    from axis_works
+    where work_id = ${workId}
+    order by axis_id, (role = 'ficha') desc
+  `;
+  return rows as { axis_id: number; axis_title: string | null; role: string; part_kind: string; reviewed: boolean }[];
+}
+
 export async function getAxisTree(id: number): Promise<AxisTree | null> {
   const axis = await getNote(id);
   if (!axis || axis.kind !== 'axis') return null;

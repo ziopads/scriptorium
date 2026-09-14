@@ -283,18 +283,24 @@ export async function addStubWork(form: FormData): Promise<void> {
 // Notes
 // ---------------------------------------------------------------------------
 
-// From a work page. With a quote or a page it is an anchor; with neither it is
-// a note about the whole work, recorded in note_works rather than as an anchor
-// with nothing in it. From /notes the work is optional: a note about nothing
-// on the list (Leal's periodisation, a definition) is allowed to stand alone.
+// From a work page or the workbench. The works come as one work_id (the work
+// page) or a comma-separated work_ids (the workbench, where clicking rows
+// attaches works). With a quote or a page the FIRST work gets an anchor; every
+// other work is a whole-work relation. With neither, all are whole-work. From
+// /notes the work is optional: a note about nothing on the list (Leal's
+// periodisation, a definition) is allowed to stand alone.
 export async function addNote(form: FormData): Promise<void> {
   await requireAllowedUser();
 
-  const workId = text(form, 'work_id');
+  const single = text(form, 'work_id');
+  const many = workIds(form, 'work_ids');
+  const ids = [...new Set([...(single ? [single] : []), ...many])];
   const body = text(form, 'body');
   if (!body) throw new Error('A note needs a body.');
-  if (workId && !(await getWork(workId))) {
-    throw new Error(`No work with id ${workId}. Check the identifier on its catalogue page.`);
+  for (const id of ids) {
+    if (!(await getWork(id))) {
+      throw new Error(`No work with id ${id}. Check the identifier on its catalogue page.`);
+    }
   }
 
   const kindRaw = text(form, 'kind');
@@ -303,6 +309,7 @@ export async function addNote(form: FormData): Promise<void> {
   const quote = text(form, 'quote');
   const attr = attribution(form);
   const passage = printedPage !== null || quote !== null;
+  const [first, ...rest] = ids;
 
   await createNote({
     kind,
@@ -310,15 +317,18 @@ export async function addNote(form: FormData): Promise<void> {
     attribution: attr,
     attributed_to: attr === 'other' ? text(form, 'attributed_to') : null,
     tags: tags(form),
-    anchors: workId && passage
-      ? [{ work_id: workId, printed_page: printedPage, quote, translation: text(form, 'translation') }]
+    anchors: first && passage
+      ? [{ work_id: first, printed_page: printedPage, quote, translation: text(form, 'translation') }]
       : [],
-    works: workId && !passage ? [{ work_id: workId, role: 'about' }] : [],
+    works: (first && passage ? rest : ids).map((work_id) => ({ work_id, role: 'about' as const })),
   });
 
-  if (workId) revalidatePath(`/works/${workId}`);
+  for (const id of ids) revalidatePath(`/works/${id}`);
   revalidatePath('/notes');
-  if (!workId) redirect('/notes');
+  revalidatePath('/');
+  const back = text(form, 'return_to');
+  if (back && back.startsWith('/')) redirect(back);
+  if (ids.length === 0) redirect('/notes');
 }
 
 export async function editNote(form: FormData): Promise<void> {
@@ -450,6 +460,9 @@ export async function addFicha(form: FormData): Promise<void> {
 
   revalidatePath(`/axes/${axisId}`);
   revalidatePath('/works', 'layout');
+  revalidatePath('/');
+  const back = text(form, 'return_to');
+  if (back && back.startsWith('/')) redirect(back);
 }
 
 // Synthesis or exam move added after the axis was created without one.
