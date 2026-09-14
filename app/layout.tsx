@@ -1,13 +1,22 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { Geist, Geist_Mono } from 'next/font/google';
+import { Geist, Geist_Mono, Literata } from 'next/font/google';
 import './globals.css';
 
 import { signOut } from '@/app/auth/sign-in/actions';
 import { getAllowedUser } from '@/lib/auth/guard';
 
+// Two families, one job each. Literata for anything she reads or writes at
+// length (notes, quotations, fichas, the instruction pages); Geist for the
+// instrument around it (nav, labels, filters, badges). Literata was drawn for
+// screen reading and has true italics, which the Spanish titles need.
 const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] });
 const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] });
+const literata = Literata({
+  variable: '--font-literata',
+  subsets: ['latin', 'latin-ext'],
+  style: ['normal', 'italic'],
+});
 
 export const metadata: Metadata = {
   title: 'Scriptorium',
@@ -44,11 +53,11 @@ export default async function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${literata.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col font-sans">
         <header className="border-b border-rule">
-          <div className="mx-auto max-w-7xl px-6 py-4 flex items-baseline gap-6">
+          <div className="mx-auto max-w-7xl px-5 py-2.5 flex items-baseline gap-6">
             <Link href="/" className="text-lg tracking-tight">
               Scriptorium
             </Link>
@@ -71,10 +80,10 @@ export default async function RootLayout({
           </div>
         </header>
 
-        <main className="mx-auto w-full max-w-7xl flex-1 px-6 py-6">{children}</main>
+        <main className="mx-auto w-full max-w-7xl flex-1 px-5 py-4">{children}</main>
 
         <footer className="border-t border-rule">
-          <div className="mx-auto flex max-w-7xl items-baseline gap-4 px-6 py-3 text-xs text-muted">
+          <div className="mx-auto flex max-w-7xl items-baseline gap-4 px-5 py-2 text-xs text-muted">
             <span>Reading list, bibliography, and notes</span>
             <Link href="/about" className="ml-auto text-[10px] hover:text-accent">
               why it is built this way

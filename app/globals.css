@@ -21,6 +21,7 @@
   --color-accent: var(--accent);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-serif: var(--font-literata);
 }
 
 body {
@@ -30,6 +31,29 @@ body {
 
 a {
   color: inherit;
+}
+
+/* Reading copy. Anything she reads or writes at length: note bodies,
+   quotations, translations, fichas, theses, the instruction pages. 16px on a
+   non-retina 1440x900 panel is the floor for a serif; the tooling around it
+   stays in the sans at 13-14px. */
+.reading {
+  font-family: var(--font-literata), Georgia, serif;
+  font-size: 1rem;
+  line-height: 1.6;
+  letter-spacing: 0.002em;
+}
+
+.reading em,
+.reading i,
+.reading .italic {
+  font-style: italic;
+}
+
+.reading-sm {
+  font-family: var(--font-literata), Georgia, serif;
+  font-size: 0.9375rem;
+  line-height: 1.55;
 }
 
 /* Form controls, styled once here rather than repeated across every field. */
@@ -44,6 +68,13 @@ textarea {
   padding: 0.35rem 0.5rem;
   font-size: 0.875rem;
   color: var(--foreground);
+}
+
+/* Where she writes, she writes in the reading face. */
+textarea.reading {
+  font-size: 1rem;
+  line-height: 1.55;
+  padding: 0.5rem 0.6rem;
 }
 
 input:focus,

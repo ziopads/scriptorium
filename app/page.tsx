@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 import { CenterPane } from '@/components/workbench/center-pane';
 import { LeftPane } from '@/components/workbench/left-pane';
 import { RightPane } from '@/components/workbench/right-pane';
@@ -12,7 +14,7 @@ import {
   listUnsupportedClaims,
 } from '@/lib/notes';
 import { listExamLists, listWorkbenchRows } from '@/lib/works';
-import { pick } from '@/lib/workbench-url';
+import { href, pick } from '@/lib/workbench-url';
 
 export const dynamic = 'force-dynamic';
 
@@ -64,8 +66,18 @@ export default async function WorkbenchPage({
       listOpenQuestions(),
     ]);
 
+  const rightOpen = params.r !== '0';
+
+  // Sized for a 13-inch MacBook Air (1440x900): the three panes fit at 1440
+  // with the right pane at 22rem; hiding it gives the centre the room a page
+  // of text needs. Height is the viewport less the header, footer, and main
+  // padding, so each pane scrolls on its own.
   return (
-    <div className="grid h-[calc(100vh-10.5rem)] min-h-[32rem] grid-cols-[17rem_minmax(0,1fr)_24rem] gap-6">
+    <div
+      className={`grid h-[calc(100vh-7.75rem)] min-h-[28rem] gap-5 ${
+        rightOpen ? 'grid-cols-[16rem_minmax(0,1fr)_22rem]' : 'grid-cols-[16rem_minmax(0,1fr)_1.25rem]'
+      }`}
+    >
       <aside className="min-h-0 border-r border-rule pr-4">
         <LeftPane
           params={params}
@@ -89,9 +101,32 @@ export default async function WorkbenchPage({
         <CenterPane params={params} />
       </section>
 
-      <aside className="min-h-0 overflow-y-auto border-l border-rule pl-4">
-        <RightPane params={params} rows={rows} />
-      </aside>
+      {rightOpen ? (
+        <aside className="relative min-h-0 overflow-y-auto border-l border-rule pl-4">
+          <Link
+            href={href(params, { r: '0' })}
+            className="absolute right-0 top-0 text-xs text-muted hover:text-accent"
+            title="Hide the note pane"
+            aria-label="Hide the note pane"
+          >
+            hide ›
+          </Link>
+          <div className="pt-5">
+            <RightPane params={params} rows={rows} />
+          </div>
+        </aside>
+      ) : (
+        <aside className="min-h-0 border-l border-rule">
+          <Link
+            href={href(params, { r: null })}
+            className="block h-full w-full pl-1 text-xs text-muted hover:text-accent [writing-mode:vertical-rl]"
+            title="Show the note pane"
+            aria-label="Show the note pane"
+          >
+            ‹ {params.n ? 'note' : params.a ? 'new ficha' : 'new note'}
+          </Link>
+        </aside>
+      )}
     </div>
   );
 }

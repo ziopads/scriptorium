@@ -11,14 +11,14 @@ export const dynamic = 'force-dynamic';
 // the argument, kept short.
 
 function H({ children }: { children: React.ReactNode }) {
-  return <h2 className="text-base pt-2">{children}</h2>;
+  return <h2 className="pt-3 text-lg">{children}</h2>;
 }
 
 function Term({ name, children }: { name: string; children: React.ReactNode }) {
   return (
     <div>
-      <dt className="font-medium">{name}</dt>
-      <dd className="text-muted">{children}</dd>
+      <dt className="inline font-semibold">{name}. </dt>
+      <dd className="inline text-muted">{children}</dd>
     </div>
   );
 }
@@ -27,7 +27,7 @@ export default async function AboutPage() {
   await requireAllowedUser();
 
   return (
-    <div className="max-w-2xl space-y-6 text-sm leading-relaxed">
+    <div className="reading max-w-2xl space-y-5">
       <div>
         <h1 className="text-2xl mb-1">Why it is built this way</h1>
         <p className="text-muted">

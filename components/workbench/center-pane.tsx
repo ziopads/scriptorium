@@ -48,7 +48,7 @@ export async function CenterPane({ params }: { params: WorkbenchParams }) {
           <p className="text-xs text-muted">
             Axis · <Link href={`/axes/${axis.id}`} className="hover:text-accent">open page</Link>
           </p>
-          <h2 className="text-lg">{axis.title}</h2>
+          <h2 className="reading text-xl leading-snug">{axis.title}</h2>
         </header>
         <section className="space-y-1">
           <h3 className="text-sm">Thesis</h3>
@@ -113,7 +113,7 @@ export async function CenterPane({ params }: { params: WorkbenchParams }) {
             in <Link href={href(params, { w: work.container.id })} className="italic hover:text-accent">{work.container.title}</Link>
           </p>
         ) : null}
-        <h2 className="text-lg italic leading-snug">{work.title}</h2>
+        <h2 className="reading text-xl italic leading-snug">{work.title}</h2>
         <p className="text-sm text-muted">
           {work.author ?? work.editor ?? 'Author unknown'}
           {work.year !== null ? ` · ${work.year}` : ''}
@@ -147,9 +147,9 @@ export async function CenterPane({ params }: { params: WorkbenchParams }) {
         <div className="space-y-4 text-sm">
           <div className="space-y-1">
             <p className="text-xs uppercase tracking-wide text-muted">Chicago</p>
-            <p className="border-l-2 border-rule pl-3">{plain(chicago.text)}</p>
+            <p className="reading-sm border-l-2 border-rule pl-3">{plain(chicago.text)}</p>
             <p className="text-xs uppercase tracking-wide text-muted pt-1">Note</p>
-            <p className="border-l-2 border-rule pl-3">{plain(note.text)}</p>
+            <p className="reading-sm border-l-2 border-rule pl-3">{plain(note.text)}</p>
           </div>
           <dl>
             <Field label="Purpose" value={PURPOSE_LABEL[work.purpose]} />

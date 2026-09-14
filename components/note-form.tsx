@@ -85,7 +85,7 @@ export function NoteForm({
 
       <label className="block space-y-1">
         <span className="text-sm">Note</span>
-        <textarea name="body" rows={compact ? 5 : 4} required />
+        <textarea name="body" rows={compact ? 5 : 4} required className="reading" />
         {compact ? null : (
           <span className="block text-xs text-muted">
             One claim per note. If this mixes what the author says with what you say,
@@ -98,7 +98,7 @@ export function NoteForm({
 
       <label className="block space-y-1">
         <span className="text-sm">Quotation</span>
-        <textarea name="quote" rows={3} />
+        <textarea name="quote" rows={3} className="reading" />
         {compact ? null : (
           <span className="block text-xs text-muted">
             Verbatim, in the original language. This is what re-locates the note if the
@@ -110,7 +110,7 @@ export function NoteForm({
 
       <label className="block space-y-1">
         <span className="text-sm">Your translation</span>
-        <textarea name="translation" rows={2} />
+        <textarea name="translation" rows={2} className="reading" />
       </label>
 
       <div className="flex flex-wrap items-end gap-3">

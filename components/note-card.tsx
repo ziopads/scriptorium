@@ -55,7 +55,7 @@ export async function NoteCard({
   return (
     <li className={`py-4 space-y-2 text-sm ${pending || rejected ? 'opacity-80' : ''}`}>
       {note.title ? (
-        <p className="font-medium">
+        <p className="reading font-medium">
           {note.kind === 'axis' ? (
             <Link href={`/axes/${note.id}`} className="hover:text-accent">{note.title}</Link>
           ) : note.title}
@@ -63,7 +63,7 @@ export async function NoteCard({
       ) : null}
 
       {here?.quote ? (
-        <blockquote className="border-l-2 border-rule pl-3 italic">
+        <blockquote className="reading border-l-2 border-rule pl-3 italic">
           {here.quote}
           {here.translation ? (
             <span className="mt-1 block not-italic text-muted">{here.translation}</span>
@@ -71,7 +71,7 @@ export async function NoteCard({
         </blockquote>
       ) : null}
 
-      <p className="whitespace-pre-wrap">{note.body}</p>
+      <p className="reading whitespace-pre-wrap">{note.body}</p>
 
       {/* Every anchor other than the one we are standing on. */}
       {elsewhere.length > 0 ? (
@@ -85,7 +85,7 @@ export async function NoteCard({
                 {anchor.printed_page !== null ? `, ${anchor.printed_page}` : null}
               </Link>
               {anchor.quote ? (
-                <p className="mt-0.5 border-l border-rule pl-2 italic text-muted">
+                <p className="reading-sm mt-0.5 border-l border-rule pl-2 italic text-muted">
                   {anchor.quote}
                   {anchor.translation ? (
                     <span className="block not-italic">{anchor.translation}</span>
@@ -213,7 +213,7 @@ export async function NoteCard({
             ) : null}
             <label className="block space-y-1">
               <span className="text-xs text-muted">{note.kind === 'axis' ? 'Thesis' : 'Note'}</span>
-              <textarea name="body" rows={4} defaultValue={note.body} required />
+              <textarea name="body" rows={4} defaultValue={note.body} required className="reading" />
             </label>
             {note.kind !== 'question' && note.kind !== 'axis' ? (
               <AttributionFields current={note.attribution} attributedTo={note.attributed_to} />
@@ -248,11 +248,11 @@ export async function NoteCard({
               </div>
               <label className="block space-y-1">
                 <span className="text-xs text-muted">Passage there, verbatim</span>
-                <textarea name="quote" rows={2} />
+                <textarea name="quote" rows={2} className="reading" />
               </label>
               <label className="block space-y-1">
                 <span className="text-xs text-muted">Your translation</span>
-                <textarea name="translation" rows={2} />
+                <textarea name="translation" rows={2} className="reading" />
               </label>
             </form>
           ) : null}
@@ -305,7 +305,7 @@ export async function NoteCard({
                       {revision.attribution ? ` · ${revision.attribution}` : null}
                     </p>
                     {revision.title ? <p className="text-xs text-muted">{revision.title}</p> : null}
-                    <p className="whitespace-pre-wrap text-xs text-muted">{revision.body}</p>
+                    <p className="reading-sm whitespace-pre-wrap text-muted">{revision.body}</p>
                   </li>
                 ))}
               </ol>

@@ -92,7 +92,7 @@ export async function RightPane({ params, rows }: { params: WorkbenchParams; row
           </div>
           <label className="block space-y-1">
             <span className="text-sm">Ficha</span>
-            <textarea name="body" rows={6} required />
+            <textarea name="body" rows={6} required className="reading" />
             <span className="block text-xs text-muted">What this work contributes to the argument.</span>
           </label>
           <AttributionFields />

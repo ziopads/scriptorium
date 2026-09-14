@@ -9,10 +9,11 @@
 //   pane  left pane tab: catalogue | notes | axes
 //   view  centre tab: meta | preview | dossier | notes | axes
 //   p     preview page (reserved)
+//   r     right pane: 0 hides it, giving the centre the room
 
 export type WorkbenchParams = Record<string, string | undefined>;
 
-export const WB_KEYS = ['w', 'n', 'a', 'ws', 'pane', 'view', 'p'] as const;
+export const WB_KEYS = ['w', 'n', 'a', 'ws', 'pane', 'view', 'p', 'r'] as const;
 
 export function pick(searchParams: Record<string, string | string[] | undefined>): WorkbenchParams {
   const out: WorkbenchParams = {};

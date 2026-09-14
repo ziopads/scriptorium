@@ -9,14 +9,14 @@ export const dynamic = 'force-dynamic';
 // implementation table in that file is not shown here.
 
 function H({ children }: { children: React.ReactNode }) {
-  return <h2 className="text-base pt-2">{children}</h2>;
+  return <h2 className="pt-3 text-lg">{children}</h2>;
 }
 
 export default async function ComoPage() {
   await requireAllowedUser();
 
   return (
-    <div className="max-w-2xl space-y-6 text-sm leading-relaxed">
+    <div className="reading max-w-2xl space-y-5">
       <div>
         <h1 className="text-2xl mb-1">Cómo tomar notas aquí</h1>
         <p className="text-muted">
@@ -38,30 +38,30 @@ export default async function ComoPage() {
       </p>
       <dl className="space-y-3">
         <div>
-          <dt className="font-medium">Nota.</dt>
-          <dd>
+          <dt className="inline font-semibold">Nota. </dt>
+          <dd className="inline">
             Una idea, una observación, una lectura de un pasaje. Es lo que más vas a
             escribir. Puede tener cita y página o no tenerlas.
           </dd>
         </div>
         <div>
-          <dt className="font-medium">Pregunta.</dt>
-          <dd>
+          <dt className="inline font-semibold">Pregunta. </dt>
+          <dd className="inline">
             Algo que te preguntas y no has resuelto. Se queda abierta hasta que otra
             nota la responda; entonces se enlaza a esa nota y no desaparece.
           </dd>
         </div>
         <div>
-          <dt className="font-medium">Ficha.</dt>
-          <dd>
+          <dt className="inline font-semibold">Ficha. </dt>
+          <dd className="inline">
             Un párrafo sobre lo que una obra aporta a un argumento. Siempre pertenece
             a un eje. Puede cubrir más de una obra (las colecciones folclóricas, por
             ejemplo) si las lees como un solo aporte.
           </dd>
         </div>
         <div>
-          <dt className="font-medium">Eje.</dt>
-          <dd>
+          <dt className="inline font-semibold">Eje. </dt>
+          <dd className="inline">
             Un argumento que reúne varias obras. Tiene cuatro partes, que son las que
             ya usas: la tesis, las fichas, cómo se conectan, y el movimiento de examen.
           </dd>
@@ -78,19 +78,19 @@ export default async function ComoPage() {
       </p>
 
       <H>Cada nota responde una pregunta: ¿de quién es esta afirmación?</H>
-      <ul className="space-y-2 border-l-2 border-rule pl-3">
+      <ul className="list-disc space-y-2 pl-5">
         <li>
-          <span className="font-medium">Lo dice el autor.</span> Estás reportando lo que
+          <span className="font-semibold">Lo dice el autor.</span> Estás reportando lo que
           el texto dice. Pon la cita y la página. Si no tienes cita, la nota se marcará
           como afirmación sin respaldo, y es la primera que el sinodal va a cuestionar.
         </li>
         <li>
-          <span className="font-medium">Lo digo yo.</span> Es tu puente, tu lectura, tu
+          <span className="font-semibold">Lo digo yo.</span> Es tu puente, tu lectura, tu
           conexión. No necesita cita. Ejemplo: el puente de Adorno a Derrida lo
           construyes tú.
         </li>
         <li>
-          <span className="font-medium">Lo dice otro.</span> Alguien que no es el autor
+          <span className="font-semibold">Lo dice otro.</span> Alguien que no es el autor
           de la obra que estás leyendo. Escribe quién. Ejemplo: <em>textual cleansing</em>{' '}
           es de Bolaños, aunque lo anotes leyendo a Adorno.
         </li>
