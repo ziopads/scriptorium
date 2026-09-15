@@ -34,7 +34,8 @@ export default async function ComoPage() {
         <Link href="/notes" className="text-accent hover:underline">Notes</Link> (<em>New note</em>)
         o desde la página de la obra (<em>Add a note</em>). Una ficha se escribe en el
         panel derecho con el eje elegido a la izquierda, o en la página del eje. Un eje
-        se crea en <Link href="/axes" className="text-accent hover:underline">Axes</Link>.
+        se crea en el mismo panel derecho, con <em>New axis</em>, o en{' '}
+        <Link href="/axes" className="text-accent hover:underline">Axes</Link>.
       </p>
       <dl className="space-y-3">
         <div>
@@ -77,6 +78,39 @@ export default async function ComoPage() {
         eje que empezó como nota; créalo y pasa los párrafos a fichas.
       </p>
 
+      <H>Una nota que ya escribiste y un eje</H>
+      <p>
+        Selecciona la nota en la lista de la izquierda y, debajo de ella en el panel
+        derecho, tienes dos maneras de unirla a un eje. No son lo mismo.
+      </p>
+      <dl className="space-y-3">
+        <div>
+          <dt className="inline font-semibold">Hacerla ficha de un eje. </dt>
+          <dd className="inline">
+            La nota se vuelve parte de ese eje: deja de estar en la lista de notas
+            sueltas y aparece entre las fichas. Es lo que quieres cuando la nota ya dice
+            qué aporta esa obra al argumento. La cita y la página se quedan con ella.
+            Una nota sólo puede ser ficha de un eje, porque una ficha se escribe para un
+            eje y una obra en concreto: la ficha de Anzaldúa en el Eje 2 no es su ficha
+            en el Eje 4. Si te arrepientes, <em>Make it a plain note again</em> la
+            devuelve a su sitio.
+          </dd>
+        </div>
+        <div>
+          <dt className="inline font-semibold">Decir que también toca un eje. </dt>
+          <dd className="inline">
+            La nota se queda donde está y sólo queda registrado el cruce. Puedes hacerlo
+            con tantos ejes como quieras. Sirve para lo que en tu mapa era «puente al
+            Eje 3»: la nota no es una ficha de ese eje, pero al leer ese eje quieres
+            acordarte de ella.
+          </dd>
+        </div>
+      </dl>
+      <p>
+        Para hacerla ficha, la nota tiene que apuntar a alguna obra: una ficha dice qué
+        aporta una obra, y sin obra no hay nada que decir.
+      </p>
+
       <H>Cada nota responde una pregunta: ¿de quién es esta afirmación?</H>
       <ul className="list-disc space-y-2 pl-5">
         <li>
@@ -111,15 +145,29 @@ export default async function ComoPage() {
       <p>
         Toda nota puede apuntar a una o más obras del catálogo. Escribe el nombre y
         elige de la lista; el código <code>[I.A.3]</code> aparece solo. Si la obra no
-        está en tus listas (Radin, Carpentier),{' '}
-        <Link href="/works/new" className="text-accent hover:underline">agrégala al catálogo</Link>{' '}
-        primero; queda marcada como añadida por ti.
+        está en tus listas (Radin, Carpentier), agrégala desde el mismo panel derecho,
+        en <em>Add a work</em>, sin salir de lo que estás escribiendo: queda marcada
+        como añadida por ti y se adjunta a la nota. Lo que falte para citarla bien lo
+        llenas después en{' '}
+        <Link href="/gaps" className="text-accent hover:underline">Gaps</Link>.
+      </p>
+      <p>
+        Si estás leyendo un libro en <em>Preview</em> y quieres agregar un cuento o un
+        ensayo que está dentro de él, el mismo formulario te ofrece marcarlo como parte
+        de ese libro, con la página en la que estás. Así el cuento se puede citar por su
+        nombre sin tener que dar de alta la colección entera.
       </p>
 
       <H>Etiquetas</H>
       <p>
         Libres, pocas, en minúsculas. Para lugares usa <code>lugar:abiquiu</code>,{' '}
         <code>lugar:conejos</code>, <code>lugar:valle-san-luis</code>.
+      </p>
+      <p>
+        Si inventas una etiqueta nueva y quieres ponérsela a notas que ya escribiste:
+        en <Link href="/notes" className="text-accent hover:underline">Notes</Link>,
+        marca las casillas de las notas (con <em>shift</em> marcas todo un tramo),
+        escribe la etiqueta en la barra de arriba y <em>Add tag</em>.
       </p>
 
       <H>Propuestas de Claude</H>
