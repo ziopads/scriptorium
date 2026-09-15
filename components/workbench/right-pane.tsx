@@ -5,8 +5,9 @@ import { NoteCard } from '@/components/note-card';
 import { NoteForm, type AttachedWork } from '@/components/note-form';
 import { ResettingForm } from '@/components/resetting-form';
 import { SubmitButton } from '@/components/submit-button';
+import { AddWorkForm } from '@/components/workbench/add-work-form';
 import { QuoteCapture } from '@/components/workbench/quote-capture';
-import { addFicha } from '@/lib/actions';
+import { addAxis, addFicha } from '@/lib/actions';
 import { getNote } from '@/lib/notes';
 import type { WorkbenchRow } from '@/lib/works';
 import { attached, href, withAttached, type WorkbenchParams } from '@/lib/workbench-url';
@@ -41,6 +42,11 @@ export async function RightPane({ params, rows }: { params: WorkbenchParams; row
   // passage cleared, and the page still open where she left it.
   const here = href(params, { ws: null, quote: null });
 
+  // What a new work would sit inside: the book open in the centre, when the
+  // Preview tab is showing one. An essay added while reading Rael belongs to
+  // Rael, and the page she is on is where it starts.
+  const container = params.view === 'preview' && params.w ? byId.get(params.w) : undefined;
+
   // A note under review.
   if (params.n) {
     const id = Number.parseInt(params.n, 10);
@@ -68,6 +74,47 @@ export async function RightPane({ params, rows }: { params: WorkbenchParams; row
               ))}
           </p>
         ) : null}
+      </div>
+    );
+  }
+
+  // A new axis. `a=new` rather than a separate key: an axis id is numeric, so
+  // the sentinel cannot collide, and the pane already keys on `a`.
+  if (params.a === 'new') {
+    return (
+      <div className="space-y-3">
+        <p className="flex items-baseline gap-3 text-xs text-muted">
+          <span>New axis</span>
+          <Link href={href(params, { a: null })} className="ml-auto hover:text-accent">
+            New note instead
+          </Link>
+        </p>
+        <ResettingForm action={addAxis} className="space-y-4">
+          <input type="hidden" name="return_to" value={href(params, { ws: null, quote: null })} />
+          <label className="block space-y-1">
+            <span className="text-sm">Title</span>
+            <input type="text" name="title" required placeholder="Eje 8 — …" />
+          </label>
+          <label className="block space-y-1">
+            <span className="text-sm">Thesis</span>
+            <textarea name="thesis" rows={5} required className="reading" />
+            <span className="block text-xs text-muted">
+              What the axis argues. The works come next, one ficha each.
+            </span>
+          </label>
+          <label className="block space-y-1">
+            <span className="text-sm">Tags</span>
+            <input type="text" name="tags" placeholder="comma, separated" />
+          </label>
+          <div className="flex items-baseline gap-3">
+            <SubmitButton>Create axis</SubmitButton>
+            <span className="text-xs text-muted">
+              {works.length > 0
+                ? `Then a ficha for ${works.length === 1 ? 'the attached work' : `each of the ${works.length} attached works`}.`
+                : 'Synthesis and exam move are added on the axis page.'}
+            </span>
+          </div>
+        </ResettingForm>
       </div>
     );
   }
@@ -124,7 +171,12 @@ export async function RightPane({ params, rows }: { params: WorkbenchParams; row
   // The new-note form.
   return (
     <div className="space-y-3">
-      <p className="text-xs text-muted">New note</p>
+      <p className="flex items-baseline gap-3 text-xs text-muted">
+        <span>New note</span>
+        <Link href={href(params, { a: 'new', n: null })} className="ml-auto hover:text-accent">
+          New axis
+        </Link>
+      </p>
       <NoteForm
         works={works}
         returnTo={here}
@@ -133,6 +185,12 @@ export async function RightPane({ params, rows }: { params: WorkbenchParams; row
         defaultPage={params.quote ? params.p : undefined}
         clearQuoteHref={href(params, { quote: null })}
         captureSlot={params.view === 'preview' ? <QuoteCapture params={params} /> : null}
+      />
+      <AddWorkForm
+        returnTo={href(params, { quote: params.quote ?? null })}
+        containerId={container?.id}
+        containerLabel={container ? label(container, container.id) : undefined}
+        page={params.p}
       />
     </div>
   );

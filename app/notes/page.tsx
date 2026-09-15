@@ -2,6 +2,7 @@ import Link from 'next/link';
 
 import { NoteCard } from '@/components/note-card';
 import { NoteForm } from '@/components/note-form';
+import { BulkTagBar, NoteCheckbox, SelectionProvider } from '@/components/notes-selection';
 import { requireAllowedUser } from '@/lib/auth/guard';
 import { day as localDay, readableDay } from '@/lib/dates';
 import {
@@ -242,29 +243,38 @@ export default async function NotesPage({
           Nothing here yet. Write one above, or from a work’s page;{' '}
           <Link href="/como" className="text-accent hover:underline">how this works</Link>.
         </p>
-      ) : grouped ? (
-        <div className="space-y-8">
-          {[...byDay.entries()].map(([key, dayNotes]) => (
-            <section key={key}>
-              <h2 className="mb-1 text-xs uppercase tracking-wide text-muted">
-                <Link href={`/notes?day=${key}`} className="hover:text-accent">
-                  {readableDay(key)}
-                </Link>
-              </h2>
-              <ul className="divide-y divide-rule border-y border-rule">
-                {notes.length > 0
-                  ? dayNotes.map((note) => <NoteCard key={note.id} note={note} />)
-                  : null}
-              </ul>
-            </section>
-          ))}
-        </div>
       ) : (
-        <ul className="divide-y divide-rule border-y border-rule">
-          {notes.map((note) => (
-            <NoteCard key={note.id} note={note} />
-          ))}
-        </ul>
+        <SelectionProvider order={notes.map((n) => n.id)}>
+          <BulkTagBar knownTags={tags.map((t) => t.tag)} />
+          {grouped ? (
+            <div className="mt-6 space-y-8">
+              {[...byDay.entries()].map(([key, dayNotes]) => (
+                <section key={key}>
+                  <h2 className="mb-1 text-xs uppercase tracking-wide text-muted">
+                    <Link href={`/notes?day=${key}`} className="hover:text-accent">
+                      {readableDay(key)}
+                    </Link>
+                  </h2>
+                  <ul className="divide-y divide-rule border-y border-rule">
+                    {dayNotes.map((note) => (
+                      <NoteCard
+                        key={note.id}
+                        note={note}
+                        selectSlot={<NoteCheckbox id={note.id} />}
+                      />
+                    ))}
+                  </ul>
+                </section>
+              ))}
+            </div>
+          ) : (
+            <ul className="mt-6 divide-y divide-rule border-y border-rule">
+              {notes.map((note) => (
+                <NoteCard key={note.id} note={note} selectSlot={<NoteCheckbox id={note.id} />} />
+              ))}
+            </ul>
+          )}
+        </SelectionProvider>
       )}
     </div>
   );

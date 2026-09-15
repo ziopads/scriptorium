@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import Link from 'next/link';
 
 import { AttributionBadge, AttributionFields } from '@/components/attribution-fields';
@@ -34,10 +35,12 @@ export async function NoteCard({
   note,
   workId,
   compact = false,
+  selectSlot,
 }: {
   note: NoteWithRelations;
   workId?: string;    // when rendered on a work page, the anchor to lead with
   compact?: boolean;  // inside an axis: no link back to the axis, no kind badge
+  selectSlot?: ReactNode; // a checkbox, on the notes list only
 }) {
   const [revisions, links] = await Promise.all([listRevisions(note.id), linksFor(note.id)]);
 
@@ -53,7 +56,10 @@ export async function NoteCard({
   const rejected = note.rejected_at !== null;
 
   return (
-    <li className={`py-4 space-y-2 text-sm ${pending || rejected ? 'opacity-80' : ''}`}>
+    <li className={`py-4 text-sm ${pending || rejected ? 'opacity-80' : ''}`}>
+      <div className="flex gap-3">
+        {selectSlot ? <div className="shrink-0">{selectSlot}</div> : null}
+        <div className="min-w-0 flex-1 space-y-2">
       {note.title ? (
         <p className="reading font-medium">
           {note.kind === 'axis' ? (
@@ -313,6 +319,8 @@ export async function NoteCard({
           ) : null}
         </details>
       ) : null}
+        </div>
+      </div>
     </li>
   );
 }

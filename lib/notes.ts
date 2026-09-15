@@ -269,6 +269,49 @@ export async function allTags(): Promise<{ tag: string; count: number }[]> {
   return rows as { tag: string; count: number }[];
 }
 
+// Bulk tagging, for a tag invented after the notes were written — Colonial
+// Terror arrived on 14 September with notes already needing it.
+//
+// Two things this deliberately does not do. It writes no note_revisions:
+// updateNote versions tags because it versions her writing, but a bulk
+// operation across seventy notes would bury the history it is meant to keep.
+// And it leaves `reviewed` alone: editing a note is reviewing it, whereas
+// tagging a proposal says nothing about whether she has accepted the claim.
+export async function addTags(ids: number[], tags: string[]): Promise<number> {
+  if (ids.length === 0 || tags.length === 0) return 0;
+  const sql = db();
+  const rows = (await sql`
+    update notes set
+      tags = coalesce(
+        (select array_agg(distinct t order by t)
+         from unnest(tags || ${tags}::text[]) as t),
+        '{}'
+      ),
+      updated_at = now()
+    where id = any(${ids})
+    returning id
+  `) as { id: number }[];
+  return rows.length;
+}
+
+export async function removeTags(ids: number[], tags: string[]): Promise<number> {
+  if (ids.length === 0 || tags.length === 0) return 0;
+  const sql = db();
+  const rows = (await sql`
+    update notes set
+      tags = coalesce(
+        (select array_agg(t order by t)
+         from unnest(tags) as t
+         where t <> all(${tags}::text[])),
+        '{}'
+      ),
+      updated_at = now()
+    where id = any(${ids})
+    returning id
+  `) as { id: number }[];
+  return rows.length;
+}
+
 // ---------------------------------------------------------------------------
 // Axes
 // ---------------------------------------------------------------------------

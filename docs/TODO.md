@@ -10,6 +10,31 @@ a guess; discussion first.
 
 ## 1. Batch-select notes and apply a tag
 
+**Built 14 Sept.** `components/notes-selection.tsx` holds a selection context, a
+checkbox, and a bulk bar; `/notes` wraps its list in the provider and passes
+each `NoteCard` a checkbox through a new `selectSlot` prop.
+
+Context rather than props because `NoteCard` renders the `<li>` and is an async
+server component, so the catalogue's self-contained client table could not be
+reused directly. Shift-click ranges work the same way, including the
+read-the-anchor-before-setState detail that otherwise makes every range a row
+to itself.
+
+`addTags` and `removeTags` in `lib/notes.ts` deliberately write no
+`note_revisions` — `updateNote` versions tags because it versions her writing,
+but seventy revision rows from one bulk action would bury the history it
+exists to keep — and deliberately leave `reviewed` alone, since tagging a
+proposal says nothing about whether she has accepted the claim. Tags are folded
+to lowercase and deduplicated in the action, the same as the note form does,
+so a bulk tag cannot become a second spelling of an existing one.
+
+**Note on item 6:** `/notes` already had more filtering than the entry below
+credited — text search over body, title, quote and translation; tag; by-day;
+untagged; connections; and the four review queues. What is still missing is a
+filter by attribution and one by work.
+
+The original entry:
+
 Zazil introduced **Colonial Terror** today and it needs applying retroactively.
 
 Tags live on `notes.tags`. There is no multi-select anywhere in the interface,

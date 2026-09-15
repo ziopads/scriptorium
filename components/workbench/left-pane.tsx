@@ -260,7 +260,11 @@ export function LeftPane({
               </li>
             ))}
           </ul>
-          <p className="py-2 text-[11px] text-muted"><Link href="/axes" className="hover:text-accent">New axis →</Link></p>
+          <p className="py-2 text-[11px] text-muted">
+            <Link href={href(params, { a: 'new', n: null })} className="hover:text-accent">
+              New axis →
+            </Link>
+          </p>
         </div>
       ) : null}
     </div>

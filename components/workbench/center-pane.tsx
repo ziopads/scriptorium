@@ -54,7 +54,10 @@ function Field({ label, value }: { label: string; value: string | number | null 
 }
 
 export async function CenterPane({ params }: { params: WorkbenchParams }) {
-  if (params.a) {
+  // `a=new` is the right pane composing an axis that does not exist yet. The
+  // centre keeps showing whatever work is selected rather than reporting a
+  // missing axis.
+  if (params.a && params.a !== 'new') {
     const id = Number.parseInt(params.a, 10);
     const tree = Number.isNaN(id) ? null : await getAxisTree(id);
     if (!tree) return <p className="text-sm text-muted">No such axis.</p>;

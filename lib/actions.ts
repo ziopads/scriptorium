@@ -25,12 +25,14 @@ import {
 } from '@/lib/works';
 import {
   addLink,
+  addTags,
   approveNote,
   createNote,
   deleteNote,
   nextAnchorOrdinal,
   rejectNote,
   removeAnchor,
+  removeTags,
   removeWork,
   restoreNote,
   setAnchor,
@@ -263,9 +265,28 @@ export async function rateWork(id: string, priority: number | null): Promise<voi
   revalidatePath(`/works/${id}`);
 }
 
+// Attach a newly created work to the note being written, on the way back to
+// the workbench. Without this she would create the work, land on its
+// catalogue page, and have to find her way back and attach it by hand — which
+// is the three-screen path this form exists to remove.
+function withAttachedWork(path: string, id: string): string {
+  const [base, query = ''] = path.split('?');
+  const params = new URLSearchParams(query);
+  const ws = params.get('ws');
+  const ids = [...new Set([...(ws ? ws.split(',').filter(Boolean) : []), id])];
+  params.set('ws', ids.join(','));
+  const rest = params.toString();
+  return rest ? `${base}?${rest}` : base;
+}
+
 // A stub: id, title, and whatever else she has, marked as added by her and
 // left for /gaps to backfill. Refuses an id that exists, because upsertWork
 // would otherwise overwrite a full record with blanks.
+//
+// container_id, first_page and last_page make this the way a tale inside a
+// collection becomes citable: reading Rael at page 47, she names the tale and
+// it is created as a child with its range, rather than the collection having
+// to be split into hundreds of rows nobody asked for.
 export async function addStubWork(form: FormData): Promise<void> {
   await requireAllowedUser();
 
@@ -281,12 +302,20 @@ export async function addStubWork(form: FormData): Promise<void> {
     throw new Error(`A work with id ${id} already exists.`);
   }
 
+  const containerId = text(form, 'container_id');
+  if (containerId && !(await getWork(containerId))) {
+    throw new Error(`No work with id ${containerId} to hold this one.`);
+  }
+
   await upsertWork({
     id,
     title,
     author,
     year,
     kind: (text(form, 'kind') ?? 'monograph') as WorkKind,
+    container_id: containerId,
+    first_page: containerId ? number(form, 'first_page') : null,
+    last_page: containerId ? number(form, 'last_page') : null,
     standing: 'added',
     purpose: 'unassigned',
     notes_internal: text(form, 'notes_internal'),
@@ -294,6 +323,10 @@ export async function addStubWork(form: FormData): Promise<void> {
 
   revalidatePath('/works');
   revalidatePath('/gaps');
+  revalidatePath('/');
+
+  const back = text(form, 'return_to');
+  if (back && back.startsWith('/')) redirect(withAttachedWork(back, id));
   redirect(`/works/${id}`);
 }
 
@@ -307,6 +340,15 @@ function showingNote(path: string, id: number): string {
   const [base, query = ''] = path.split('?');
   const params = new URLSearchParams(query);
   params.set('n', String(id));
+  const rest = params.toString();
+  return rest ? `${base}?${rest}` : base;
+}
+
+function showingAxis(path: string, id: number): string {
+  const [base, query = ''] = path.split('?');
+  const params = new URLSearchParams(query);
+  params.set('a', String(id));
+  params.delete('n');
   const rest = params.toString();
   return rest ? `${base}?${rest}` : base;
 }
@@ -361,6 +403,33 @@ export async function addNote(form: FormData): Promise<void> {
   const back = text(form, 'return_to');
   if (back && back.startsWith('/')) redirect(showingNote(back, note.id));
   if (ids.length === 0) redirect('/notes');
+}
+
+// Tags applied to a selection, from the notes list. Called from a client
+// component rather than a form, like characterizeSelection, because shift-click
+// range selection needs browser state.
+//
+// Folded to lowercase and deduplicated the same way the note form does it, so
+// a tag added in bulk cannot become a second spelling of one that exists.
+export async function tagSelection(
+  ids: number[],
+  add: string[],
+  remove: string[],
+): Promise<{ updated: number }> {
+  await requireAllowedUser();
+
+  const fold = (list: string[]) => [
+    ...new Set(list.map((t) => t.trim().toLowerCase()).filter(Boolean)),
+  ];
+
+  const added = await addTags(ids, fold(add));
+  const removed = await removeTags(ids, fold(remove));
+
+  revalidatePath('/notes');
+  revalidatePath('/works', 'layout');
+  revalidatePath('/');
+
+  return { updated: Math.max(added, removed) };
 }
 
 export async function editNote(form: FormData): Promise<void> {
@@ -466,6 +535,13 @@ export async function addAxis(form: FormData): Promise<void> {
   }
 
   revalidatePath('/axes');
+  revalidatePath('/');
+
+  // Back to the workbench with the new axis selected, which turns the right
+  // pane into its ficha composer with her attached works still there — so
+  // making an axis and writing its first ficha is one motion.
+  const back = text(form, 'return_to');
+  if (back && back.startsWith('/')) redirect(showingAxis(back, axis.id));
   redirect(`/axes/${axis.id}`);
 }
 
