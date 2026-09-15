@@ -77,6 +77,7 @@ export default async function WorksPage({
       standing: work.standing,
       examinable: examinable.has(work.id),
       source_format: work.source_format,
+      priority: work.priority,
       missing: formatBibliography(work, container).missing,
     };
   });

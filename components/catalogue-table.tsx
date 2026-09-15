@@ -1,8 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { useRef, useState, useTransition } from 'react';
+import { useMemo, useRef, useState, useTransition } from 'react';
 
+import { Stars } from '@/components/stars';
 import { characterizeSelection } from '@/lib/actions';
 import {
   PURPOSE_CODE,
@@ -34,6 +35,7 @@ export interface Row {
   standing: Standing;
   examinable: boolean;
   source_format: string;
+  priority: number | null;
   missing: string[];
 }
 
@@ -54,6 +56,9 @@ const FILE_MARK: Record<string, { mark: string; label: string; dim: boolean }> =
 // choice. A single "none" default meant one stray Apply wiped a field across a
 // whole catalogue in Vivarium.
 const NO_CHANGE = '__nochange__';
+// Distinct again from NO_CHANGE: clearing a rating is a real instruction, and
+// null is the value it writes.
+const CLEAR_RATING = '__clear__';
 
 const PURPOSES: Purpose[] = ['comps', 'both', 'dissertation', 'unassigned'];
 const STANDINGS: Standing[] = ['assigned', 'added', 'excluded'];
@@ -62,8 +67,37 @@ export function CatalogueTable({ rows }: { rows: Row[] }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkPurpose, setBulkPurpose] = useState<string>(NO_CHANGE);
   const [bulkStanding, setBulkStanding] = useState<string>(NO_CHANGE);
+  const [bulkRating, setBulkRating] = useState<string>(NO_CHANGE);
   const [note, setNote] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  // Ratings changed here since the page was rendered, so the filter and the
+  // sort follow a click immediately rather than waiting for a refetch.
+  const [rated, setRated] = useState<Map<string, number | null>>(new Map());
+  const [minStars, setMinStars] = useState<number | null>(null);
+  const [unratedOnly, setUnratedOnly] = useState(false);
+  const [byRating, setByRating] = useState(false);
+
+  function priorityOf(row: Row): number | null {
+    return rated.has(row.id) ? rated.get(row.id)! : row.priority;
+  }
+
+  // What is on screen. Shift-click ranges and select-all follow this rather
+  // than the full list, so a range never reaches a row she cannot see.
+  const visible = useMemo(() => {
+    const kept = rows.filter((r) => {
+      const p = rated.has(r.id) ? rated.get(r.id)! : r.priority;
+      if (unratedOnly) return p === null;
+      if (minStars !== null) return p !== null && p >= minStars;
+      return true;
+    });
+    if (!byRating) return kept;
+    return [...kept].sort((a, b) => {
+      const pa = (rated.has(a.id) ? rated.get(a.id)! : a.priority) ?? -1;
+      const pb = (rated.has(b.id) ? rated.get(b.id)! : b.priority) ?? -1;
+      return pb - pa;
+    });
+  }, [rows, rated, minStars, unratedOnly, byRating]);
 
   // A ref, not state: read during a click, never rendered, and state would
   // rerender every row on each tick.
@@ -80,13 +114,13 @@ export function CatalogueTable({ rows }: { rows: Row[] }) {
       const turningOn = !prev.has(id);
 
       if (shift && anchor !== null && anchor !== id) {
-        const a = rows.findIndex((r) => r.id === anchor);
-        const b = rows.findIndex((r) => r.id === id);
+        const a = visible.findIndex((r) => r.id === anchor);
+        const b = visible.findIndex((r) => r.id === id);
         if (a !== -1 && b !== -1) {
           const [lo, hi] = a < b ? [a, b] : [b, a];
           for (let i = lo; i <= hi; i++) {
-            if (turningOn) next.add(rows[i].id);
-            else next.delete(rows[i].id);
+            if (turningOn) next.add(visible[i].id);
+            else next.delete(visible[i].id);
           }
           return next;
         }
@@ -102,13 +136,14 @@ export function CatalogueTable({ rows }: { rows: Row[] }) {
 
   function toggleAll() {
     setSelected((prev) => {
-      const all = rows.length > 0 && rows.every((r) => prev.has(r.id));
-      return all ? new Set<string>() : new Set(rows.map((r) => r.id));
+      const all = visible.length > 0 && visible.every((r) => prev.has(r.id));
+      return all ? new Set<string>() : new Set(visible.map((r) => r.id));
     });
     anchorRef.current = null;
   }
 
-  const wouldChange = bulkPurpose !== NO_CHANGE || bulkStanding !== NO_CHANGE;
+  const wouldChange =
+    bulkPurpose !== NO_CHANGE || bulkStanding !== NO_CHANGE || bulkRating !== NO_CHANGE;
 
   function apply() {
     const ids = [...selected];
@@ -118,25 +153,39 @@ export function CatalogueTable({ rows }: { rows: Row[] }) {
       const { updated } = await characterizeSelection(ids, {
         purpose: bulkPurpose === NO_CHANGE ? undefined : (bulkPurpose as Purpose),
         standing: bulkStanding === NO_CHANGE ? undefined : (bulkStanding as Standing),
+        ...(bulkRating === NO_CHANGE
+          ? {}
+          : { priority: bulkRating === CLEAR_RATING ? null : Number(bulkRating) }),
       });
+
+      if (bulkRating !== NO_CHANGE) {
+        const value = bulkRating === CLEAR_RATING ? null : Number(bulkRating);
+        setRated((prev) => {
+          const next = new Map(prev);
+          for (const id of ids) next.set(id, value);
+          return next;
+        });
+      }
+
       setNote(`${updated} updated`);
       setSelected(new Set());
       setBulkPurpose(NO_CHANGE);
       setBulkStanding(NO_CHANGE);
+      setBulkRating(NO_CHANGE);
       anchorRef.current = null;
     });
   }
 
   const worksCitedHref =
     '/works-cited?' + [...selected].map((id) => `id=${encodeURIComponent(id)}`).join('&');
-  const allSelected = rows.length > 0 && rows.every((r) => selected.has(r.id));
+  const allSelected = visible.length > 0 && visible.every((r) => selected.has(r.id));
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs text-muted">
         <label className="flex items-center gap-2">
           <input type="checkbox" checked={allSelected} onChange={toggleAll} className="w-auto" />
-          Select all {rows.length}
+          Select all {visible.length}
         </label>
         <span>Tick a row, then shift-click another to take everything between.</span>
         <span className="ml-auto">
@@ -144,6 +193,60 @@ export function CatalogueTable({ rows }: { rows: Row[] }) {
           numbers · blank: no file
         </span>
         {note ? <span className="text-accent">{note}</span> : null}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-1 text-xs">
+        <span className="pr-1 text-muted">Rated</span>
+        {[5, 4, 3].map((n) => (
+          <button
+            key={n}
+            type="button"
+            onClick={() => {
+              setUnratedOnly(false);
+              setMinStars(minStars === n ? null : n);
+            }}
+            className={`border px-2 py-0.5 ${
+              minStars === n ? 'border-accent text-accent' : 'border-rule text-muted hover:text-accent'
+            }`}
+          >
+            {'★'.repeat(n)}
+            {n < 5 ? '+' : ''}
+          </button>
+        ))}
+        <button
+          type="button"
+          onClick={() => {
+            setMinStars(null);
+            setUnratedOnly((v) => !v);
+          }}
+          className={`border px-2 py-0.5 ${
+            unratedOnly ? 'border-accent text-accent' : 'border-rule text-muted hover:text-accent'
+          }`}
+          title="The works she has not characterised yet — the list to work down"
+        >
+          not yet rated
+        </button>
+        <button
+          type="button"
+          onClick={() => setByRating((v) => !v)}
+          className={`border px-2 py-0.5 ${
+            byRating ? 'border-accent text-accent' : 'border-rule text-muted hover:text-accent'
+          }`}
+        >
+          sort by rating
+        </button>
+        {minStars !== null || unratedOnly || byRating ? (
+          <button
+            type="button"
+            onClick={() => { setMinStars(null); setUnratedOnly(false); setByRating(false); }}
+            className="px-2 py-0.5 text-muted hover:text-accent"
+          >
+            clear
+          </button>
+        ) : null}
+        <span className="ml-auto text-muted">
+          {visible.length} of {rows.length}
+        </span>
       </div>
 
       {selected.size > 0 ? (
@@ -167,6 +270,17 @@ export function CatalogueTable({ rows }: { rows: Row[] }) {
               {STANDINGS.map((s) => (
                 <option key={s} value={s}>{STANDING_LABEL[s]}</option>
               ))}
+            </select>
+          </label>
+
+          <label className="flex items-center gap-2">
+            Rating
+            <select value={bulkRating} onChange={(e) => setBulkRating(e.target.value)} className="w-40">
+              <option value={NO_CHANGE}>— no change —</option>
+              {[5, 4, 3, 2, 1].map((n) => (
+                <option key={n} value={String(n)}>{'★'.repeat(n)}</option>
+              ))}
+              <option value={CLEAR_RATING}>clear the rating</option>
             </select>
           </label>
 
@@ -194,7 +308,7 @@ export function CatalogueTable({ rows }: { rows: Row[] }) {
       ) : null}
 
       <ul className="divide-y divide-rule border-y border-rule">
-        {rows.map((row) => (
+        {visible.map((row) => (
           <li key={row.id} className={`py-3 ${selected.has(row.id) ? 'bg-accent/5' : ''}`}>
             <div className="flex items-baseline gap-3">
               <input
@@ -236,6 +350,13 @@ export function CatalogueTable({ rows }: { rows: Row[] }) {
                   </Link>
 
                   <span className="flex shrink-0 items-baseline gap-3 font-mono text-xs text-muted">
+                    <Stars
+                      id={row.id}
+                      value={priorityOf(row)}
+                      onChanged={(v) =>
+                        setRated((prev) => new Map(prev).set(row.id, v))
+                      }
+                    />
                     {row.kind !== 'monograph' ? <span>{row.kind.replace('_', ' ')}</span> : null}
                     <span
                       title={PURPOSE_LABEL[row.purpose]}

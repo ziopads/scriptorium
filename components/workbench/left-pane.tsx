@@ -45,16 +45,32 @@ export function LeftPane({
   const [q, setQ] = useState('');
   const [list, setList] = useState<string | null>(null);
   const [fileOnly, setFileOnly] = useState(false);
+  const [starred, setStarred] = useState(false);
   const [active, setActive] = useState<number>(-1);
   const listRef = useRef<HTMLUListElement>(null);
 
   const ws = attached(params);
+
+  // The selected work is attached to the note implicitly, in the right pane:
+  //
+  //   const ids = ws.length > 0 ? ws : params.w ? [params.w] : [];
+  //
+  // So building the + link from the raw ws dropped it. Pressing + on a second
+  // book wrote ws=<that book>, ws stopped being empty, the implicit fallback
+  // stopped applying, and the work she was reading vanished from the note she
+  // was writing about it. Attaching starts from the effective list instead.
+  //
+  // Order matters: NoteForm treats the first attachment as the one carrying
+  // the quotation anchor and labels it "quote in …", so the selected work has
+  // to stay at the head.
+  const effective = ws.length > 0 ? ws : params.w ? [params.w] : [];
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return rows.filter((r) => {
       if (list && r.list_id !== list) return false;
       if (fileOnly && !r.has_file) return false;
+      if (starred && (r.priority ?? 0) < 4) return false;
       if (!needle) return true;
       return (
         r.title.toLowerCase().includes(needle) ||
@@ -63,9 +79,9 @@ export function LeftPane({
         r.id.includes(needle)
       );
     });
-  }, [rows, q, list, fileOnly]);
+  }, [rows, q, list, fileOnly, starred]);
 
-  useEffect(() => { setActive(-1); }, [q, list, fileOnly, pane]);
+  useEffect(() => { setActive(-1); }, [q, list, fileOnly, starred, pane]);
 
   // Keep the highlighted row in view.
   useEffect(() => {
@@ -134,6 +150,14 @@ export function LeftPane({
               >
                 has file
               </button>
+              <button
+                type="button"
+                onClick={() => setStarred((v) => !v)}
+                className={`border px-2 py-0.5 ${starred ? 'border-accent text-accent' : 'border-rule text-muted hover:text-accent'}`}
+                title="Rated four stars or more — the works she is leaning on"
+              >
+                ★★★★+
+              </button>
             </div>
             <p className="text-[11px] text-muted">
               {filtered.length} shown · {examinableCount} examinable
@@ -143,7 +167,7 @@ export function LeftPane({
           <ul ref={listRef} className="min-h-0 flex-1 divide-y divide-rule overflow-y-auto" tabIndex={0}>
             {filtered.map((r, i) => {
               const selected = params.w === r.id && !params.n && !params.a;
-              const isAttached = ws.includes(r.id);
+              const isAttached = effective.includes(r.id);
               return (
                 <li
                   key={r.id}
@@ -156,6 +180,11 @@ export function LeftPane({
                     className={`min-w-0 flex-1 ${selected ? 'text-accent' : 'hover:text-accent'}`}
                   >
                     <span className="block truncate">
+                      {r.priority ? (
+                        <span className="text-accent" title={`${r.priority} of 5`}>
+                          {'★'.repeat(r.priority)}{' '}
+                        </span>
+                      ) : null}
                       {r.author ?? '—'}
                       {r.year !== null ? <span className="text-muted"> {r.year}</span> : null}
                     </span>
@@ -167,7 +196,14 @@ export function LeftPane({
                     </span>
                   </Link>
                   <Link
-                    href={href(params, { ws: withAttached(params, isAttached ? ws.filter((x) => x !== r.id) : [...ws, r.id]) })}
+                    href={href(params, {
+                      ws: withAttached(
+                        params,
+                        isAttached
+                          ? effective.filter((x) => x !== r.id)
+                          : [...effective, r.id],
+                      ),
+                    })}
                     className={`mt-0.5 shrink-0 px-1 text-base leading-none ${
                       isAttached ? 'text-accent' : 'text-muted opacity-0 hover:text-accent group-hover:opacity-100'
                     }`}

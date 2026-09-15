@@ -17,6 +17,7 @@ import {
   characterizeWorks,
   getWork,
   removeFromList,
+  setPriority,
   setStandingNote,
   setStatus,
   updateImprint,
@@ -232,7 +233,7 @@ export async function leaveList(form: FormData): Promise<void> {
 // eventually rewrite the catalogue on one stray click.
 export async function characterizeSelection(
   ids: string[],
-  fields: { purpose?: Purpose; standing?: Standing },
+  fields: { purpose?: Purpose; standing?: Standing; priority?: number | null },
 ): Promise<{ updated: number }> {
   await requireAllowedUser();
 
@@ -243,6 +244,23 @@ export async function characterizeSelection(
   for (const id of ids) revalidatePath(`/works/${id}`);
 
   return { updated };
+}
+
+// One work rated from its row. Called from the catalogue's client table, like
+// characterizeSelection, because rating a list is a run of single clicks and a
+// form submit per star would be intolerable.
+export async function rateWork(id: string, priority: number | null): Promise<void> {
+  await requireAllowedUser();
+
+  if (priority !== null && (priority < 1 || priority > 5)) {
+    throw new Error('A rating is 1 to 5, or null to clear it.');
+  }
+
+  await setPriority(id, priority);
+
+  revalidatePath('/works');
+  revalidatePath('/');
+  revalidatePath(`/works/${id}`);
 }
 
 // A stub: id, title, and whatever else she has, marked as added by her and

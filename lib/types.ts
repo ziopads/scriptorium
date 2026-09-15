@@ -86,6 +86,13 @@ export interface Work {
   purpose: Purpose;
   standing: Standing;
   standing_note: string | null;
+
+  // How much it matters to her preparation, 1–5, null until she says. Distinct
+  // from purpose (what it is for) and standing (how it got on the list);
+  // null and 1 are different states, and the unrated list is the one she works
+  // down (migration 007).
+  priority: number | null;
+
   source_format: SourceFormat;
   source_path: string | null;
   r2_pages_key: string | null;

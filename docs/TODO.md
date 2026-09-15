@@ -222,6 +222,28 @@ total. Do it early, while it is cheap to think about.
 
 ## 8. Stars on catalogue items
 
+**Built 14 Sept.** Migration `db/007-priority.sql` adds `works.priority`
+(smallint, 1–5, nullable, checked). Nullable rather than defaulted for the same
+reason `notes.attribution` is: not-yet-rated and rated-low are different
+states, and the unrated list is the one she works down — a default would empty
+it on the day the migration ran.
+
+`components/stars.tsx` is the per-row control, optimistic because rating a
+hundred works is a run of single clicks and a round trip each would make the
+list feel broken; clicking the star you are on clears the rating. The bulk bar
+gained a Rating select with its own `CLEAR_RATING` sentinel, distinct from
+`NO_CHANGE`, because clearing is an instruction and no-change is not — which is
+also why `characterizeWorks` tests `'priority' in fields` rather than relying
+on coalesce. Filters above the list: ★★★★★, ★★★★+, ★★★+, not-yet-rated, and
+sort-by-rating. Selection and shift-click ranges now follow the visible rows
+rather than the full list, so a range can never reach a row she cannot see.
+
+The workbench left pane shows the stars on each row and has a ★★★★+ filter
+beside "has file".
+
+**Still open:** nothing sorts the workbench pane by rating, and there is no
+way to see at a glance how many of the 125 examinable works remain unrated.
+
 Yes, and the batch-select from item 1 is most of the work.
 
 `works` already carries `purpose` and `standing`, which characterise a work's
@@ -271,7 +293,20 @@ Cheap, and it decides the rest.
 
 ---
 
-## 10. The `+` button drops the selected work — confirmed bug
+## 10. The `+` button drops the selected work — fixed 14 Sept
+
+**Fixed.** `left-pane.tsx` now builds the attachment list from the effective
+set — `ws` if anything is explicitly attached, otherwise the selected work — so
+pressing `+` on a second book keeps the first, and the selected work stays at
+the head where `NoteForm` expects the quotation anchor to be. A side effect:
+the selected work now shows ✓ rather than +, which is honest.
+
+**Edge left alone:** pressing ✓ on the selected work writes an empty `ws`, the
+implicit fallback re-applies, and it comes straight back. Detaching it would
+need `ws` to distinguish absent from explicitly empty. Pre-existing — the right
+pane's chip already had no × in that case.
+
+The original diagnosis, kept because the shape recurs:
 
 Reproduced in the source. In `components/workbench/left-pane.tsx` the `+` link
 builds the new attachment list from `attached(params)`, which reads `ws` from
@@ -475,6 +510,70 @@ without a code. Both should work today — worth confirming against
 bulk-proposal loader is medium and only pays for itself on the large volumes.
 **Value:** high for the folktale collections, which are objects of study rather
 than reference works, and where the tale is the unit she argues about.
+
+### 13a. Creating a child work from the workbench
+
+Decided 14 Sept, in preference to bulk import for Rael. Rael has no outline, no
+usable running heads, and a bad OCR text layer, so there is nothing to import
+from; and the collection holds hundreds of tales against perhaps a dozen she
+will write about. Creating hundreds of catalogue rows to serve twelve would
+swamp a 160-work catalogue for no gain.
+
+So: on demand. When she cites "Doña Sebastiana," the tale becomes a child work
+at that moment, with its page range, and nothing else does.
+
+`addStubWork` currently takes title, author, year and kind. It does not take
+`container_id`, `first_page` or `last_page`, so today the path is create the
+stub, open its record, set the container and range by hand — three screens.
+
+What to build: those three fields on the add-a-work form of item 2, defaulted
+from what she is previewing. Reading Rael at page 47, she presses add-a-work
+and the container and the starting page are already filled; she types the tale's
+title and it is attached to the note.
+
+Bulk import stays worth building for exactly one book in this corpus:
+Flores-Masera, whose 125-entry outline is already machine-readable and
+hierarchical. Anaya is borderline — its tales appeared in the withdrawn
+detector, so lowering `CHAPTER_HEAD_MIN` for short sections would probably
+recover its thirty or so. Neither is loaded yet.
+
+**Cost:** small, and it depends on item 2 existing. **Value:** it is the only
+way a tale ever becomes citable, so everything in item 13 waits behind it.
+
+---
+
+## Where the pipeline stands, 14 September, end of day
+
+**Stopped after extraction.** All five books re-extracted with the dict-mode
+reader, the per-book glyph table, and the repeated-line removal. `pages`,
+`chunks` and the embeddings in Neon are still the old text-mode load and do not
+yet reflect any of it. Resuming in the morning: `load_pages.py`, `chunk.py`,
+`load_chunks.py`, `embed.py`.
+
+Verified before stopping: Adorno's glyph report is down to legitimate
+characters (`/` in mariner/conquistador, `.` in U.S, `[` in editorial brackets
+inside quoted colonial Spanish); Gonzales carries no `ebookcentral` string on
+any page and lost about 260 characters per page, which is the ProQuest stamp;
+Anzaldúa extracts as 228 pages rather than the 520 of the concatenated pair.
+
+Already done: the old Anzaldúa `pages` and `chunks` rows were deleted, so the
+Meléndez half cannot survive as orphans. Notes were never at risk —
+`note_anchors` stores a work id and a printed folio, not a row reference.
+
+Outstanding when the reload happens:
+
+- **Anzaldúa's `page_offset` is wrong.** It was derived over the concatenated
+  pair. The Preview header compares `pages.folio` against
+  `page_index + page_offset` and will say so; correct it there and reload that
+  book's pages.
+- Rael and Herrera were extracted but their chapter maps report none, which is
+  correct for both.
+- `load_pages.py` has not been read. The extract JSON has gained `chapters`,
+  `chapters_source`, `chapter_candidates` and `boilerplate_removed`; the loader
+  is assumed to ignore keys it does not know. Worth a glance first.
+- Two mapping conflicts remain unresolved and are skipped by extraction:
+  `rivera-garza-muertos-indociles-2013` and `gomez-barris-extractive-zone-2017`,
+  each matching two files. Neither is among the five.
 
 ---
 

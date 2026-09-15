@@ -23,7 +23,7 @@ const COLS = `
   id, title, subtitle, author, translator, editor, publisher, place, year,
   edition, language, kind, container_id, first_page, last_page,
   isbn, volume, series, original_year, url, doi, accessed,
-  status, purpose, standing, standing_note, source_format, source_path,
+  status, purpose, standing, standing_note, priority, source_format, source_path,
   r2_pages_key, page_offset, vivarium_item_id, notes_internal,
   created_at, updated_at
 `;
@@ -34,7 +34,7 @@ export async function listWorks(): Promise<Work[]> {
     select id, title, subtitle, author, translator, editor, publisher, place, year,
            edition, language, kind, container_id, first_page, last_page,
            isbn, volume, series, original_year, url, doi, accessed,
-           status, purpose, standing, standing_note, source_format, source_path,
+           status, purpose, standing, standing_note, priority, source_format, source_path,
            r2_pages_key, page_offset, vivarium_item_id, notes_internal,
            created_at, updated_at
     from works
@@ -49,7 +49,7 @@ export async function getWork(id: string): Promise<Work | null> {
     select id, title, subtitle, author, translator, editor, publisher, place, year,
            edition, language, kind, container_id, first_page, last_page,
            isbn, volume, series, original_year, url, doi, accessed,
-           status, purpose, standing, standing_note, source_format, source_path,
+           status, purpose, standing, standing_note, priority, source_format, source_path,
            r2_pages_key, page_offset, vivarium_item_id, notes_internal,
            created_at, updated_at
     from works
@@ -77,7 +77,7 @@ export async function listContents(containerId: string): Promise<Work[]> {
     select id, title, subtitle, author, translator, editor, publisher, place, year,
            edition, language, kind, container_id, first_page, last_page,
            isbn, volume, series, original_year, url, doi, accessed,
-           status, purpose, standing, standing_note, source_format, source_path,
+           status, purpose, standing, standing_note, priority, source_format, source_path,
            r2_pages_key, page_offset, vivarium_item_id, notes_internal,
            created_at, updated_at
     from works
@@ -149,7 +149,7 @@ export async function listWorksInList(listId: string): Promise<Work[]> {
            w.publisher, w.place, w.year, w.edition, w.language, w.kind,
            w.container_id, w.first_page, w.last_page,
            w.isbn, w.volume, w.series, w.original_year, w.url, w.doi, w.accessed,
-           w.status, w.purpose, w.standing, w.standing_note, w.source_format,
+           w.status, w.purpose, w.standing, w.standing_note, w.priority, w.source_format,
            w.source_path, w.r2_pages_key, w.page_offset, w.vivarium_item_id,
            w.notes_internal, w.created_at, w.updated_at
     from works w
@@ -179,7 +179,7 @@ export async function upsertWork(input: WorkInput): Promise<Work> {
       id, title, subtitle, author, translator, editor, publisher, place, year,
       edition, language, kind, container_id, first_page, last_page,
       isbn, volume, series, original_year, url, doi, accessed,
-      status, purpose, standing, standing_note, source_format, source_path,
+      status, purpose, standing, standing_note, priority, source_format, source_path,
       r2_pages_key, page_offset, vivarium_item_id, notes_internal, updated_at
     ) values (
       ${w.id}, ${w.title}, ${w.subtitle ?? null}, ${w.author ?? null},
@@ -192,6 +192,7 @@ export async function upsertWork(input: WorkInput): Promise<Work> {
       ${w.accessed ?? null},
       ${w.status ?? 'unread'}, ${w.purpose ?? 'unassigned'},
       ${w.standing ?? 'assigned'}, ${w.standing_note ?? null},
+      ${w.priority ?? null},
       ${w.source_format ?? 'none'}, ${w.source_path ?? null},
       ${w.r2_pages_key ?? null}, ${w.page_offset ?? 0},
       ${w.vivarium_item_id ?? null}, ${w.notes_internal ?? null}, now()
@@ -209,6 +210,7 @@ export async function upsertWork(input: WorkInput): Promise<Work> {
       doi = excluded.doi, accessed = excluded.accessed,
       status = excluded.status, purpose = excluded.purpose,
       standing = excluded.standing, standing_note = excluded.standing_note,
+      priority = excluded.priority,
       source_format = excluded.source_format, source_path = excluded.source_path,
       r2_pages_key = excluded.r2_pages_key, page_offset = excluded.page_offset,
       vivarium_item_id = excluded.vivarium_item_id,
@@ -247,18 +249,32 @@ export async function updateImprint(
   `;
 }
 
+// One work rated, from the star control on a catalogue row. Zero means clear
+// it: she has decided it is unrated again, which is not the same as rating it
+// low, and the column allows null for exactly that reason.
+export async function setPriority(id: string, priority: number | null): Promise<void> {
+  const sql = db();
+  await sql`update works set priority = ${priority}, updated_at = now() where id = ${id}`;
+}
+
 export async function characterizeWorks(
   ids: string[],
-  fields: { purpose?: Purpose; standing?: Standing },
+  fields: { purpose?: Purpose; standing?: Standing; priority?: number | null },
 ): Promise<number> {
   if (ids.length === 0) return 0;
-  if (!fields.purpose && !fields.standing) return 0;
+  // priority is the one field whose null is a real value, so it needs its own
+  // presence test: 'priority' in fields distinguishes "clear it" from "leave
+  // it alone", which coalesce alone cannot.
+  const clearing = 'priority' in fields && fields.priority === null;
+  if (!fields.purpose && !fields.standing && !fields.priority && !clearing) return 0;
 
   const sql = db();
   const rows = (await sql`
     update works set
       purpose  = coalesce(${fields.purpose ?? null}, purpose),
       standing = coalesce(${fields.standing ?? null}, standing),
+      priority = case when ${clearing} then null
+                      else coalesce(${fields.priority ?? null}, priority) end,
       updated_at = now()
     where id = any(${ids})
     returning id
@@ -320,7 +336,7 @@ export async function worksWithoutSource(): Promise<Work[]> {
     select id, title, subtitle, author, translator, editor, publisher, place, year,
            edition, language, kind, container_id, first_page, last_page,
            isbn, volume, series, original_year, url, doi, accessed,
-           status, purpose, standing, standing_note, source_format, source_path,
+           status, purpose, standing, standing_note, priority, source_format, source_path,
            r2_pages_key, page_offset, vivarium_item_id, notes_internal,
            created_at, updated_at
     from works
@@ -352,12 +368,14 @@ export interface WorkbenchRow {
   note_count: number;
   examinable: boolean;
   standing: string;
+  priority: number | null;
 }
 
 export async function listWorkbenchRows(): Promise<WorkbenchRow[]> {
   const sql = db();
   const rows = await sql`
     select w.id, w.title, w.author, w.year, w.kind, w.container_id, w.standing,
+           w.priority,
            m.list_id,
            m.code,
            (w.source_format <> 'none') as has_file,
