@@ -3,6 +3,8 @@ import Link from 'next/link';
 import { AttributionFields } from '@/components/attribution-fields';
 import { NoteCard } from '@/components/note-card';
 import { NoteForm, type AttachedWork } from '@/components/note-form';
+import { ResettingForm } from '@/components/resetting-form';
+import { SubmitButton } from '@/components/submit-button';
 import { QuoteCapture } from '@/components/workbench/quote-capture';
 import { addFicha } from '@/lib/actions';
 import { getNote } from '@/lib/notes';
@@ -78,9 +80,9 @@ export async function RightPane({ params, rows }: { params: WorkbenchParams; row
           <span>New ficha for this axis</span>
           <Link href={href(params, { a: null })} className="ml-auto hover:text-accent">New note instead</Link>
         </p>
-        <form action={addFicha} className="space-y-4">
+        <ResettingForm action={addFicha} className="space-y-4">
           <input type="hidden" name="axis_id" value={params.a} />
-          <input type="hidden" name="return_to" value={href(params, { ws: null })} />
+          <input type="hidden" name="return_to" value={href(params, { ws: null, quote: null })} />
           <div className="space-y-1">
             <span className="text-sm">Works</span>
             <input type="hidden" name="work_ids" value={ids.join(',')} />
@@ -108,11 +110,9 @@ export async function RightPane({ params, rows }: { params: WorkbenchParams; row
               <span className="text-sm">Tags</span>
               <input type="text" name="tags" placeholder="comma, separated" />
             </label>
-            <button type="submit" className="border border-accent px-4 py-1.5 text-sm text-accent hover:bg-accent hover:text-background">
-              Add ficha
-            </button>
+            <SubmitButton>Add ficha</SubmitButton>
           </div>
-        </form>
+        </ResettingForm>
         <p className="text-xs text-muted">
           Synthesis and exam move are edited on the{' '}
           <Link href={`/axes/${params.a}`} className="hover:text-accent">axis page</Link>.

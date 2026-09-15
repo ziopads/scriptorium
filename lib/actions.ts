@@ -279,6 +279,20 @@ export async function addStubWork(form: FormData): Promise<void> {
   redirect(`/works/${id}`);
 }
 
+// Show her the note she just wrote. Without this the workbench redirects to
+// the URL it is already on, the pane redraws as an empty form, and nothing
+// says the save happened — which is how three identical notes arrived 456 and
+// 247 milliseconds apart on 14 September. With n set, the right pane switches
+// to the note under review: the anchor, the attribution and the quotation are
+// all in front of her, and there is nothing left to press twice.
+function showingNote(path: string, id: number): string {
+  const [base, query = ''] = path.split('?');
+  const params = new URLSearchParams(query);
+  params.set('n', String(id));
+  const rest = params.toString();
+  return rest ? `${base}?${rest}` : base;
+}
+
 // ---------------------------------------------------------------------------
 // Notes
 // ---------------------------------------------------------------------------
@@ -311,7 +325,7 @@ export async function addNote(form: FormData): Promise<void> {
   const passage = printedPage !== null || quote !== null;
   const [first, ...rest] = ids;
 
-  await createNote({
+  const note = await createNote({
     kind,
     body,
     attribution: attr,
@@ -327,7 +341,7 @@ export async function addNote(form: FormData): Promise<void> {
   revalidatePath('/notes');
   revalidatePath('/');
   const back = text(form, 'return_to');
-  if (back && back.startsWith('/')) redirect(back);
+  if (back && back.startsWith('/')) redirect(showingNote(back, note.id));
   if (ids.length === 0) redirect('/notes');
 }
 
@@ -448,7 +462,7 @@ export async function addFicha(form: FormData): Promise<void> {
   if (ids.length === 0) throw new Error('A ficha names at least one work.');
 
   const attr = attribution(form);
-  await createNote({
+  const ficha = await createNote({
     kind: 'ficha',
     parent_id: axisId,
     body,
@@ -462,7 +476,7 @@ export async function addFicha(form: FormData): Promise<void> {
   revalidatePath('/works', 'layout');
   revalidatePath('/');
   const back = text(form, 'return_to');
-  if (back && back.startsWith('/')) redirect(back);
+  if (back && back.startsWith('/')) redirect(showingNote(back, ficha.id));
 }
 
 // Synthesis or exam move added after the axis was created without one.

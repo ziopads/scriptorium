@@ -2,6 +2,8 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 
 import { AttributionFields } from '@/components/attribution-fields';
+import { ResettingForm } from '@/components/resetting-form';
+import { SubmitButton } from '@/components/submit-button';
 import { addNote } from '@/lib/actions';
 
 // The note form, in three settings.
@@ -20,6 +22,11 @@ import { addNote } from '@/lib/actions';
 // work: changing defaultValue on a mounted uncontrolled input does nothing, so
 // the field has to be remounted. Keyed narrowly, on the quotation and the page
 // alone, so a note body already typed survives the capture.
+//
+// ResettingForm and SubmitButton are here for the same reason as each other:
+// after a save the form used to keep every value and the URL did not change,
+// which looked exactly like a failure. The button now refuses a second press
+// while the first is in flight, and the form empties when the action returns.
 
 export interface AttachedWork {
   id: string;
@@ -49,7 +56,7 @@ export function NoteForm({
   const attached = works ?? [];
 
   return (
-    <form action={addNote} className="space-y-4">
+    <ResettingForm action={addNote} className="space-y-4">
       {returnTo ? <input type="hidden" name="return_to" value={returnTo} /> : null}
 
       {workId ? (
@@ -156,12 +163,7 @@ export function NoteForm({
           <span className="text-sm">Tags</span>
           <input type="text" name="tags" placeholder="comma, separated · lugar:abiquiu" />
         </label>
-        <button
-          type="submit"
-          className="border border-accent px-4 py-1.5 text-sm text-accent hover:bg-accent hover:text-background"
-        >
-          Add note
-        </button>
+        <SubmitButton>Add note</SubmitButton>
       </div>
 
       {compact ? null : (
@@ -170,6 +172,6 @@ export function NoteForm({
           another work, save the note and then use Edit.
         </p>
       )}
-    </form>
+    </ResettingForm>
   );
 }
