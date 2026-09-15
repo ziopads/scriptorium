@@ -560,6 +560,76 @@ export async function addLink(from: number, to: number, kind: LinkKind): Promise
   `;
 }
 
+// An axis gains a ficha from a note already written. The note stops being a
+// top-level note and becomes a part of the axis, which is what a ficha is
+// (migration 005): kind, parent_id and ordinal all move together, and the
+// works it touches become note_works with role 'ficha'.
+//
+// Its anchors stay. A ficha with a passage behind it is worth more than one
+// without, and the unsupported_claims view reads anchors.
+//
+// Note that a promoted note leaves listAllNotes, which excludes parts. It has
+// not vanished; it is on its axis.
+export async function promoteToFicha(noteId: number, axisId: number): Promise<void> {
+  const sql = db();
+
+  const works = (await sql`
+    select work_id from note_anchors where note_id = ${noteId}
+    union
+    select work_id from note_works   where note_id = ${noteId}
+  `) as { work_id: string }[];
+
+  if (works.length === 0) {
+    throw new Error(
+      'A ficha says what a work contributes, so this note has to touch a work first.',
+    );
+  }
+
+  const ordinal = await nextSiblingOrdinal(axisId, 'ficha');
+
+  // Guarded on kind so a second press cannot move a ficha between axes by
+  // accident; the parent-must-be-an-axis trigger does the rest.
+  const moved = (await sql`
+    update notes set kind = 'ficha', parent_id = ${axisId}, ordinal = ${ordinal},
+                     updated_at = now()
+    where id = ${noteId} and kind = 'note' and rejected_at is null
+    returning id
+  `) as { id: number }[];
+
+  if (moved.length === 0) {
+    throw new Error('Only a plain note can become a ficha.');
+  }
+
+  for (const [index, work] of works.entries()) {
+    await sql`
+      insert into note_works (note_id, work_id, role, ordinal)
+      values (${noteId}, ${work.work_id}, 'ficha', ${index + 1})
+      on conflict (note_id, work_id) do update set role = 'ficha'
+    `;
+  }
+}
+
+// Back out again. The works stay attached, as plain relations rather than
+// fichas, because she said the note was about them and that is still true.
+export async function demoteFicha(noteId: number): Promise<void> {
+  const sql = db();
+  await sql`
+    update notes set kind = 'note', parent_id = null, ordinal = null, updated_at = now()
+    where id = ${noteId} and kind = 'ficha'
+  `;
+  await sql`
+    update note_works set role = 'about' where note_id = ${noteId} and role = 'ficha'
+  `;
+}
+
+export async function removeLink(from: number, to: number, kind: LinkKind): Promise<void> {
+  const sql = db();
+  await sql`
+    delete from note_links
+    where from_note = ${from} and to_note = ${to} and kind = ${kind}
+  `;
+}
+
 export async function linksFor(noteId: number): Promise<
   (NoteLink & { other_id: number; other_kind: string; other_title: string | null; other_body: string; direction: 'out' | 'in' })[]
 > {

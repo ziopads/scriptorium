@@ -7,8 +7,8 @@ import { ResettingForm } from '@/components/resetting-form';
 import { SubmitButton } from '@/components/submit-button';
 import { AddWorkForm } from '@/components/workbench/add-work-form';
 import { QuoteCapture } from '@/components/workbench/quote-capture';
-import { addAxis, addFicha } from '@/lib/actions';
-import { getNote } from '@/lib/notes';
+import { addAxis, addFicha, bridgeToAxis, makeFicha, unbridge, unmakeFicha } from '@/lib/actions';
+import { getNote, linksFor } from '@/lib/notes';
 import type { WorkbenchRow } from '@/lib/works';
 import { attached, href, withAttached, type WorkbenchParams } from '@/lib/workbench-url';
 
@@ -29,7 +29,15 @@ function label(r: WorkbenchRow | undefined, id: string): string {
   return `${surname}, ${short}`;
 }
 
-export async function RightPane({ params, rows }: { params: WorkbenchParams; rows: WorkbenchRow[] }) {
+export async function RightPane({
+  params,
+  rows,
+  axes,
+}: {
+  params: WorkbenchParams;
+  rows: WorkbenchRow[];
+  axes: { id: number; title: string | null }[];
+}) {
   const byId = new Map(rows.map((r) => [r.id, r]));
   const ws = attached(params);
   const ids = ws.length > 0 ? ws : params.w ? [params.w] : [];
@@ -52,6 +60,13 @@ export async function RightPane({ params, rows }: { params: WorkbenchParams; row
     const id = Number.parseInt(params.n, 10);
     const note = Number.isNaN(id) ? null : await getNote(id);
     if (!note) return <p className="text-sm text-muted">No such note.</p>;
+    const links = await linksFor(note.id);
+    const bridged = new Set(
+      links.filter((l) => l.kind === 'bridge' && l.direction === 'out').map((l) => l.other_id),
+    );
+    const touchesWork = note.anchors.length > 0 || note.works.length > 0;
+    const elsewhere = axes.filter((a) => a.id !== note.parent_id && !bridged.has(a.id));
+
     return (
       <div className="space-y-3">
         <p className="flex items-baseline gap-3 text-xs text-muted">
@@ -73,6 +88,97 @@ export async function RightPane({ params, rows }: { params: WorkbenchParams; row
                 </span>
               ))}
           </p>
+        ) : null}
+
+        {/* An axis and a note meet two ways. A ficha is membership: the note
+            becomes a part of the axis. A bridge is a cross-reference and
+            leaves the note where it is. */}
+        {note.kind === 'note' || note.kind === 'ficha' ? (
+          <div className="space-y-2 border-t border-rule pt-3 text-xs">
+            {note.kind === 'ficha' ? (
+              <form action={unmakeFicha} className="flex flex-wrap items-baseline gap-2">
+                <input type="hidden" name="note_id" value={note.id} />
+                <input type="hidden" name="return_to" value={href(params, {})} />
+                <span className="text-muted">
+                  A ficha of{' '}
+                  {note.parent_id !== null ? (
+                    <Link
+                      href={href(params, { a: String(note.parent_id), n: null })}
+                      className="hover:text-accent"
+                    >
+                      {axes.find((a) => a.id === note.parent_id)?.title ?? 'an axis'}
+                    </Link>
+                  ) : (
+                    'an axis'
+                  )}
+                  .
+                </span>
+                <button type="submit" className="text-muted hover:text-accent">
+                  Make it a plain note again
+                </button>
+              </form>
+            ) : axes.length === 0 ? null : touchesWork ? (
+              <form action={makeFicha} className="flex flex-wrap items-baseline gap-2">
+                <input type="hidden" name="note_id" value={note.id} />
+                <input type="hidden" name="return_to" value={href(params, {})} />
+                <label className="flex items-baseline gap-2">
+                  <span className="text-muted">Make this a ficha of</span>
+                  <select name="axis_id" className="w-44" required defaultValue="">
+                    <option value="" disabled>choose an axis</option>
+                    {axes.map((a) => (
+                      <option key={a.id} value={a.id}>{a.title}</option>
+                    ))}
+                  </select>
+                </label>
+                <button type="submit" className="text-accent hover:underline">Move it</button>
+              </form>
+            ) : (
+              <p className="text-muted">
+                A ficha says what a work contributes, so attach a work before making
+                this one.
+              </p>
+            )}
+
+            {elsewhere.length > 0 ? (
+              <form action={bridgeToAxis} className="flex flex-wrap items-baseline gap-2">
+                <input type="hidden" name="note_id" value={note.id} />
+                <input type="hidden" name="return_to" value={href(params, {})} />
+                <label className="flex items-baseline gap-2">
+                  <span className="text-muted">Also bears on</span>
+                  <select name="axis_id" className="w-44" required defaultValue="">
+                    <option value="" disabled>choose an axis</option>
+                    {elsewhere.map((a) => (
+                      <option key={a.id} value={a.id}>{a.title}</option>
+                    ))}
+                  </select>
+                </label>
+                <button type="submit" className="text-accent hover:underline">Link</button>
+              </form>
+            ) : null}
+
+            {bridged.size > 0 ? (
+              <ul className="space-y-0.5">
+                {axes
+                  .filter((a) => bridged.has(a.id))
+                  .map((a) => (
+                    <li key={a.id} className="flex items-baseline gap-2">
+                      <Link
+                        href={href(params, { a: String(a.id), n: null })}
+                        className="text-muted hover:text-accent"
+                      >
+                        bears on {a.title}
+                      </Link>
+                      <form action={unbridge}>
+                        <input type="hidden" name="note_id" value={note.id} />
+                        <input type="hidden" name="axis_id" value={a.id} />
+                        <input type="hidden" name="return_to" value={href(params, {})} />
+                        <button type="submit" className="text-muted hover:text-accent">×</button>
+                      </form>
+                    </li>
+                  ))}
+              </ul>
+            ) : null}
+          </div>
         ) : null}
       </div>
     );

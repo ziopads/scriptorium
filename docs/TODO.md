@@ -111,6 +111,32 @@ ficha is one continuous action.
 
 ## 4. Linking a note to an axis
 
+**Built 14 Sept.** Both relations, in the right pane when a note is under
+review.
+
+**Ficha** is membership. `promoteToFicha` moves the row: `kind`, `parent_id`
+and `ordinal` together, and the works the note touches — from anchors or from
+`note_works`, whichever it has — become `note_works` with role `ficha`. Anchors
+stay, because a ficha with a passage behind it is worth more than one without
+and `unsupported_claims` reads anchors. Guarded on `kind = 'note'`, so a second
+press cannot move a ficha between axes; the parent-must-be-an-axis trigger does
+the rest. Refused when the note touches no work, since a ficha says what a work
+contributes. `demoteFicha` reverses it and sets the roles back to `about`.
+
+**Bridge** is a cross-reference, a `note_links` row of kind `bridge`. A note can
+bridge to as many axes as it likes, and bridging does not put its works into
+the axis — `axis_works` derives membership from the children only, which is the
+right behaviour and worth not forgetting.
+
+One consequence to know: a promoted note leaves `listAllNotes`, which excludes
+parts, so it drops out of `/notes` and the left pane's recent list. It has not
+vanished; it is on its axis.
+
+**Still open:** the controls live only in the workbench's review pane. A note
+on `/notes` or on a work page has no way to reach them.
+
+The original entry:
+
 You are not missing anything; the model supports two different versions of this
 and the interface exposes neither.
 

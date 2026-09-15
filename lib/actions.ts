@@ -29,9 +29,12 @@ import {
   approveNote,
   createNote,
   deleteNote,
+  demoteFicha,
   nextAnchorOrdinal,
+  promoteToFicha,
   rejectNote,
   removeAnchor,
+  removeLink,
   removeTags,
   removeWork,
   restoreNote,
@@ -493,6 +496,96 @@ export async function answerQuestion(form: FormData): Promise<void> {
   }
   await addLink(answerId, questionId, 'answers');
   revalidatePath('/notes');
+}
+
+// ---------------------------------------------------------------------------
+// A note and an axis
+// ---------------------------------------------------------------------------
+// Two different relations, and the difference matters.
+//
+// A ficha is membership: this note says what this work contributes to that
+// axis's argument, and it becomes a part of the axis. A note can be a ficha of
+// one axis only, because a ficha is written per (axis, work) — Anzaldúa's
+// ficha in Eje 2 is not her ficha in Eje 4.
+//
+// A bridge is a cross-reference: this note bears on that axis. A note can
+// bridge to as many axes as it likes, and bridging does not put its works into
+// the axis, because axis_works derives membership from the children only.
+
+export async function makeFicha(form: FormData): Promise<void> {
+  await requireAllowedUser();
+
+  const noteId = number(form, 'note_id');
+  const axisId = number(form, 'axis_id');
+  if (noteId === null || axisId === null) {
+    throw new Error('makeFicha needs a note_id and an axis_id.');
+  }
+
+  await promoteToFicha(noteId, axisId);
+
+  revalidatePath('/notes');
+  revalidatePath('/axes', 'layout');
+  revalidatePath('/works', 'layout');
+  revalidatePath('/');
+
+  const back = text(form, 'return_to');
+  if (back && back.startsWith('/')) redirect(back);
+}
+
+export async function unmakeFicha(form: FormData): Promise<void> {
+  await requireAllowedUser();
+
+  const noteId = number(form, 'note_id');
+  if (noteId === null) throw new Error('unmakeFicha called without a note_id.');
+
+  await demoteFicha(noteId);
+
+  revalidatePath('/notes');
+  revalidatePath('/axes', 'layout');
+  revalidatePath('/works', 'layout');
+  revalidatePath('/');
+
+  const back = text(form, 'return_to');
+  if (back && back.startsWith('/')) redirect(back);
+}
+
+export async function bridgeToAxis(form: FormData): Promise<void> {
+  await requireAllowedUser();
+
+  const noteId = number(form, 'note_id');
+  const axisId = number(form, 'axis_id');
+  if (noteId === null || axisId === null) {
+    throw new Error('bridgeToAxis needs a note_id and an axis_id.');
+  }
+  if (noteId === axisId) throw new Error('A note cannot bridge to itself.');
+
+  await addLink(noteId, axisId, 'bridge');
+
+  revalidatePath('/notes');
+  revalidatePath('/axes', 'layout');
+  revalidatePath('/');
+
+  const back = text(form, 'return_to');
+  if (back && back.startsWith('/')) redirect(back);
+}
+
+export async function unbridge(form: FormData): Promise<void> {
+  await requireAllowedUser();
+
+  const noteId = number(form, 'note_id');
+  const axisId = number(form, 'axis_id');
+  if (noteId === null || axisId === null) {
+    throw new Error('unbridge needs a note_id and an axis_id.');
+  }
+
+  await removeLink(noteId, axisId, 'bridge');
+
+  revalidatePath('/notes');
+  revalidatePath('/axes', 'layout');
+  revalidatePath('/');
+
+  const back = text(form, 'return_to');
+  if (back && back.startsWith('/')) redirect(back);
 }
 
 // ---------------------------------------------------------------------------

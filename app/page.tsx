@@ -112,7 +112,11 @@ export default async function WorkbenchPage({
             hide ›
           </Link>
           <div className="pt-5">
-            <RightPane params={params} rows={rows} />
+            <RightPane
+              params={params}
+              rows={rows}
+              axes={axes.map((a) => ({ id: a.id, title: a.title }))}
+            />
           </div>
         </aside>
       ) : (
