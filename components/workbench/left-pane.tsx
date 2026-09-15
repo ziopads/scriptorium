@@ -49,6 +49,43 @@ export function LeftPane({
   const [active, setActive] = useState<number>(-1);
   const listRef = useRef<HTMLUListElement>(null);
 
+  // Where she was in each book, so that leaving a work and coming back does
+  // not lose her place.
+  //
+  // The page lives in the URL as `p`, and href() carries every key forward, so
+  // selecting a different book used to apply the old book's page to the new
+  // one — page 300 of Adorno becoming page 300 of Herrera, which has 140. The
+  // page belongs to the work, not to the session, so the link clears `p` for a
+  // book she has not opened and restores it for one she has.
+  //
+  // Session storage rather than the URL, which would have to carry every
+  // book's page at once, and rather than the database, which would make a
+  // scroll position durable across devices for no gain.
+  const [lastPage, setLastPage] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    try {
+      const saved = window.sessionStorage.getItem('scriptorium:pages');
+      if (saved) setLastPage(JSON.parse(saved));
+    } catch {
+      // Private browsing, or storage disabled. Losing the place is survivable.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!params.w || !params.p) return;
+    setLastPage((prev) => {
+      if (prev[params.w!] === params.p) return prev;
+      const next = { ...prev, [params.w!]: params.p! };
+      try {
+        window.sessionStorage.setItem('scriptorium:pages', JSON.stringify(next));
+      } catch {
+        // as above
+      }
+      return next;
+    });
+  }, [params.w, params.p]);
+
   const ws = attached(params);
 
   // The selected work is attached to the note implicitly, in the right pane:
@@ -96,7 +133,12 @@ export function LeftPane({
     else if (e.key === 'ArrowUp') { e.preventDefault(); setActive((i) => Math.max(i - 1, 0)); }
     else if (e.key === 'Enter' && active >= 0) {
       e.preventDefault();
-      router.push(href(params, { w: filtered[active].id, n: null, view: params.view === 'axes' || params.view === 'notes' ? params.view : null }));
+      router.push(href(params, {
+        w: filtered[active].id,
+        p: lastPage[filtered[active].id] ?? null,
+        n: null,
+        view: params.view === 'axes' || params.view === 'notes' ? params.view : null,
+      }));
     }
   }
 
@@ -176,7 +218,12 @@ export function LeftPane({
                   }`}
                 >
                   <Link
-                    href={href(params, { w: r.id, n: null, a: params.a ?? null })}
+                    href={href(params, {
+                      w: r.id,
+                      p: r.id === params.w ? params.p ?? null : lastPage[r.id] ?? null,
+                      n: null,
+                      a: params.a ?? null,
+                    })}
                     className={`min-w-0 flex-1 ${selected ? 'text-accent' : 'hover:text-accent'}`}
                   >
                     <span className="block truncate">
