@@ -9,9 +9,15 @@ export const dynamic = 'force-dynamic';
 // from the wordmark, so it is the first page anyone lands on who wants to know
 // what they are looking at.
 //
-// The instructions she needs in order to work are on /como, in Spanish; nothing
-// here is required to use the application. The image credit and the typefaces
-// are on /colophon, which is public. Decisions are recorded in the repo under
+// Written for a reader who arrives knowing nothing. An earlier version said
+// "she" from its first sentence with no antecedent anywhere on the page, and
+// quoted a line out of the candidate's own working notes as an example. The
+// subject is introduced here and kept general: the design is not about one
+// person, and the one person it was built for should not be described to
+// strangers.
+//
+// Instructions for use are on /como. The image credit and the typefaces are on
+// /colophon, which is public. Decisions are recorded in the repository under
 // docs/; this page is the argument, kept short.
 
 function H({ children, id }: { children: React.ReactNode; id?: string }) {
@@ -37,68 +43,84 @@ export default async function AboutPage() {
         <div>
           <h1 className="mb-1 text-2xl">Scriptorium</h1>
           <p className="text-muted">
-            A reading instrument: a catalogue of the works on an examination list, the
-            books themselves to read from, and notes that keep hold of the page they
-            came from. Instructions for use are on{' '}
-            <Link href="/como" className="text-accent hover:underline">Cómo</Link>; the
-            initial above and the faces it is set in are on the{' '}
-            <Link href="/colophon" className="text-accent hover:underline">colophon</Link>.
+            A reading instrument for a doctoral candidate preparing comprehensive
+            examinations: a catalogue of the works on the reading lists, the books
+            themselves to read from, and notes that keep hold of the page they came
+            from.
           </p>
         </div>
       </div>
+
+      <H>The reader it is built for</H>
+      <p>
+        Comprehensive examinations set a candidate a hundred or more works across
+        several lists, to be read over a year and then defended in writing and aloud.
+        The examiners may open on any of them. What the candidate needs at the end is
+        not a summary of each book but an argument that moves across them, held
+        together well enough to survive questioning, with every claim traceable to the
+        page it came from.
+      </p>
+      <p>
+        Scriptorium is built for one such reader, and its shape follows from how that
+        reader already worked: reading notes written while reading, and a map of
+        connections written afterwards. It is not a general note-taking application,
+        and the places where it refuses to be general are the places where it is
+        useful.
+      </p>
 
       <H>How it is used</H>
       <p>
         The workbench is three columns. The catalogue is on the left; choosing a work
         opens it in the middle, where its contents, its pages and the notes already
         written about it are tabs. A note is written on the right, and it is written by
-        pointing rather than by typing identifiers: the work she has open is attached
-        already, other works are attached by clicking them, and selecting a passage in
-        the page view fills the quotation and its printed folio into the form.
+        pointing rather than by typing identifiers: the open work is attached already,
+        other works are attached by clicking them, and selecting a passage in the page
+        view fills the quotation and its printed folio into the form.
       </p>
       <p>
         That last part is the whole of it. A quotation arrives with the page it was
-        printed on, taken from the book rather than typed from memory, so a citation
-        written in October can be checked against the edition it claims. Everything
-        else — the axes, the review queues, the search — is built on notes that have
-        that property.
+        printed on, taken from the book rather than from memory, so a citation written
+        in the last week before an examination can be checked against the edition it
+        claims. Everything else — the axes, the review queues, the search across the
+        corpus — is built on notes that have that property.
       </p>
       <p>
-        Notes gather into <em>ejes</em>: arguments over four to six works, each with a
-        thesis, a paragraph on what each work contributes, a synthesis, and what to say
-        when an exam question opens on that ground. A note written while reading can be
-        promoted into an axis later, or linked to one without moving.
+        Notes gather into <em>ejes</em>, axes: arguments over four to six works, each
+        with a thesis, a paragraph on what each work contributes, a synthesis, and what
+        to say when an examination question opens on that ground. A note written while
+        reading can be promoted into part of an axis later, or linked to one without
+        moving.
       </p>
 
       <H>The design, in one line</H>
       <p>
-        Nothing is asserted that cannot be traced to a page, and nothing she wrote is
-        ever confused with something she read. The rest of this page is what follows
-        from those two.
+        Nothing is asserted that cannot be traced to a page, and nothing the reader
+        wrote is ever confused with something the reader read. The rest of this page is
+        what follows from those two.
       </p>
 
-      <H>What the exam asks</H>
+      <H>What the examination asks</H>
       <p>
         An oral examination asks a candidate to report scholarship accurately, to make
-        her own arguments across it, and to keep the two apart under questioning. The
-        third is the one that fails silently. A note that says Adorno&rsquo;s ghosts
-        are Derrida&rsquo;s hauntology is a good bridge if she says it is hers and a
-        misattribution if she lets it sound like Adorno. She was already tracking this
-        by hand in prose: &ldquo;el puente hauntológico con Derrida lo construyes tú; no
-        se lo atribuyas a Adorno.&rdquo; The model exists to hold that distinction as
-        data, so it survives the deadline.
+        arguments of their own across it, and to keep the two apart under questioning.
+        The third is the one that fails silently. A note observing that one theorist&rsquo;s
+        ghosts are another&rsquo;s hauntology is a good bridge if the candidate says it is
+        theirs, and a misattribution if it is allowed to sound like the first author.
+        Candidates track this by hand, in asides to themselves, and the asides are the
+        first thing lost when a deadline closes in. The model exists to hold that
+        distinction as data instead.
       </p>
 
       <H>Two genres of writing</H>
       <p>
-        Her working documents are of two kinds. Reading notes are written while
-        reading: a verbatim quotation with a page, her translation beneath it, her
-        commentary after, with open questions and cross-references threaded through.
-        The <em>mapa de cruces</em> is written afterwards: seven <em>ejes</em>, each
-        an argument over four to six works, with a thesis, a paragraph per work
-        (<em>ficha</em>), a synthesis, and what to say when an exam question opens on
-        that ground. The fichas cite no pages. They are claims about whole works, and
-        the same work gets a different ficha in each axis it belongs to.
+        The working documents behind this design are of two kinds. Reading notes are
+        written while reading: a verbatim quotation with a page, a translation beneath
+        it, commentary after, with open questions and cross-references threaded
+        through. A <em>mapa de cruces</em> is written afterwards: a set of axes, each an
+        argument over several works, with a thesis, a paragraph per work
+        (<em>ficha</em>), a synthesis, and what to say when a question opens there. The
+        fichas cite no pages. They are claims about whole works, and the same work earns
+        a different ficha in each axis it belongs to.
       </p>
       <p>
         Those two facts settle most of the schema. A passage anchor and a whole-work
@@ -118,18 +140,19 @@ export default async function AboutPage() {
       </p>
       <p>
         Two provenance columns sit on every note and are independent. <em>Origin</em>{' '}
-        records who typed the words, her or Claude. <em>Attribution</em> records whose
-        claim the note asserts: the author of the work, herself, or a named third
-        party. It has no default. An author&rsquo;s claim with no quotation behind it
-        is flagged, because that is the one an examiner presses on.
+        records who typed the words, the reader or Claude. <em>Attribution</em> records
+        whose claim the note asserts: the author of the work, the reader, or a named
+        third party. It has no default. An author&rsquo;s claim with no quotation behind
+        it is flagged, because that is the one an examiner presses on.
       </p>
       <p>
         Claude&rsquo;s proposals arrive as notes marked as Claude&rsquo;s and
-        unreviewed, held apart from her graph until she accepts them. Accepting keeps
-        the origin, so a year from now she can still tell what she found and what she
-        confirmed. Rejecting hides rather than deletes. Retrieval finds passages that
-        share a topic; whether a passage supports or disputes a claim is a judgement
-        made by reading it, and the application never makes it.
+        unreviewed, held apart from the reader&rsquo;s own graph until accepted.
+        Accepting keeps the origin, so a year later it is still possible to tell what
+        was found from what was confirmed. Rejecting hides rather than deletes.
+        Retrieval finds passages that share a topic; whether a passage supports or
+        disputes a claim is a judgement made by reading it, and the application never
+        makes it.
       </p>
 
       <H>Prior art</H>
@@ -167,8 +190,8 @@ export default async function AboutPage() {
         <Term name="Zettelkasten (Luhmann)">
           The literature note reports what an author says, with page; the permanent
           note is the reader&rsquo;s own claim; a structure note organises permanent
-          notes into an argument. Her reading notes are the first two interleaved; an
-          axis is the third.
+          notes into an argument. Reading notes are the first two interleaved; an axis
+          is the third.
         </Term>
         <Term name="Qualitative data analysis (Strauss and Corbin)">
           Codes on text segments, memos about codes, and axial coding, where codes are
@@ -179,7 +202,7 @@ export default async function AboutPage() {
           A relation among more than two things is a hyperedge, and the standard way
           to store one is a membership table, which is also a bipartite graph. That is
           why the map draws axes and works as two kinds of node rather than collapsing
-          seven axes into pairs of works.
+          a set of axes into pairs of works.
         </Term>
       </dl>
 
@@ -187,16 +210,19 @@ export default async function AboutPage() {
       <p>
         The role vocabulary, note-to-note links, and the idea of a concept note as a
         hub all exist in the data and none of them appears as a control. The only
-        question the interface asks that she would not ask herself is whose claim a
-        note asserts. The rest can be exposed later without touching the schema; a
-        six-option role picker on every note would produce blank or wrong roles, and
-        a wrong role is worse than none.
+        question the interface asks that the reader would not ask unprompted is whose
+        claim a note asserts. The rest can be exposed later without touching the
+        schema; a six-option role picker on every note would produce blank or wrong
+        roles, and a wrong role is worse than none.
       </p>
 
       <p className="text-xs text-muted">
-        Decisions and the entity-relationship diagram are in the repository under{' '}
-        <code>docs/</code>: <code>ERD.md</code>, <code>COMO-TOMAR-NOTAS.md</code>, and
-        the design brief.
+        Instructions for use are on{' '}
+        <Link href="/como" className="hover:text-accent">Cómo</Link>. The initial and
+        the typefaces are on the{' '}
+        <Link href="/colophon" className="hover:text-accent">colophon</Link>. Decisions
+        and the entity-relationship diagram are in the repository under{' '}
+        <code>docs/</code>.
       </p>
     </div>
   );
