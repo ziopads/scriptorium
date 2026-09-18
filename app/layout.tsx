@@ -32,6 +32,7 @@ export const metadata: Metadata = {
 export const dynamic = 'force-dynamic';
 
 const NAV = [
+  { href: '/', label: 'Workbench' },
   { href: '/lists', label: 'Lists' },
   { href: '/works', label: 'Catalogue' },
   { href: '/notes', label: 'Notes' },
@@ -59,7 +60,11 @@ export default async function RootLayout({
       <body className="min-h-full flex flex-col font-sans">
         <header className="border-b border-rule">
           <div className="mx-auto max-w-7xl px-5 py-2.5 flex items-baseline gap-6">
-            <Wordmark />
+            {/* The wordmark goes to the introduction, not to the workbench.
+                The workbench has its own link now: a name in the nav is easier
+                to aim at than a logo, and it leaves the wordmark free to point
+                at what this is. */}
+            <Wordmark href="/about" />
             <nav className="flex gap-4 text-sm text-muted">
               {NAV.map((item) => (
                 <Link key={item.href} href={item.href} className="hover:text-accent">
@@ -84,8 +89,8 @@ export default async function RootLayout({
         <footer className="border-t border-rule">
           <div className="mx-auto flex max-w-7xl items-baseline gap-4 px-5 py-2 text-xs text-muted">
             <span>Reading list, bibliography, and notes</span>
-            <Link href="/about" className="ml-auto text-[10px] hover:text-accent">
-              why it is built this way
+            <Link href="/colophon" className="ml-auto text-[10px] hover:text-accent">
+              colophon
             </Link>
           </div>
         </footer>

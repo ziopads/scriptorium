@@ -56,8 +56,18 @@ a {
   line-height: 1.55;
 }
 
-/* Form controls, styled once here rather than repeated across every field. */
+/* Form controls, styled once here rather than repeated across every field.
+
+   Every type that is used has to be named. Tailwind's base resets everything to
+   border: 0 on a transparent background, so a type missing from this list has no
+   border, no fill, and no visible presence at all — which is what happened to the
+   password field on the sign-in page, a bordered label above nothing. */
 input[type='text'],
+input[type='password'],
+input[type='email'],
+input[type='search'],
+input[type='url'],
+input[type='date'],
 input[type='number'],
 select,
 textarea {

@@ -1,17 +1,21 @@
 import Link from 'next/link';
 
+import { InitialS } from '@/components/initial-s';
 import { requireAllowedUser } from '@/lib/auth/guard';
 
 export const dynamic = 'force-dynamic';
 
-// Why the notes model is shaped the way it is. For James, for a future
-// collaborator, for her advisor, and for her on a day with time. The
-// instructions she needs are on /como; nothing here is required to use the
-// application. Decisions are recorded in the repo under docs/; this page is
-// the argument, kept short.
+// What Scriptorium is, how it is used, and why it is shaped as it is. Reached
+// from the wordmark, so it is the first page anyone lands on who wants to know
+// what they are looking at.
+//
+// The instructions she needs in order to work are on /como, in Spanish; nothing
+// here is required to use the application. The image credit and the typefaces
+// are on /colophon, which is public. Decisions are recorded in the repo under
+// docs/; this page is the argument, kept short.
 
-function H({ children }: { children: React.ReactNode }) {
-  return <h2 className="pt-3 text-lg">{children}</h2>;
+function H({ children, id }: { children: React.ReactNode; id?: string }) {
+  return <h2 id={id} className="scroll-mt-6 pt-3 text-lg">{children}</h2>;
 }
 
 function Term({ name, children }: { name: string; children: React.ReactNode }) {
@@ -28,14 +32,50 @@ export default async function AboutPage() {
 
   return (
     <div className="reading max-w-2xl space-y-5">
-      <div>
-        <h1 className="text-2xl mb-1">Why it is built this way</h1>
-        <p className="text-muted">
-          The problem, the prior art the design borrows from, and what each table is
-          for. Instructions for use are on{' '}
-          <Link href="/como" className="text-accent hover:underline">Cómo</Link>.
-        </p>
+      <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:gap-8">
+        <InitialS size={132} className="shrink-0 border border-rule" />
+        <div>
+          <h1 className="mb-1 text-2xl">Scriptorium</h1>
+          <p className="text-muted">
+            A reading instrument: a catalogue of the works on an examination list, the
+            books themselves to read from, and notes that keep hold of the page they
+            came from. Instructions for use are on{' '}
+            <Link href="/como" className="text-accent hover:underline">Cómo</Link>; the
+            initial above and the faces it is set in are on the{' '}
+            <Link href="/colophon" className="text-accent hover:underline">colophon</Link>.
+          </p>
+        </div>
       </div>
+
+      <H>How it is used</H>
+      <p>
+        The workbench is three columns. The catalogue is on the left; choosing a work
+        opens it in the middle, where its contents, its pages and the notes already
+        written about it are tabs. A note is written on the right, and it is written by
+        pointing rather than by typing identifiers: the work she has open is attached
+        already, other works are attached by clicking them, and selecting a passage in
+        the page view fills the quotation and its printed folio into the form.
+      </p>
+      <p>
+        That last part is the whole of it. A quotation arrives with the page it was
+        printed on, taken from the book rather than typed from memory, so a citation
+        written in October can be checked against the edition it claims. Everything
+        else — the axes, the review queues, the search — is built on notes that have
+        that property.
+      </p>
+      <p>
+        Notes gather into <em>ejes</em>: arguments over four to six works, each with a
+        thesis, a paragraph on what each work contributes, a synthesis, and what to say
+        when an exam question opens on that ground. A note written while reading can be
+        promoted into an axis later, or linked to one without moving.
+      </p>
+
+      <H>The design, in one line</H>
+      <p>
+        Nothing is asserted that cannot be traced to a page, and nothing she wrote is
+        ever confused with something she read. The rest of this page is what follows
+        from those two.
+      </p>
 
       <H>What the exam asks</H>
       <p>

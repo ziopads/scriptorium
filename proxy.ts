@@ -13,7 +13,22 @@ export default auth.middleware({
 
 export const config = {
   matcher: [
-    // Everything except the auth pages, the auth API, and static assets.
-    '/((?!auth|api/auth|_next/static|_next/image|favicon.ico).*)',
+    // Everything except the auth pages, the colophon, the auth API, and static
+    // assets.
+    //
+    // The colophon is public by design: it credits a Met woodcut shown on the
+    // sign-in page, and a credit that only signed-in readers can reach is not a
+    // credit. It carries nothing of hers — /about, which describes the exam and
+    // the note model, stays guarded.
+    //
+    // Files in public/ are served from the root, so excluding _next/static is
+    // not enough: /initial-s-vogtherr.jpg was treated as a page, redirected to
+    // the sign-in form, and rendered as alt text — on the sign-in page itself,
+    // where nobody is signed in by definition. Anything with a file extension
+    // is an asset and is left alone.
+    //
+    // A page route never has a dot in its last segment, so this cannot exclude
+    // a real page.
+    '/((?!auth|colophon|api/auth|_next/static|_next/image|.*\\.[a-zA-Z0-9]+$).*)',
   ],
 };
