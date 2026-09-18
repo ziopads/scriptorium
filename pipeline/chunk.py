@@ -2,13 +2,13 @@
 """Chunk page text into search windows.
 
     python3 pipeline/chunk.py                    # every page file
-    python3 pipeline/chunk.py rael-cuentos-espanoles-1977
+    python3 pipeline/chunk.py rael               # a substring of a work id
     python3 pipeline/chunk.py --dry-run          # report, write nothing
-    python3 pipeline/chunk.py --show rael-cuentos-espanoles-1977 --page 40
+    python3 pipeline/chunk.py --show rael --page 40
                                                  # print the chunks touching a page
 
-Input:  pipeline/pages/{book_id}.json   (the durable artifact)
-Output: pipeline/chunks/{book_id}.json  (derived; rebuilt whenever the rules
+Input:  pipeline/pages/{work_id}.json   (the durable artifact)
+Output: pipeline/chunks/{work_id}.json  (derived; rebuilt whenever the rules
                                          change, and stamped with the version)
 
 Deterministic and local: no network, no key, no database. load_chunks.py
@@ -53,6 +53,8 @@ import sys
 import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
+
+from dbconn import resolve
 
 CHUNKER_VERSION = 1
 
@@ -230,24 +232,21 @@ def show(doc: dict, chunks: list[dict], page: int) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("book_id", nargs="*")
+    parser.add_argument("work", nargs="*", help="work ids, or a substring of one")
     parser.add_argument("--dry-run", action="store_true")
-    parser.add_argument("--show", metavar="BOOK_ID", help="print chunks touching --page")
+    parser.add_argument("--show", metavar="WORK", help="print chunks touching --page")
     parser.add_argument("--page", type=int, help="page index, with --show")
     args = parser.parse_args()
 
     if args.show:
-        doc = json.loads((PAGES / f"{args.show}.json").read_text(encoding="utf-8"))
+        doc = json.loads((PAGES / f"{resolve(args.show)}.json").read_text(encoding="utf-8"))
         show(doc, chunk_book(doc), args.page or 1)
         return
 
     files = sorted(PAGES.glob("*.json"))
-    if args.book_id:
-        wanted = set(args.book_id)
+    if args.work:
+        wanted = {resolve(n) for n in args.work}
         files = [f for f in files if f.stem in wanted]
-        missing = wanted - {f.stem for f in files}
-        if missing:
-            sys.exit(f"no page file for: {', '.join(sorted(missing))}")
     if not files:
         sys.exit("nothing to chunk")
 
@@ -259,7 +258,7 @@ def main() -> None:
             langs[c["lang"]] = langs.get(c["lang"], 0) + 1
         sizes = [c["chars"] for c in chunks]
         print(
-            f"  {f.stem:<44} {len(chunks):>5} chunks  "
+            f"  {f.stem:<52} {len(chunks):>5} chunks  "
             f"{min(sizes) if sizes else 0:>5}–{max(sizes) if sizes else 0:<5} chars  "
             + ", ".join(f"{k} {v}" for k, v in sorted(langs.items()))
         )
@@ -267,7 +266,7 @@ def main() -> None:
             CHUNKS.mkdir(exist_ok=True)
             out = CHUNKS / f"{f.stem}.json"
             out.write_text(json.dumps({
-                "book_id": doc["book_id"],
+                "work_id": doc["work_id"],
                 "chunker_version": CHUNKER_VERSION,
                 "chunked_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
                 "params": {"target": TARGET, "hard_max": HARD_MAX, "overlap": OVERLAP,
@@ -280,7 +279,7 @@ def main() -> None:
     else:
         print(f"\n  Wrote {CHUNKS}/")
         print("  Read Rael's around a facing pair before loading:")
-        print("    python3 pipeline/chunk.py --show rael-cuentos-espanoles-1977 --page 40")
+        print("    python3 pipeline/chunk.py --show rael --page 40")
 
 
 if __name__ == "__main__":

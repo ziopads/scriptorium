@@ -5,17 +5,19 @@ import { PageView } from '@/components/workbench/page-view';
 import { Tabs } from '@/components/workbench/tabs';
 import { formatBibliography, formatNote, plain } from '@/lib/citation';
 import { getAxisTree, listAxesForWork, listNotesForWork } from '@/lib/notes';
-import { getPage, pageBounds } from '@/lib/pages';
+import { getPage, offsetLooksWrong, pageBounds } from '@/lib/pages';
+import { listSections, sectionAt } from '@/lib/sections';
 import { getWorkWithContainer, listContents, membershipsFor } from '@/lib/works';
 import { href, type WorkbenchParams } from '@/lib/workbench-url';
 import { KIND_LABEL, PURPOSE_LABEL, STANDING_LABEL } from '@/lib/types';
 
 // The centre pane: whatever is selected on the left, in full. A work has tabs
-// (Meta, Preview, Dossier, Notes, Axes); an axis shows its tree. Dossier is a
-// placeholder until there are dossiers.
+// (Meta, Contents, Preview, Dossier, Notes, Axes); an axis shows its tree.
+// Dossier is a placeholder until there are dossiers.
 
 const VIEWS = [
   { id: 'meta', label: 'Meta' },
+  { id: 'toc', label: 'Contents' },
   { id: 'preview', label: 'Preview' },
   { id: 'dossier', label: 'Dossier' },
   { id: 'notes', label: 'Notes' },
@@ -39,8 +41,11 @@ async function loadPreview(workId: string, p: string | undefined) {
   const wanted = Number.isNaN(asked)
     ? bounds.first
     : Math.min(Math.max(asked, bounds.first), bounds.last);
-  const page = await getPage(workId, wanted);
-  return page ? { bounds, page } : null;
+  const [page, offsetWrong] = await Promise.all([
+    getPage(workId, wanted),
+    offsetLooksWrong(workId),
+  ]);
+  return page ? { bounds, page, offsetWrong } : null;
 }
 
 function Field({ label, value }: { label: string; value: string | number | null }) {
@@ -123,6 +128,8 @@ export async function CenterPane({ params }: { params: WorkbenchParams }) {
   ]);
 
   const preview = view === 'preview' ? await loadPreview(work.id, params.p) : null;
+  const sections = view === 'toc' ? await listSections(work.id) : [];
+  const inSection = preview ? await sectionAt(work.id, preview.page.printed_page) : null;
 
   const chicago = formatBibliography(work, work.container, 'chicago');
   const note = formatNote(work, work.container, null);
@@ -158,7 +165,8 @@ export async function CenterPane({ params }: { params: WorkbenchParams }) {
           id: v.id,
           label: v.label,
           href: href(params, { view: v.id === 'meta' ? null : v.id }),
-          badge: v.id === 'notes' ? notes.length : v.id === 'axes' ? axes.length : undefined,
+          badge:
+            v.id === 'notes' ? notes.length : v.id === 'axes' ? axes.length : undefined,
         }))}
       />
 
@@ -203,14 +211,63 @@ export async function CenterPane({ params }: { params: WorkbenchParams }) {
         </div>
       ) : null}
 
+      {view === 'toc' ? (
+        sections.length === 0 ? (
+          <p className="text-sm text-muted">
+            No chapter map for this work. The extractor found neither an embedded
+            outline nor running heads it could trust, which for a scanned
+            collection is the honest answer.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            <ul className="divide-y divide-rule border-y border-rule text-sm">
+              {sections.map((s) => (
+                <li key={s.ordinal} className="py-1.5">
+                  <Link
+                    href={href(params, { view: 'preview', p: String(s.first_page) })}
+                    className="flex items-baseline gap-3 hover:text-accent"
+                    style={{ paddingLeft: `${(s.level - 1) * 1.25}rem` }}
+                  >
+                    <span className="min-w-0 flex-1 truncate">{s.title}</span>
+                    <span className="shrink-0 font-mono text-xs text-muted">
+                      {s.first_page}
+                      {s.last_page !== null && s.last_page !== s.first_page
+                        ? `–${s.last_page}`
+                        : ''}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-muted">
+              {sections[0].source === 'outline'
+                ? 'From the file’s own table of contents.'
+                : sections[0].source === 'running heads'
+                  ? 'Inferred from the running heads — the head standing on each chapter’s pages. Check it against the printed contents.'
+                  : 'Entered by hand.'}
+            </p>
+          </div>
+        )
+      ) : null}
+
       {view === 'preview' ? (
         preview ? (
-          <PageView
-            params={params}
-            page={preview.page}
-            bounds={preview.bounds}
-            language={work.language}
-          />
+          <>
+            {inSection ? (
+              <p className="text-xs text-muted">
+                <Link href={href(params, { view: 'toc' })} className="hover:text-accent">
+                  {inSection.title}
+                </Link>
+              </p>
+            ) : null}
+            <PageView
+              params={params}
+              page={preview.page}
+              bounds={preview.bounds}
+              language={work.language}
+              offsetWrong={preview.offsetWrong}
+            />
+          </>
         ) : (
           <div className="space-y-2 text-sm text-muted">
             {work.source_format === 'none' ? (

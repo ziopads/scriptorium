@@ -37,6 +37,10 @@ const SHORT_LINE = 0.86;
 // title, a section rubric, or a running head the extractor failed to catch.
 const HEADING_MAX_CHARS = 64;
 
+// A note reference, decoded to Unicode superscript digits by extract.py. Never
+// closes a paragraph: "… collaboration worked.¹⁹" ends at the full stop.
+const SUPERSCRIPT = /[\u2070\u00b9\u00b2\u00b3\u2074-\u2079]+$/u;
+
 function median(values: number[]): number {
   if (values.length === 0) return 0;
   const sorted = [...values].sort((a, b) => a - b);
@@ -63,23 +67,27 @@ function joinLines(lines: string[]): string {
 
 export function toBlocks(text: string): Block[] {
   const out: Block[] = [];
+  const chunks = text.split(/\n{2,}/);
 
-  for (const chunk of text.split(/\n{2,}/)) {
+  for (const chunk of chunks) {
     const lines = chunk
       .split('\n')
       .map((l) => l.trim())
       .filter(Boolean);
     if (lines.length === 0) continue;
 
-    // A heading only ever opens a block, and only where there is prose after
-    // it — a genuinely one-line block is a caption or a folio, not a heading.
-    if (
-      lines.length > 1 &&
+    // A heading only ever opens a block. Since the extractor started marking
+    // paragraphs from the page's geometry, a rubric set on its own line is its
+    // own block — "guaman poma, artist" above the prose that follows it — so a
+    // one-line block counts, provided it is not the only thing on the page.
+    const heading =
       lines[0].length <= HEADING_MAX_CHARS &&
-      !TERMINAL.test(lines[0])
-    ) {
+      !TERMINAL.test(lines[0].replace(SUPERSCRIPT, ''));
+
+    if (heading && (lines.length > 1 || chunks.length > 1)) {
       out.push({ kind: 'heading', text: lines[0] });
       lines.shift();
+      if (lines.length === 0) continue;
     }
 
     // Too few lines to say what the measure is; treat the block as one run.
@@ -93,7 +101,10 @@ export function toBlocks(text: string): Block[] {
 
     for (const line of lines) {
       buffer.push(line);
-      if (TERMINAL.test(line) && line.length < measure * SHORT_LINE) {
+      // A note reference sits after the stop, so it is ignored when asking
+      // whether the line ends a sentence.
+      const closed = line.replace(SUPERSCRIPT, '');
+      if (TERMINAL.test(closed) && line.length < measure * SHORT_LINE) {
         out.push({ kind: 'text', text: joinLines(buffer) });
         buffer = [];
       }

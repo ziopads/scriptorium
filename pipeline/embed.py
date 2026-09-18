@@ -2,7 +2,7 @@
 """Embed chunks that have no embedding yet.
 
     python3 pipeline/embed.py                      # every unembedded chunk
-    python3 pipeline/embed.py rael-cuentos-espanoles-1977
+    python3 pipeline/embed.py rael                 # a substring of a work id
     python3 pipeline/embed.py --dry-run            # count, no API call
     python3 pipeline/embed.py --model voyage-4-large --dim 1024
 
@@ -31,7 +31,7 @@ import sys
 import time
 from pathlib import Path
 
-from dbconn import connect, work_ids
+from dbconn import connect, resolve
 
 DEFAULT_MODEL = "voyage-4"
 DEFAULT_DIM = 1024
@@ -57,7 +57,7 @@ def api_key() -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("book_id", nargs="*", help="pipeline ids; default: every work with chunks")
+    parser.add_argument("work", nargs="*", help="work ids, or a substring of one")
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--dim", type=int, default=DEFAULT_DIM)
     parser.add_argument("--replace", action="store_true",
@@ -65,14 +65,7 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
-    mapped = work_ids()
-    if args.book_id:
-        missing = [b for b in args.book_id if b not in mapped]
-        if missing:
-            sys.exit(f"no work_id in mapping.csv for: {', '.join(missing)}")
-        works = [mapped[b] for b in args.book_id]
-    else:
-        works = None
+    works = [resolve(n) for n in args.work] if args.work else None
 
     with connect() as conn:
         with conn.cursor() as cur:

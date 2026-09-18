@@ -51,3 +51,25 @@ export async function getPage(workId: string, printedPage: number): Promise<Page
   `) as PageText[];
   return rows[0] ?? null;
 }
+
+// Whether this work's offset looks wrong, judged across the book rather than
+// on the page in front of her.
+//
+// The per-page test cried wolf: a chapter opening carries no folio, a stray
+// number in the text gets read as one, and the header announced a broken
+// offset on a page that was fine. One page disagreeing is noise. A fifth of
+// the folio-bearing pages disagreeing is an offset, and that is the same
+// evidence the page_offsets ranges were built from (migration 008).
+export async function offsetLooksWrong(workId: string): Promise<boolean> {
+  const sql = db();
+  const rows = (await sql`
+    select count(*) filter (where folio <> printed_page)::int as disagreeing,
+           count(*)::int as with_folio
+    from printed_pages
+    where work_id = ${workId} and folio is not null
+  `) as { disagreeing: number; with_folio: number }[];
+
+  const row = rows[0];
+  if (!row || row.with_folio < 20) return false;
+  return row.disagreeing > row.with_folio * 0.2;
+}

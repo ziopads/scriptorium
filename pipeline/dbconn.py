@@ -1,11 +1,30 @@
-"""Shared plumbing for the loaders: the connection string, and the map from the
-pipeline's book ids to the catalogue's work ids.
+"""Shared plumbing for the pipeline: the connection string, and the map from a
+file in the corpus to the catalogue work it is.
 
 Read DATABASE_URL_UNPOOLED from .env.local at the repo root. The unpooled string
 is required: each loader replaces one work's rows inside a single transaction,
 which the pooled endpoint does not guarantee.
 
 Nothing here prints a connection string, ever.
+
+ONE KEY, NOT TWO
+
+    There used to be a pipeline book_id alongside the catalogue work_id, and
+    every script existed partly to translate between them. The book_id came
+    from a filename, the work_id from a bibliography, and they disagreed
+    whenever the two named different people:
+
+        file       "Cuentos_ Tales from the Hispanic Southwest -- … Griego …"
+        book_id    anaya-cuentos-hispanic-southwest-1980
+        work_id    griego-y-maestas-cuentos-tales-from-the-hispanic-1980
+
+    Nothing connected them but a column, and where that column was empty there
+    was no way from one to the other but guesswork. So the book_id is gone.
+    mapping.csv is now match → work_id, the JSON files are named for the work,
+    and the catalogue id is the only identifier in the pipeline.
+
+    Work ids are long, so every script takes a substring instead: `anzaldua`,
+    `lotman`, `saldana`. An ambiguous one lists what it matched and stops.
 """
 
 from __future__ import annotations
@@ -44,25 +63,54 @@ def connect():
     return psycopg.connect(database_url())
 
 
-def work_ids() -> dict[str, str]:
-    """book_id (pipeline) -> work_id (catalogue), from mapping.csv. Rows with an
-    empty work_id are unmapped and the loaders refuse them by name rather than
-    guessing."""
-    out: dict[str, str] = {}
+def books() -> dict[str, dict]:
+    """work_id -> {matches: [str], note: str}, from mapping.csv.
+
+    A work split across several files has several rows, each naming its own
+    file; they collapse to one entry with several match strings. A row with no
+    work_id is skipped here and reported by status.py, because a file nobody
+    has identified should be visible rather than silently processed."""
+    out: dict[str, dict] = {}
     with MAPPING.open(encoding="utf-8") as handle:
         for row in csv.DictReader(handle):
-            book_id = (row.get("book_id") or "").strip()
             work_id = (row.get("work_id") or "").strip()
-            if book_id and work_id:
-                out[book_id] = work_id
+            match = (row.get("match") or "").strip()
+            if not work_id or not match:
+                continue
+            entry = out.setdefault(work_id, {"matches": [], "note": ""})
+            entry["matches"].append(match)
+            if (row.get("note") or "").strip():
+                entry["note"] = row["note"].strip()
     return out
 
 
-def resolve(book_id: str) -> str:
-    mapping = work_ids()
-    if book_id not in mapping:
+def work_ids() -> list[str]:
+    return sorted(books())
+
+
+def resolve(needle: str) -> str:
+    """A work id from a substring of one. Exact wins; otherwise a single
+    substring match wins; anything else prints the candidates and stops, since
+    guessing which book someone meant is how the wrong one gets re-embedded."""
+    ids = work_ids()
+    if needle in ids:
+        return needle
+
+    folded = needle.casefold()
+    hits = [i for i in ids if folded in i.casefold()]
+    if len(hits) == 1:
+        return hits[0]
+    if not hits:
         sys.exit(
-            f"{book_id}: no work_id in pipeline/mapping.csv. Add the catalogue id "
-            f"to that row (it is the id on the work's page under Record)."
+            f"{needle!r} matches no work in pipeline/mapping.csv.\n"
+            f"    pipeline/status.py lists every book and its catalogue id."
         )
-    return mapping[book_id]
+    listing = "\n      ".join(hits)
+    sys.exit(f"{needle!r} matches {len(hits)} works:\n      {listing}\n    Be more specific.")
+
+
+def resolve_all(needles: list[str]) -> list[str]:
+    """Every work when nothing is named \u2014 which is how twenty books once got
+    extracted in one afternoon, so the caller should say what it is about to
+    do."""
+    return [resolve(n) for n in needles] if needles else work_ids()

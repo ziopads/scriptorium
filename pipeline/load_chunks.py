@@ -2,13 +2,17 @@
 """Load pipeline/chunks/*.json into the chunks table, with no embeddings.
 
     python3 pipeline/load_chunks.py                    # every mapped chunk file
-    python3 pipeline/load_chunks.py rael-cuentos-espanoles-1977
+    python3 pipeline/load_chunks.py rael               # a substring of a work id
     python3 pipeline/load_chunks.py --dry-run
 
 One work per transaction: its chunks are deleted and reinserted. start_page
-and end_page are PRINTED pages, as the schema requires: the page index from
-the chunk file plus works.page_offset read from the catalogue at load time.
-If the offset is later corrected, rerun this for that work.
+and end_page are PRINTED pages, as the schema requires, and they are read from
+the printed_pages view rather than computed here. That matters since migration
+008: a book whose printed numbering breaks partway — Gonzales has an unnumbered
+plate section, after which the file runs twelve ahead — needs a different
+offset for each range, and works.page_offset alone would put every chunk in the
+second half of that book on the wrong page. If an offset is later corrected,
+rerun this for that work.
 
 embedding, embedding_model and embedding_dim are left null; embed.py fills
 them once the model is settled.
@@ -26,29 +30,62 @@ from dbconn import connect, resolve, work_ids
 CHUNKS = Path(__file__).parent / "chunks"
 
 
-def load_one(cur, book_id: str, work_id: str, doc: dict) -> int:
+def load_one(cur, work_id: str, doc: dict) -> int:
     cur.execute("select page_offset from works where id = %s", (work_id,))
     row = cur.fetchone()
     if row is None:
-        sys.exit(f"{book_id}: work_id {work_id} is not in the works table")
+        sys.exit(f"{work_id} is not in the works table")
     offset = row[0]
+
+    # The printed page per file page, as the view resolves it: a range in
+    # page_offsets where one covers the page, works.page_offset elsewhere.
+    # Falling back to the bare offset for a page the view does not know about,
+    # which happens only if chunks were built from a newer extraction than the
+    # one loaded into pages.
+    cur.execute(
+        "select page_index, printed_page from printed_pages where work_id = %s",
+        (work_id,),
+    )
+    printed = {index: page for index, page in cur.fetchall()}
+
+    def page_of(index: int) -> int:
+        return printed.get(index, index + offset)
+
+    missing = sum(
+        1
+        for c in doc["chunks"]
+        if c["start_page_index"] not in printed or c["end_page_index"] not in printed
+    )
+    if missing:
+        print(
+            f"  ! {work_id}: {missing} chunks name a page that is not in the pages"
+            " table; load_pages.py may be behind chunk.py"
+        )
 
     cur.execute("delete from chunks where work_id = %s", (work_id,))
     cur.executemany(
         """
         insert into chunks
-          (work_id, start_page, end_page, lang, text, text_search, chunker_version)
-        values (%s, %s, %s, %s, %s, %s, %s)
+          (work_id, start_page, end_page, lang, text, text_search,
+           chunker_version, section_type)
+        values (%s, %s, %s, %s, %s, %s, %s, %s)
         """,
         [
             (
                 work_id,
-                c["start_page_index"] + offset,
-                c["end_page_index"] + offset,
+                page_of(c["start_page_index"]),
+                page_of(c["end_page_index"]),
                 c["lang"],
                 c["text"],
                 c["text_search"],
                 doc["chunker_version"],
+                # A printed page below 1 is front matter: half-title, title,
+                # copyright, contents, dedication. Those chunks were competing
+                # with the body in every search — Adorno's table of contents
+                # came back second for a question about the right to narrate,
+                # and its copyright page sixth. Marking them costs nothing now
+                # that the offsets are trustworthy, and search excludes them.
+                "front" if page_of(c["start_page_index"]) < 1 else None,
             )
             for c in doc["chunks"]
         ],
@@ -58,22 +95,19 @@ def load_one(cur, book_id: str, work_id: str, doc: dict) -> int:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("book_id", nargs="*")
+    parser.add_argument("work", nargs="*", help="work ids, or a substring of one")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
     files = sorted(CHUNKS.glob("*.json"))
-    if args.book_id:
-        wanted = set(args.book_id)
+    if args.work:
+        wanted = {resolve(n) for n in args.work}
         files = [f for f in files if f.stem in wanted]
-        missing = wanted - {f.stem for f in files}
-        if missing:
-            sys.exit(f"no chunk file for: {', '.join(sorted(missing))}")
 
-    mapped = work_ids()
+    mapped = set(work_ids())
     for f in files:
         if f.stem not in mapped:
-            print(f"  {f.stem}: no work_id in mapping.csv, skipped")
+            print(f"  {f.stem}: not in mapping.csv, skipped")
     files = [f for f in files if f.stem in mapped]
     if not files:
         sys.exit("nothing to load")
@@ -81,7 +115,7 @@ def main() -> None:
     if args.dry_run:
         for f in files:
             doc = json.loads(f.read_text(encoding="utf-8"))
-            print(f"  {f.stem:<44} -> {mapped[f.stem]:<52} {len(doc['chunks']):>5} chunks")
+            print(f"  {f.stem:<52} {len(doc['chunks']):>5} chunks")
         print("\n  dry run: nothing written")
         return
 
@@ -89,13 +123,12 @@ def main() -> None:
     with connect() as conn:
         for f in files:
             doc = json.loads(f.read_text(encoding="utf-8"))
-            book_id = f.stem
-            work_id = resolve(book_id)
+            work_id = f.stem
             with conn.transaction():
                 with conn.cursor() as cur:
-                    n = load_one(cur, book_id, work_id, doc)
+                    n = load_one(cur, work_id, doc)
             total += n
-            print(f"  {book_id:<44} -> {work_id:<52} {n:>5} chunks")
+            print(f"  {work_id:<52} {n:>5} chunks")
 
     print(f"\n  {total:,} chunks loaded, no embeddings yet")
 

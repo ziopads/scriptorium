@@ -1,19 +1,18 @@
 #!/usr/bin/env python3
-"""Extract page text from the mapped PDFs into one JSON file per book.
+"""Extract page text from the mapped PDFs into one JSON file per work.
 
-    python3 pipeline/extract.py                  # every mapped book
-    python3 pipeline/extract.py herrera-transmigracion-cuerpos-2013
+    python3 pipeline/extract.py                  # every mapped work
+    python3 pipeline/extract.py anzaldua         # a substring of a work id
     python3 pipeline/extract.py --dry-run        # report, write nothing
-    python3 pipeline/extract.py --chapters       # show all three chapter
-                                                 # sources side by side
+    python3 pipeline/extract.py --chapters       # show the chapter sources
     python3 pipeline/extract.py --glyphs         # list suspect characters
                                                  # sitting inside words
 
-Output: pipeline/pages/{book_id}.json, keyed by book id rather than filename,
-so that no accented, 200-character download name ever propagates past this
-boundary. That is the durable artifact. Everything downstream — chunks, vectors,
-the database — is derived from it and can be rebuilt without touching a PDF
-again.
+Output: pipeline/pages/{work_id}.json, keyed by the catalogue id — the same id
+the app, the notes and the anchors use — so that no accented, 200-character
+download name, and no second identifier, ever propagates past this boundary.
+That is the durable artifact. Everything downstream — chunks, vectors, the
+database — is derived from it and can be rebuilt without touching a PDF again.
 
 Deterministic and local. No network, no key, no database. Runs on files and
 writes files, so it can be tested by reading its output beside the source (O-4).
@@ -62,6 +61,8 @@ import unicodedata
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
+
+from dbconn import resolve
 
 try:
     import fitz  # PyMuPDF
@@ -149,12 +150,48 @@ LIGATURES = {
 # Add to this by eye, per book. `--glyphs` lists every suspect character with
 # the words it appears in, which is how each of these was found.
 MOJIBAKE: dict[str, dict[str, str]] = {
-    "adorno-polemics-possession-2007": {
-        "\u221a": "ff",    # o√ered → offered
+    "adorno-the-polemics-of-possession-in-2007": {
+        "\u221a": "ff",    # o√ered → offered, better o√ → better off
         "\u2248": "ffi",   # o≈ces → offices, insu≈cient → insufficient
         "\u0394": "ffl",   # shuΔing → shuffling
     },
 }
+
+# The characters a book's superscript font produces instead of digits, when its
+# ToUnicode map is wrong, and what each one means.
+#
+# Adorno's, read off the notes themselves: page 34 carries notes 16 to 19 as
+# ∞∏, ∞π, ∞∫, ∞Ω, which fixes ∞=1, ∏=6, π=7, ∫=8, Ω=9; earlier pages give
+# ≤=2, ≥=3, ∂=4, ∑=5. Zero is unconfirmed — no note number below 100 in the
+# pages read so far contains one — and √ is the guess, since it is the
+# remaining glyph of the ten. Check it against note 10 or 20 when one turns up.
+#
+# These are DECODED, not deleted. An earlier version dropped them, which lost
+# the note number with the noise: a passage she quotes should say that it
+# carries note 17, because that is how she finds Adorno's note at the back.
+# They are written as Unicode superscript digits, so they need no markup, read
+# correctly as plain text, and can be stripped from a quotation by their code
+# points alone.
+#
+# Most marks are caught in line_text by their superscript flag. These are the
+# ones that are neither flagged nor set small enough, and what identifies them
+# is position: a run of one to three of these characters immediately after
+# sentence punctuation. The same characters elsewhere are untouched — which
+# matters for √, the ff ligature in the body font and a digit in the
+# superscript font.
+SUPERSCRIPT_FIGURES = {
+    "adorno-the-polemics-of-possession-in-2007": {
+        "\u221e": "1", "\u2264": "2", "\u2265": "3", "\u2202": "4", "\u2211": "5",
+        "\u220f": "6", "\u03c0": "7", "\u222b": "8", "\u03a9": "9", "\u221a": "0",
+    },
+}
+
+SUPERSCRIPT_DIGITS = {
+    "0": "\u2070", "1": "\u00b9", "2": "\u00b2", "3": "\u00b3", "4": "\u2074",
+    "5": "\u2075", "6": "\u2076", "7": "\u2077", "8": "\u2078", "9": "\u2079",
+}
+
+AFTER_SENTENCE = r"[.,;:!?\u2019\u201d\u00bb\)\]]"
 
 # A diacritic set as its own character beside the letter it belongs to. Which
 # side it falls on differs by file, so each entry says: the caron precedes its
@@ -216,7 +253,7 @@ def fold(value: str) -> str:
     return "".join(c for c in decomposed if not unicodedata.combining(c)).casefold()
 
 
-def clean_page(text: str, subs: dict[str, str]) -> str:
+def clean_page(text: str, subs: dict[str, str], figures: dict[str, str] | None = None) -> str:
     # Compose accented characters into single code points. PDF extraction often
     # yields decomposed forms, and a decomposed á will not match a composed one
     # in any later comparison.
@@ -225,9 +262,24 @@ def clean_page(text: str, subs: dict[str, str]) -> str:
     for ligature, plain in LIGATURES.items():
         text = text.replace(ligature, plain)
 
+    # Reference marks first, so that a √ belonging to a note number is decoded
+    # before the ligature rule below claims every √ that follows a letter.
+    if figures:
+        def decode(match: re.Match) -> str:
+            return "".join(SUPERSCRIPT_DIGITS[figures[c]] for c in match.group(0))
+
+        text = re.sub(
+            r"(?<=" + AFTER_SENTENCE + r")[" + re.escape("".join(figures)) + r"]{1,3}",
+            decode,
+            text,
+        )
+
+    # A letter before is enough. Requiring one after as well missed the
+    # ligature at the end of a word — "better o√ being ruled" for "better off"
+    # — which is where an f-ligature most often falls.
     for glyph, plain in subs.items():
         text = re.sub(
-            r"(?<=[A-Za-z\u00c0-\u024f])" + re.escape(glyph) + r"(?=[A-Za-z\u00c0-\u024f])",
+            r"(?<=[A-Za-z\u00c0-\u024f])" + re.escape(glyph),
             plain,
             text,
         )
@@ -282,10 +334,18 @@ def body_size(blocks: list[dict]) -> float:
     return counts.most_common(1)[0][0] if counts else 0.0
 
 
-def line_text(line: dict, base: float) -> str:
-    """One line, with its endnote reference marks removed. Falls back to the
+def line_text(line: dict, base: float, figures: dict[str, str] | None = None) -> str:
+    """One line, with its endnote reference marks handled. Falls back to the
     whole line when dropping would empty it, so that a folio standing alone
     survives.
+
+    A reference mark is KEPT when its characters can be read as a number —
+    either plain digits, or this book's mis-decoded figures, which clean_page
+    turns into superscript digits afterwards. Dropping them here is what lost
+    notes 16 and 18 on Adorno's page 34 while 17 and 19 survived: those two
+    were not flagged superscript, so they reached clean_page and were decoded,
+    and the flagged pair never got there. Only a mark that cannot be read as a
+    number at all is discarded.
 
     Spans are joined on their geometry rather than end to end. A PDF often sets
     the space between two words by moving the pen rather than by writing a
@@ -315,25 +375,37 @@ def line_text(line: dict, base: float) -> str:
             and not any(ch.isalpha() for ch in text)
             and len(text.strip()) <= MARK_MAX_CHARS
         )
-        if not mark:
-            gapped = (
-                prev_right is not None
-                and left - prev_right > size * SPAN_GAP
-                and kept
-                and not kept[-1].endswith((" ", "\u00a0"))
-                and not text.startswith((" ", "\u00a0"))
-            )
-            if gapped:
-                kept.append(" ")
-            kept.append(text)
 
+        if mark:
+            body = text.strip()
+            if body.isdigit():
+                # A font whose map is intact: the note number is already a
+                # number, and only needs raising.
+                kept.append("".join(SUPERSCRIPT_DIGITS[d] for d in body))
+            elif figures and all(ch in figures for ch in body):
+                # A font whose map is broken: leave it for clean_page, which
+                # knows what these glyphs mean in this book.
+                kept.append(body)
+            prev_right = right
+            continue
+
+        gapped = (
+            prev_right is not None
+            and left - prev_right > size * SPAN_GAP
+            and kept
+            and not kept[-1].endswith((" ", "\u00a0"))
+            and not text.startswith((" ", "\u00a0"))
+        )
+        if gapped:
+            kept.append(" ")
+        kept.append(text)
         prev_right = right
 
     joined = "".join(kept).strip()
     return joined if joined else "".join(whole).strip()
 
 
-def page_text(page) -> str:
+def page_text(page, figures: dict[str, str] | None = None) -> str:
     """A page as paragraphs separated by a blank line, lines within a paragraph
     still separated by a newline so that clean_page can rejoin broken words
     before reflowing them."""
@@ -344,7 +416,7 @@ def page_text(page) -> str:
     for block in blocks:
         lines = []
         for line in block.get("lines", []):
-            text = line_text(line, base)
+            text = line_text(line, base, figures)
             if not text:
                 continue
             x0, y0, _, y1 = line.get("bbox", (0.0, 0.0, 0.0, 0.0))
@@ -620,62 +692,65 @@ def folio_from(text: str, heads: set[str]) -> int | None:
 
 
 def read_mapping() -> dict[str, dict]:
-    """book_id -> {files: [...], page_offset: int}"""
-    with MAPPING.open(encoding="utf-8") as handle:
-        rules = [r for r in csv.DictReader(handle) if r["match"].strip()]
+    if not MAPPING.exists():
+        sys.exit(f"missing {MAPPING}")
 
     pdfs = sorted(p for p in CORPUS.rglob("*.pdf") if not p.name.startswith("."))
+    if not pdfs:
+        sys.exit(f"no PDFs in {CORPUS}")
 
     books: dict[str, dict] = {}
-    for rule in rules:
-        book_id = rule["book_id"].strip()
-        if not book_id:
-            continue
+    with MAPPING.open(encoding="utf-8") as handle:
+        for rule in csv.DictReader(handle):
+            work_id = (rule.get("work_id") or "").strip()
+            match = (rule.get("match") or "").strip()
+            if not work_id or not match:
+                if match:
+                    print(f"  ! {match!r}: no work_id in mapping.csv, skipped")
+                continue
 
-        needle = fold(rule["match"].strip())
-        hits = [p for p in pdfs if needle in fold(p.name)]
+            needle = fold(match)
+            hits = [p for p in pdfs if needle in fold(p.name)]
 
-        entry = books.setdefault(
-            book_id, {"files": [], "page_offset": 0, "conflicts": []}
-        )
+            entry = books.setdefault(
+                work_id, {"files": [], "page_offset": 0, "conflicts": []}
+            )
 
-        # A rule matching several files used to concatenate them into one book
-        # without saying so: "Borderlands" caught both Anzaldúa and Meléndez's
-        # Hidden Chicano Cinema, and 290 pages of the wrong book were extracted,
-        # chunked and embedded under Anzaldúa's id. A book genuinely split
-        # across files gets one row per file, each naming its own.
-        #
-        # Recorded rather than raised, because mapping.csv describes the whole
-        # corpus and one bad rule must not stop the extraction of a different
-        # book. main() refuses only the books actually asked for.
-        if len(hits) > 1:
-            entry["conflicts"].append((rule["match"].strip(), [p.name for p in hits]))
-            continue
+            # A rule matching several files used to concatenate them into one
+            # book without saying so: "Borderlands" caught both Anzaldúa and
+            # Meléndez's Hidden Chicano Cinema, and 290 pages of the wrong book
+            # were extracted, chunked and embedded under Anzaldúa's id. A book
+            # genuinely split across files gets one row per file, each naming
+            # its own.
+            #
+            # Recorded rather than raised, because mapping.csv describes the
+            # whole corpus and one bad rule must not stop the extraction of a
+            # different book. main() refuses only the books actually asked for.
+            if len(hits) > 1:
+                entry["conflicts"].append((match, [p.name for p in hits]))
+                continue
 
-        entry["files"].extend(hits)
-
-        offset = (rule.get("page_offset") or "").strip()
-        if offset:
-            entry["page_offset"] = int(offset)
+            entry["files"].extend(hits)
 
     for entry in books.values():
-        # Sorted so that a book split across several files assembles in a stable
+        # Sorted so that a work split across several files assembles in a stable
         # order rather than whatever the filesystem returned.
         entry["files"] = sorted(set(entry["files"]), key=lambda p: p.name)
 
     return books
 
 
-def extract_book(book_id: str, entry: dict, dry_run: bool) -> dict:
+def extract_book(work_id: str, entry: dict, dry_run: bool) -> dict:
     raw_pages: list[str] = []
     provenance: list[dict] = []
-    subs = MOJIBAKE.get(book_id, {})
+    subs = MOJIBAKE.get(work_id, {})
+    figures = SUPERSCRIPT_FIGURES.get(work_id)
 
     for path in entry["files"]:
         with fitz.open(path) as doc:
             start = len(raw_pages) + 1
             for page in doc:
-                raw_pages.append(clean_page(page_text(page), subs))
+                raw_pages.append(clean_page(page_text(page, figures), subs, figures))
             provenance.append(
                 {
                     "file": path.name,
@@ -714,7 +789,7 @@ def extract_book(book_id: str, entry: dict, dry_run: bool) -> dict:
         )
 
     document = {
-        "book_id": book_id,
+        "work_id": work_id,
         "extracted_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "extractor": f"pymupdf {getattr(fitz, '__version__', 'unknown')}",
         "page_offset": offset,
@@ -736,7 +811,7 @@ def extract_book(book_id: str, entry: dict, dry_run: bool) -> dict:
 
     if not dry_run:
         PAGES.mkdir(exist_ok=True)
-        out = PAGES / f"{book_id}.json"
+        out = PAGES / f"{work_id}.json"
         out.write_text(
             json.dumps(
                 {k: v for k, v in document.items() if not k.startswith("_")},
@@ -754,9 +829,9 @@ def report_glyphs(doc: dict) -> int:
     the words it appears in say what it should have been."""
     counts = glyph_report(doc["_raw_pages"])
     if not counts:
-        print(f"  {doc['book_id']:<44} clean")
+        print(f"  {doc['work_id']:<52} clean")
         return 0
-    print(f"\n  {doc['book_id']}")
+    print(f"\n  {doc['work_id']}")
     for glyph, count in counts.most_common(12):
         words = glyph_examples(doc["_raw_pages"], glyph)
         name = unicodedata.name(glyph, "?")
@@ -768,7 +843,7 @@ def report_chapters(doc: dict) -> None:
     """Every source for one book, side by side, so a person picks."""
     offset = doc["page_offset"]
     chosen = doc["chapters_source"]
-    print(f"\n  {doc['book_id']}  — using: {chosen}")
+    print(f"\n  {doc['work_id']}  — using: {chosen}")
 
     for name, found in doc["_chapter_sources"].items():
         mark = "→" if name == chosen else " "
@@ -786,7 +861,11 @@ def report_chapters(doc: dict) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("book_id", nargs="*", help="limit to these books")
+    parser.add_argument(
+        "work",
+        nargs="*",
+        help="work ids, or any substring of one — anzaldua, lotman, saldana",
+    )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument(
         "--chapters",
@@ -804,11 +883,11 @@ def main() -> None:
         sys.exit(f"{MAPPING} not found.")
 
     books = read_mapping()
-    if args.book_id:
-        missing = [b for b in args.book_id if b not in books]
-        if missing:
-            sys.exit(f"not in mapping.csv: {', '.join(missing)}")
-        books = {k: v for k, v in books.items() if k in args.book_id}
+    if args.work:
+        wanted = {resolve(n) for n in args.work}
+        books = {k: v for k, v in books.items() if k in wanted}
+    elif not (args.chapters or args.glyphs or args.dry_run):
+        print(f"  extracting all {len(books)} mapped works. Name one to do less.")
 
     if not books:
         sys.exit("nothing to extract")
@@ -817,26 +896,26 @@ def main() -> None:
     total_chars = 0
     empty_warnings = []
 
-    for book_id, entry in sorted(books.items()):
+    for work_id, entry in sorted(books.items()):
         if entry.get("conflicts"):
             for match, names in entry["conflicts"]:
                 listing = "\n        ".join(n[:96] for n in names)
-                print(f"  ! {book_id}: match {match!r} hits {len(names)} files:")
+                print(f"  ! {work_id}: match {match!r} hits {len(names)} files:")
                 print(f"        {listing}")
             print("    Narrow the match column until it names one file. Skipped.")
             continue
 
         if not entry["files"]:
-            print(f"  {book_id}: no file found, skipped")
+            print(f"  {work_id}: no file found, skipped")
             continue
 
         # Dict-mode extraction is slow on a scanned book, where the OCR text
         # layer can carry a span per word, so the report modes say where they
         # are rather than looking hung.
         if args.chapters or args.glyphs:
-            print(f"  reading {book_id} …", end="\r", flush=True)
+            print(f"  reading {work_id} …", end="\r", flush=True)
 
-        doc = extract_book(book_id, entry, args.dry_run or args.chapters or args.glyphs)
+        doc = extract_book(work_id, entry, args.dry_run or args.chapters or args.glyphs)
 
         if args.chapters:
             report_chapters(doc)
@@ -857,7 +936,7 @@ def main() -> None:
             f"  offset {doc['page_offset']:+d}" if doc["page_offset"] else ""
         )
         print(
-            f"  {book_id:<44} {len(pages):>4}p  "
+            f"  {work_id:<52} {len(pages):>4}p  "
             f"{chars // max(len(pages), 1):>5} ch/p{offset_note}"
         )
 
@@ -870,13 +949,13 @@ def main() -> None:
                 print(f"       removed repeated line: {line[:72]}")
 
         if empty > len(pages) * 0.2:
-            empty_warnings.append((book_id, empty, len(pages)))
+            empty_warnings.append((work_id, empty, len(pages)))
 
     if not args.chapters and not args.glyphs:
         print(f"\n  {total_pages:,} pages, {total_chars:,} characters")
 
-        for book_id, empty, pages in empty_warnings:
-            print(f"  ! {book_id}: {empty} of {pages} pages nearly empty — check it")
+        for work_id, empty, pages in empty_warnings:
+            print(f"  ! {work_id}: {empty} of {pages} pages nearly empty — check it")
 
     if args.glyphs:
         print("\n  Nothing written. Each character above is one whose font said")

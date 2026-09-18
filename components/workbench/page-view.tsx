@@ -31,11 +31,13 @@ export function PageView({
   page,
   bounds,
   language,
+  offsetWrong = false,
 }: {
   params: WorkbenchParams;
   page: PageText;
   bounds: PageBounds;
   language: string | null;
+  offsetWrong?: boolean;
 }) {
   const router = useRouter();
   const [selection, setSelection] = useState('');
@@ -96,10 +98,6 @@ export function PageView({
 
   const shown = scrub ?? page.printed_page;
 
-  // The offset check: folio is the number read off the page, printed_page is
-  // page_index + works.page_offset. A disagreement means the offset is wrong.
-  const offsetOff = page.folio !== null && page.folio !== page.printed_page;
-
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted">
@@ -143,9 +141,12 @@ export function PageView({
           <span className="pl-2">({bounds.count} pages held)</span>
         </span>
 
-        {offsetOff ? (
-          <span className="text-accent" title="pages.folio disagrees with page_index + works.page_offset">
-            printed folio reads {page.folio} — the offset for this work looks wrong
+        {offsetWrong ? (
+          <span
+            className="text-accent"
+            title="Most of this work's folios disagree with page_index + the offset"
+          >
+            the offset for this work looks wrong
           </span>
         ) : null}
       </div>

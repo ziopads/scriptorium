@@ -24,9 +24,15 @@ const HYPHEN_AT_LINE_END = /(\p{L})[-\u2010\u2011]\s*\n\s*(\p{L})/gu;
 const LINE_BREAK = /\s*\n\s*/g;
 const RUN_OF_SPACES = /[ \t\u00A0]+/g;
 
+// Note references, which extract.py decodes to Unicode superscript digits so
+// that a page can say it carries note 17. They belong on the page and not in
+// a quotation: nobody wants "the collaboration worked.\u00b9\u2079" pasted into a chapter.
+const NOTE_REFERENCE = /[\u2070\u00b9\u00b2\u00b3\u2074-\u2079]+/g;
+
 export function normalizeQuotation(raw: string): string {
   return raw
     .replace(SOFT_HYPHEN, '')
+    .replace(NOTE_REFERENCE, '')
     .replace(HYPHEN_AT_LINE_END, '$1$2')
     .replace(LINE_BREAK, ' ')
     .replace(RUN_OF_SPACES, ' ')
