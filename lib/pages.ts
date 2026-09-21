@@ -73,3 +73,20 @@ export async function offsetLooksWrong(workId: string): Promise<boolean> {
   if (!row || row.with_folio < 20) return false;
   return row.disagreeing > row.with_folio * 0.2;
 }
+
+// The page a Preview shows: the one asked for, clamped to the pages held, or
+// the first. Null when nothing has been loaded. Used by the workbench's
+// Preview tab and the book page's.
+export async function loadPreview(workId: string, p: string | undefined) {
+  const bounds = await pageBounds(workId);
+  if (!bounds) return null;
+  const asked = Number.parseInt(p ?? '', 10);
+  const wanted = Number.isNaN(asked)
+    ? bounds.first
+    : Math.min(Math.max(asked, bounds.first), bounds.last);
+  const [page, offsetWrong] = await Promise.all([
+    getPage(workId, wanted),
+    offsetLooksWrong(workId),
+  ]);
+  return page ? { bounds, page, offsetWrong } : null;
+}

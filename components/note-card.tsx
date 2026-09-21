@@ -6,6 +6,7 @@ import {
   acceptNote,
   declineNote,
   detachWork,
+  editAnchor,
   editNote,
   linkNote,
   reconsiderNote,
@@ -30,6 +31,13 @@ import { NOTE_KIND_LABEL, NOTE_ROLE_LABEL } from '@/lib/types';
 //
 // Editing is a <details> holding forms rather than a modal, which keeps the
 // mutation path free of client JavaScript and lets several stay open at once.
+//
+// Each passage the note already has is its own form, prefilled with its page,
+// quotation and translation, saved in place by editAnchor. Until 21 September
+// the only passage form was a blank "add", so correcting a quotation added a
+// second copy of it, and the card, which leads with the first passage for
+// the work, went on showing the old one. The add form now sits apart, below
+// the passages it would join.
 
 export async function NoteCard({
   note,
@@ -235,46 +243,109 @@ export async function NoteCard({
             </div>
           </form>
 
-          {/* A passage in another work. Adding it here means the link is made
-              where the thought occurred, while reading. */}
-          {note.kind !== 'axis' ? (
-            <form action={linkNote} className="mt-3 space-y-2 border-l-2 border-rule pl-3">
-              <input type="hidden" name="note_id" value={note.id} />
-              <p className="text-xs text-muted">Add a passage from another work</p>
-              <div className="flex flex-wrap items-end gap-2">
-                <label className="min-w-56 flex-1 space-y-1">
-                  <span className="text-xs text-muted">Work id</span>
-                  <input type="text" name="work_id" placeholder="taylor-archive-repertoire-2003" />
-                </label>
-                <label className="w-20 space-y-1">
-                  <span className="text-xs text-muted">Page</span>
-                  <input type="number" name="printed_page" />
-                </label>
-                <button type="submit" className="text-xs text-accent hover:underline">Link</button>
-              </div>
-              <label className="block space-y-1">
-                <span className="text-xs text-muted">Passage there, verbatim</span>
-                <textarea name="quote" rows={2} className="reading" />
-              </label>
-              <label className="block space-y-1">
-                <span className="text-xs text-muted">Your translation</span>
-                <textarea name="translation" rows={2} className="reading" />
-              </label>
-            </form>
-          ) : null}
-
-          {note.anchors.length > 1 || (note.anchors.length > 0 && note.works.length > 0) ? (
-            <div className="mt-2 space-y-1 border-l-2 border-rule pl-3">
+          {/* The passages the note has, each editable in place. */}
+          {note.kind !== 'axis' && note.anchors.length > 0 ? (
+            <div className="mt-4 space-y-3">
+              <p className="text-xs uppercase tracking-wide text-muted">
+                {note.anchors.length === 1 ? 'Passage' : 'Passages'}
+              </p>
               {note.anchors.map((anchor) => (
-                <form key={anchor.ordinal} action={unlinkNote}>
-                  <input type="hidden" name="note_id" value={note.id} />
-                  <input type="hidden" name="ordinal" value={anchor.ordinal} />
-                  <button type="submit" className="text-xs text-muted hover:text-accent">
-                    Remove passage from {anchor.work_title}
-                  </button>
-                </form>
+                <div key={anchor.ordinal} className="space-y-2 border-l-2 border-rule pl-3">
+                  <form action={editAnchor} className="space-y-2">
+                    <input type="hidden" name="note_id" value={note.id} />
+                    <input type="hidden" name="ordinal" value={anchor.ordinal} />
+                    <input type="hidden" name="work_id" value={anchor.work_id} />
+                    <p className="text-xs text-muted">
+                      {anchor.work_author ?? '—'}, <span className="italic">{anchor.work_title}</span>
+                    </p>
+                    <label className="block w-24 space-y-1">
+                      <span className="text-xs text-muted">Page</span>
+                      <input
+                        type="number"
+                        name="printed_page"
+                        defaultValue={anchor.printed_page ?? ''}
+                      />
+                    </label>
+                    <label className="block space-y-1">
+                      <span className="text-xs text-muted">Passage, verbatim</span>
+                      <textarea
+                        name="quote"
+                        rows={3}
+                        defaultValue={anchor.quote ?? ''}
+                        className="reading"
+                      />
+                    </label>
+                    <label className="block space-y-1">
+                      <span className="text-xs text-muted">Your translation</span>
+                      <textarea
+                        name="translation"
+                        rows={2}
+                        defaultValue={anchor.translation ?? ''}
+                        className="reading"
+                      />
+                    </label>
+                    <button
+                      type="submit"
+                      className="border border-accent px-3 py-1.5 text-xs text-accent hover:bg-accent hover:text-background"
+                    >
+                      Save this passage
+                    </button>
+                  </form>
+                  {/* Its own form: nested inside the one above, one button
+                      would submit the other's fields. */}
+                  <form action={unlinkNote}>
+                    <input type="hidden" name="note_id" value={note.id} />
+                    <input type="hidden" name="ordinal" value={anchor.ordinal} />
+                    <button type="submit" className="text-xs text-muted hover:text-accent">
+                      Remove this passage
+                    </button>
+                  </form>
+                </div>
               ))}
             </div>
+          ) : null}
+
+          {/* A further passage, in this work or another. Adding it here means
+              the link is made where the thought occurred, while reading. */}
+          {note.kind !== 'axis' ? (
+            <details className="mt-4">
+              <summary className="cursor-pointer text-xs text-muted hover:text-accent">
+                {note.anchors.length > 0 ? 'Add another passage' : 'Add a passage'}
+              </summary>
+              <form action={linkNote} className="mt-2 space-y-2 border-l-2 border-rule pl-3">
+                <input type="hidden" name="note_id" value={note.id} />
+                <p className="text-xs text-muted">
+                  A new passage, added alongside {note.anchors.length > 0 ? 'the ones above' : 'the note'}.
+                  To correct an existing passage, edit it above.
+                </p>
+                <div className="flex flex-wrap items-end gap-2">
+                  <label className="min-w-56 flex-1 space-y-1">
+                    <span className="text-xs text-muted">Work id</span>
+                    <input
+                      type="text"
+                      name="work_id"
+                      defaultValue={workId ?? ''}
+                      placeholder="taylor-archive-repertoire-2003"
+                    />
+                  </label>
+                  <label className="w-20 space-y-1">
+                    <span className="text-xs text-muted">Page</span>
+                    <input type="number" name="printed_page" />
+                  </label>
+                </div>
+                <label className="block space-y-1">
+                  <span className="text-xs text-muted">Passage, verbatim</span>
+                  <textarea name="quote" rows={2} className="reading" />
+                </label>
+                <label className="block space-y-1">
+                  <span className="text-xs text-muted">Your translation</span>
+                  <textarea name="translation" rows={2} className="reading" />
+                </label>
+                <button type="submit" className="text-xs text-accent hover:underline">
+                  Add passage
+                </button>
+              </form>
+            </details>
           ) : null}
 
           {note.works.length > 1 ? (

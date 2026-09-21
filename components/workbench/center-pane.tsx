@@ -14,7 +14,7 @@ import {
   listClaimsForWork,
   listNotesForWork,
 } from '@/lib/notes';
-import { getPage, offsetLooksWrong, pageBounds } from '@/lib/pages';
+import { loadPreview } from '@/lib/pages';
 import { listSections, sectionAt } from '@/lib/sections';
 import { getWorkWithContainer, listContents, membershipsFor } from '@/lib/works';
 import { href, type WorkbenchParams } from '@/lib/workbench-url';
@@ -44,21 +44,9 @@ const SOURCE_LABEL: Record<string, string> = {
 };
 
 // Only five works have been through the pipeline, so most of the catalogue
-// reaches the first branch. source_format on the work says a file is held,
-// which is a different claim from pages having been loaded.
-async function loadPreview(workId: string, p: string | undefined) {
-  const bounds = await pageBounds(workId);
-  if (!bounds) return null;
-  const asked = Number.parseInt(p ?? '', 10);
-  const wanted = Number.isNaN(asked)
-    ? bounds.first
-    : Math.min(Math.max(asked, bounds.first), bounds.last);
-  const [page, offsetWrong] = await Promise.all([
-    getPage(workId, wanted),
-    offsetLooksWrong(workId),
-  ]);
-  return page ? { bounds, page, offsetWrong } : null;
-}
+// reaches the no-pages branch of the Preview tab. source_format on the work
+// says a file is held, which is a different claim from pages having been
+// loaded. loadPreview lives in lib/pages.ts, shared with the book page.
 
 function Field({ label, value }: { label: string; value: string | number | null }) {
   if (value === null || value === '') return null;
@@ -311,7 +299,7 @@ export async function CenterPane({ params }: { params: WorkbenchParams }) {
         dossier ? (
           <DossierView
             dossier={dossier}
-            params={params}
+            pageHref={(page) => href(params, { view: 'preview', p: String(page) })}
             workId={work.id}
             language={work.language}
           />

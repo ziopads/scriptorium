@@ -25,6 +25,10 @@ import { href, type WorkbenchParams } from '@/lib/workbench-url';
 // The capture button normally lives beside the Quotation field in the note
 // form, where she is about to type. It only appears here when the note pane is
 // collapsed and there is therefore nowhere else for it to be.
+//
+// basePath puts the viewer outside the workbench, on the book page's Preview
+// tab: page turns go to basePath?p=N, and capture is offered only as a link
+// to the same page in the workbench, where the note form is.
 
 export function PageView({
   params,
@@ -32,12 +36,14 @@ export function PageView({
   bounds,
   language,
   offsetWrong = false,
+  basePath,
 }: {
   params: WorkbenchParams;
   page: PageText;
   bounds: PageBounds;
   language: string | null;
   offsetWrong?: boolean;
+  basePath?: string;
 }) {
   const router = useRouter();
   const [selection, setSelection] = useState('');
@@ -46,7 +52,7 @@ export function PageView({
 
   const blocks = useMemo(() => toBlocks(page.text), [page.text]);
   const lang = htmlLang(language);
-  const paneHidden = params.r === '0';
+  const paneHidden = !basePath && params.r === '0';
 
   useEffect(() => {
     setFolioField(String(page.printed_page));
@@ -56,9 +62,11 @@ export function PageView({
   const go = useCallback(
     (to: number, patch: Record<string, string | null> = {}) => {
       const clamped = Math.min(Math.max(to, bounds.first), bounds.last);
-      router.push(href(params, { p: String(clamped), ...patch }));
+      router.push(
+        basePath ? `${basePath}?p=${clamped}` : href(params, { p: String(clamped), ...patch }),
+      );
     },
-    [bounds.first, bounds.last, params, router],
+    [basePath, bounds.first, bounds.last, params, router],
   );
 
   // Watched only to know whether to offer the fallback button below; the
@@ -167,7 +175,18 @@ export function PageView({
         <p className="text-xs text-accent">p. {scrub} — release to go</p>
       ) : null}
 
-      {paneHidden && selection ? (
+      {basePath ? (
+        <p className="text-xs text-muted">
+          ← and → turn the page. To quote a passage in a note,{' '}
+          <a
+            href={href({ w: params.w }, { view: 'preview', p: String(page.printed_page) })}
+            className="text-accent hover:underline underline-offset-2"
+          >
+            open this page in the workbench
+          </a>
+          .
+        </p>
+      ) : paneHidden && selection ? (
         <button
           type="button"
           disabled={selection.length > MAX_QUOTE_CHARS}

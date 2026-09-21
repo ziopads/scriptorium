@@ -1,22 +1,16 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
-import { NoteCard } from '@/components/note-card';
-import { NoteForm } from '@/components/note-form';
-import { Stars } from '@/components/stars';
 import { changeStatus } from '@/lib/actions';
 import { requireAllowedUser } from '@/lib/auth/guard';
 import { formatBibliography, formatNote, formatShortNote, plain } from '@/lib/citation';
-import { claimCounts, listNotesForWork } from '@/lib/notes';
-import {
-  examinableIds,
-  getWorkWithContainer,
-  listContents,
-  membershipsFor,
-} from '@/lib/works';
-import { KIND_LABEL, PURPOSE_LABEL, STANDING_LABEL, STATUS_LABEL } from '@/lib/types';
+import { getWorkWithContainer, listContents } from '@/lib/works';
+import { PURPOSE_LABEL, STANDING_LABEL, STATUS_LABEL } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
+
+// The book page's Meta tab: citations, the record, and where she is with it.
+// The header and tab bar are the layout's; notes are on the Notes tab.
 
 const STATUSES = ['unread', 'reading', 'read'] as const;
 
@@ -37,7 +31,7 @@ function Field({ label, value }: { label: string; value: string | number | null 
   );
 }
 
-export default async function WorkPage({
+export default async function WorkMetaPage({
   params,
 }: {
   params: Promise<{ id: string }>;
@@ -48,13 +42,7 @@ export default async function WorkPage({
   const work = await getWorkWithContainer(id);
   if (!work) notFound();
 
-  const [memberships, notes, contents, examinable, claims] = await Promise.all([
-    membershipsFor(id),
-    listNotesForWork(id),
-    listContents(id),
-    examinableIds(),
-    claimCounts(id),
-  ]);
+  const contents = await listContents(id);
 
   const chicago = formatBibliography(work, work.container, 'chicago');
   const mla = formatBibliography(work, work.container, 'mla');
@@ -63,102 +51,30 @@ export default async function WorkPage({
 
   return (
     <div className="space-y-8">
-      <header className="space-y-2">
-        {work.container ? (
-          <p className="text-xs text-muted">
-            in{' '}
-            <Link href={`/works/${work.container.id}`} className="italic hover:text-accent">
-              {work.container.title}
-            </Link>
-          </p>
-        ) : null}
-
-        <h1 className="text-2xl italic">{work.title}</h1>
-        {work.subtitle ? <p className="text-lg italic text-muted">{work.subtitle}</p> : null}
-        <p className="text-sm text-muted">
-          {work.author ?? work.editor ?? 'Author unknown'}
-          {work.kind !== 'monograph' ? ` · ${KIND_LABEL[work.kind]}` : null}
-          {examinable.has(work.id) ? null : ' · not examinable'}
-        </p>
-
-        <div className="flex items-baseline gap-2 text-sm">
-          <span className="text-muted">Rating</span>
-          <Stars id={work.id} value={work.priority} />
-        </div>
-
-        <div className="flex flex-wrap items-baseline gap-3 pt-2 text-sm">
-          {memberships.map((m) => (
-            <Link
-              key={m.id}
-              href={`/works?list=${m.id}`}
-              className="text-accent hover:underline underline-offset-2"
-            >
-              {m.name}
-              {m.section_title ? (
-                <span className="text-muted"> · {m.section_letter}. {m.section_title}</span>
-              ) : null}
-              {m.section_kind === 'supplementary' ? (
-                <span className="text-muted"> (supplementary)</span>
-              ) : null}
-            </Link>
-          ))}
-          {work.has_pages ? (
-            <Link
-              href={`/?w=${encodeURIComponent(work.id)}`}
-              className="ml-auto text-accent hover:underline underline-offset-2"
-              title="Open the text in the workbench"
-            >
-              Read
-            </Link>
-          ) : null}
-          {claims.all > 0 ? (
-            <Link
-              href={`/works/${work.id}/claims`}
-              className={`${work.has_pages ? '' : 'ml-auto '}text-accent hover:underline underline-offset-2`}
-              title="Review the claims from this book's dossier"
-            >
-              Claims
-              <span className="pl-1 text-xs text-muted">
-                {claims.unreviewed > 0 ? `${claims.unreviewed} to review` : `${claims.accepted} accepted`}
-              </span>
-            </Link>
-          ) : null}
-          <a
-            href="#notes"
-            className={`${work.has_pages || claims.all > 0 ? '' : 'ml-auto '}text-accent hover:underline underline-offset-2`}
-          >
-            Add a note
-          </a>
-          <Link href={`/works/${work.id}/edit`} className="text-muted hover:text-accent">
-            Edit
-          </Link>
-        </div>
-      </header>
-
       <section className="space-y-3">
-        <h2 className="text-base">Citation</h2>
+        <h2 className="text-base">Citations</h2>
 
         {chicago.missing.length > 0 ? (
           <p className="text-xs text-accent">
-            Incomplete — missing {chicago.missing.join(', ')}. Both forms emit what is
+            Incomplete — missing {chicago.missing.join(', ')}. Every form emits what is
             known and nothing more.
           </p>
         ) : null}
 
         <div className="space-y-1">
-          <p className="text-xs uppercase tracking-wide text-muted">Chicago</p>
+          <p className="text-xs uppercase tracking-wide text-muted">Bibliography entry · Chicago</p>
           <p className="border-l-2 border-rule pl-3 text-sm">{plain(chicago.text)}</p>
         </div>
         <div className="space-y-1">
-          <p className="text-xs uppercase tracking-wide text-muted">MLA</p>
+          <p className="text-xs uppercase tracking-wide text-muted">Works cited · MLA</p>
           <p className="border-l-2 border-rule pl-3 text-sm">{plain(mla.text)}</p>
         </div>
         <div className="space-y-1">
-          <p className="text-xs uppercase tracking-wide text-muted">Chicago note</p>
+          <p className="text-xs uppercase tracking-wide text-muted">Footnote, first citation · Chicago</p>
           <p className="border-l-2 border-rule pl-3 text-sm">{plain(note.text)}</p>
         </div>
         <div className="space-y-1">
-          <p className="text-xs uppercase tracking-wide text-muted">Chicago note, later citations</p>
+          <p className="text-xs uppercase tracking-wide text-muted">Footnote, later citations · Chicago</p>
           <p className="border-l-2 border-rule pl-3 text-sm">
             {plain(shortNote.text).replace(/\.$/, '')}, <span className="text-muted">page</span>.
           </p>
@@ -167,10 +83,10 @@ export default async function WorkPage({
 
       {contents.length > 0 ? (
         <section className="space-y-2">
-          <h2 className="text-base">Contents</h2>
+          <h2 className="text-base">Essays in this volume</h2>
           <p className="text-xs text-muted">
-            Essays in this volume. Each is examinable because the volume is listed, and
-            each can carry its own notes, card, and dossier.
+            Each is examinable because the volume is listed, and each can carry its own
+            notes and dossier.
           </p>
           <ul className="divide-y divide-rule border-y border-rule text-sm">
             {contents.map((essay) => (
@@ -238,25 +154,6 @@ export default async function WorkPage({
             Save
           </button>
         </form>
-      </section>
-
-      <section id="notes" className="space-y-4">
-        <h2 className="text-base">Notes</h2>
-
-        {notes.length === 0 ? (
-          <p className="text-sm text-muted">None yet.</p>
-        ) : (
-          <ul className="divide-y divide-rule border-y border-rule">
-            {notes.map((n) => (
-              <NoteCard key={n.id} note={n} workId={work.id} />
-            ))}
-          </ul>
-        )}
-
-        <div className="border-t border-rule pt-4">
-          <h3 className="mb-3 text-sm">New note on this work</h3>
-          <NoteForm workId={work.id} />
-        </div>
       </section>
     </div>
   );

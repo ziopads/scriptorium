@@ -1,7 +1,8 @@
 import Link from 'next/link';
 
 import type { Dossier, DossierQuote } from '@/lib/dossier';
-import { href, type WorkbenchParams } from '@/lib/workbench-url';
+
+type PageHref = (page: number) => string;
 
 // The Dossier tab: a study aid generated from the book's own text by
 // pipeline/dossier.py, in the order she would review it: the general argument,
@@ -14,9 +15,10 @@ import { href, type WorkbenchParams } from '@/lib/workbench-url';
 // claims page; the workbench's Claims tab shows the ones she accepted.
 //
 // Every page shown is a link that opens Preview at that page, so any sentence
-// here can be checked against the book in one click.
+// here can be checked against the book in one click. pageHref decides which
+// Preview: the workbench's, or the book page's.
 
-function PageLinks({ params, pages }: { params: WorkbenchParams; pages?: number[] }) {
+function PageLinks({ pageHref, pages }: { pageHref: PageHref; pages?: number[] }) {
   if (!pages || pages.length === 0) return null;
   return (
     <span className="text-xs text-muted">
@@ -25,7 +27,7 @@ function PageLinks({ params, pages }: { params: WorkbenchParams; pages?: number[
         <span key={page}>
           {i > 0 ? ', ' : ''}
           <Link
-            href={href(params, { view: 'preview', p: String(page) })}
+            href={pageHref(page)}
             className="hover:text-accent underline-offset-2 hover:underline"
           >
             {page}
@@ -52,18 +54,18 @@ function Unfound({ terms }: { terms?: string[] }) {
 
 function Quote({
   q,
-  params,
+  pageHref,
   lang,
 }: {
   q: DossierQuote;
-  params: WorkbenchParams;
+  pageHref: PageHref;
   lang: string | undefined;
 }) {
   return (
     <blockquote lang={lang} className="reading-sm border-l-2 border-rule pl-3">
       &ldquo;{q.text}&rdquo;{' '}
       <Link
-        href={href(params, { view: 'preview', p: String(q.page) })}
+        href={pageHref(q.page)}
         className="whitespace-nowrap text-xs text-muted hover:text-accent hover:underline underline-offset-2"
       >
         p. {q.pages}
@@ -82,12 +84,12 @@ function Quote({
 
 export function DossierView({
   dossier,
-  params,
+  pageHref,
   workId,
   language,
 }: {
   dossier: Dossier;
-  params: WorkbenchParams;
+  pageHref: PageHref;
   workId: string;
   language: string | null;
 }) {
@@ -118,7 +120,7 @@ export function DossierView({
           <div key={i} className="space-y-1">
             <p className="reading-sm">{para.text}</p>
             <Unfound terms={para.unfound} />
-            <PageLinks params={params} pages={para.pages} />
+            <PageLinks pageHref={pageHref} pages={para.pages} />
           </div>
         ))}
       </section>
@@ -136,7 +138,7 @@ export function DossierView({
               <Unfound terms={a.unfound} />
               {a.example ? <p className="text-xs text-muted">Ejemplo: {a.example}</p> : null}
               {a.quotes.map((q, j) => (
-                <Quote key={j} q={q} params={params} lang={lang} />
+                <Quote key={j} q={q} pageHref={pageHref} lang={lang} />
               ))}
             </li>
           ))}
@@ -153,7 +155,7 @@ export function DossierView({
                 <dd className="space-y-2">
                   <p className="reading-sm">{t.definition}</p>
                   <Unfound terms={t.unfound} />
-                  <Quote q={t.quote} params={params} lang={lang} />
+                  <Quote q={t.quote} pageHref={pageHref} lang={lang} />
                 </dd>
               </div>
             ))}
@@ -182,7 +184,7 @@ export function DossierView({
                   <li key={i} className="space-y-1">
                     <p className="reading-sm">{b.text}</p>
                     <Unfound terms={b.unfound} />
-                    <PageLinks params={params} pages={b.pages} />
+                    <PageLinks pageHref={pageHref} pages={b.pages} />
                   </li>
                 ))}
               </ul>
@@ -192,11 +194,12 @@ export function DossierView({
       </section>
 
       <p className="border-t border-rule pt-4 text-xs text-muted">
-        Condensed from the book&rsquo;s claims, each with its passages.{' '}
+        Condensed from the book&rsquo;s claims, each with its passages. Review them in
+        the{' '}
         <Link href={`/works/${workId}/claims`} className="text-accent hover:underline underline-offset-2">
-          Review the claims
+          book&rsquo;s Claims tab
         </Link>
-        ; the ones you accept appear in the Claims tab.
+        ; the ones you accept also appear in the workbench&rsquo;s.
       </p>
     </div>
   );
