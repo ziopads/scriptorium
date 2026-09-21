@@ -487,7 +487,8 @@ export async function listWorkbenchRows(): Promise<WorkbenchRow[]> {
               select note_id from note_works where work_id = w.id
             ) t
             join notes n on n.id = t.note_id
-            where n.rejected_at is null) as note_count,
+            where n.rejected_at is null
+              and not ('dossier' = any(n.tags) and n.reviewed = false)) as note_count,
            exists (select 1 from examinable_works e where e.id = w.id) as examinable
     from works w
     left join lateral (

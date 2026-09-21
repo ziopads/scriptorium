@@ -1,6 +1,14 @@
 import type { Timestamp } from '@/lib/dates';
 
 export type WorkStatus = 'unread' | 'reading' | 'read';
+
+// How far she has got with the book. Every work was seeded 'unread'; the
+// stored values stay as they are and only the display changes.
+export const STATUS_LABEL: Record<WorkStatus, string> = {
+  unread: 'Not started',
+  reading: 'Reading',
+  read: 'Read',
+};
 export type SourceFormat = 'pdf_text' | 'pdf_ocr' | 'epub' | 'none';
 export type NoteOrigin = 'human' | 'assistant';
 

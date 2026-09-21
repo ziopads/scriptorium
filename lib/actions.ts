@@ -466,6 +466,7 @@ export async function acceptNote(form: FormData): Promise<void> {
   await approveNote(id);
   revalidatePath('/works', 'layout');
   revalidatePath('/notes');
+  revalidatePath('/');
 }
 
 export async function declineNote(form: FormData): Promise<void> {
@@ -475,6 +476,7 @@ export async function declineNote(form: FormData): Promise<void> {
   await rejectNote(id);
   revalidatePath('/works', 'layout');
   revalidatePath('/notes');
+  revalidatePath('/');
 }
 
 export async function reconsiderNote(form: FormData): Promise<void> {
@@ -484,6 +486,7 @@ export async function reconsiderNote(form: FormData): Promise<void> {
   await restoreNote(id);
   revalidatePath('/works', 'layout');
   revalidatePath('/notes');
+  revalidatePath('/');
 }
 
 // A later note answers a question. The question stays; the link records it.

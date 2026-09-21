@@ -30,10 +30,12 @@ WHAT IT PRODUCES
         themes         at most three connections per dissertation theme,
                        labelled in the app as the assistant's proposals
 
-    --load writes four rows to dossier_sections (migration 004), each with
-    origin 'assistant', reviewed false and the model recorded: summary,
-    argument (the key arguments, with the full record for "all claims"),
-    key_terms and themes. Bodies are JSON in the existing text column.
+    --load writes, in one transaction, four rows to dossier_sections
+    (migration 004), each with origin 'assistant', reviewed false and the
+    model recorded: summary, argument (the key arguments), key_terms and
+    themes; and one assistant note per claim, tagged 'dossier', with an anchor
+    for each verified quotation, for her to review on the book's claims page.
+    Bodies are JSON in the existing text column.
 
 WHY IT CANNOT INVENT A QUOTATION OR A PAGE
 
@@ -1113,8 +1115,44 @@ def condense(work_id: str, model: str) -> None:
 
 # --------------------------------------------------------------------------
 # Load
+#
+# Two things go into Neon in one transaction: the study aid, as four rows of
+# dossier_sections, and the record, as one assistant note per claim.
+#
+# Each claim note: kind 'note', attribution 'author' (the claim is the
+# author's, never hers), origin 'assistant', reviewed false, tagged 'dossier',
+# plus 'respaldo-parcial' if the check found its quotations only partly
+# support it and 'revisar-nombres' if its wording holds a name or number not
+# in the book. One note_anchors row per verified quotation, with the printed
+# page. The app keeps unreviewed dossier notes out of her lists and reviews
+# them on the book's claims page (lib/notes.ts).
+#
+# A regenerated dossier numbers its claims afresh, so a reload cannot tell
+# which new claim is which old one. Claims are therefore written only for a
+# book that has none. --replace-claims deletes the ones still unreviewed and
+# writes the new set; everything she accepted or rejected stays as it is.
 
-def load(work_id: str, dry_run: bool, force: bool) -> None:
+PARTIAL_TAG = "respaldo-parcial"
+NAMES_TAG = "revisar-nombres"
+
+
+def claim_body(c: dict) -> str:
+    body = c["claim"].strip()
+    if c.get("example"):
+        body += f"\n\nEjemplo: {c['example'].strip()}"
+    return body
+
+
+def claim_tags(c: dict) -> list[str]:
+    tags = ["dossier"]
+    if c.get("check", {}).get("verdict") == "partial":
+        tags.append(PARTIAL_TAG)
+    if c.get("unfound"):
+        tags.append(NAMES_TAG)
+    return tags
+
+
+def load(work_id: str, dry_run: bool, force: bool, replace_claims: bool) -> None:
     path = DOSSIERS / f"{work_id}.json"
     if not path.exists():
         sys.exit(f"no dossier file for {work_id}; generate it first")
@@ -1123,29 +1161,32 @@ def load(work_id: str, dry_run: bool, force: bool) -> None:
         sys.exit(f"{work_id}: the file has no study aid in the current form; run --condense first")
     claims = doc["claims"]
 
-    def pages_of(ids) -> list[str]:
-        pages = sorted({q["page"] for i in ids if i in claims for q in claims[i]["quotes"]})
+    def pages_of(ids) -> list[int]:
+        return sorted({q["page"] for i in ids if i in claims for q in claims[i]["quotes"]})
+
+    def with_pages(items: list[dict]) -> list[dict]:
+        return [{**item, "pages": pages_of(item["claims"])} for item in items]
+
+    def cited(pages: list[int]) -> list[str]:
         return [f"p. {p}" for p in pages]
 
-    def ids_in(items) -> list[str]:
-        return sorted({i for item in items for i in item["claims"]}, key=lambda s: int(s[1:]))
+    summary = with_pages(doc["summary"])
+    themes = [{"theme": t["theme"], "bridges": with_pages(t["bridges"])} for t in doc["themes"]]
+    argument_pages = sorted({q["page"] for a in doc["key_arguments"] for q in a["quotes"]})
+    term_pages = sorted({t["quote"]["page"] for t in doc["key_terms"]})
 
-    bridges = [b for t in doc["themes"] for b in t["bridges"]]
     rows = [
-        ("summary",
-         {"version": VERSION, "paragraphs": doc["summary"]},
-         pages_of(ids_in(doc["summary"]))),
-        ("argument",
-         {"version": VERSION, "key_arguments": doc["key_arguments"],
-          "groups": doc["groups"], "claims": claims},
-         pages_of(ids_in(doc["key_arguments"]))),
-        ("key_terms",
-         {"version": VERSION, "terms": doc["key_terms"]},
-         pages_of(ids_in(doc["key_terms"]))),
-        ("themes",
-         {"version": VERSION, "themes": doc["themes"]},
-         pages_of(ids_in(bridges))),
+        ("summary", {"version": VERSION, "paragraphs": summary},
+         cited(sorted({p for s in summary for p in s["pages"]}))),
+        ("argument", {"version": VERSION, "key_arguments": doc["key_arguments"]},
+         cited(argument_pages)),
+        ("key_terms", {"version": VERSION, "terms": doc["key_terms"]},
+         cited(term_pages)),
+        ("themes", {"version": VERSION, "themes": themes},
+         cited(sorted({p for t in themes for b in t["bridges"] for p in b["pages"]}))),
     ]
+
+    ordered = sorted(claims.items(), key=lambda kv: int(kv[0][1:]))
 
     with connect() as conn:
         with conn.cursor() as cur:
@@ -1155,6 +1196,18 @@ def load(work_id: str, dry_run: bool, force: bool) -> None:
                 (work_id, [r[0] for r in rows]),
             )
             existing = dict(cur.fetchall())
+            cur.execute(
+                """
+                select count(*) filter (where n.reviewed = false and n.rejected_at is null),
+                       count(*)
+                from notes n
+                where 'dossier' = any(n.tags)
+                  and exists (select 1 from note_anchors a
+                              where a.note_id = n.id and a.work_id = %s)
+                """,
+                (work_id,),
+            )
+            pending, loaded = cur.fetchone()
 
         reviewed = [k for k, v in existing.items() if v]
         if reviewed and not force:
@@ -1167,6 +1220,17 @@ def load(work_id: str, dry_run: bool, force: bool) -> None:
             state = "replace" if kind in existing else "insert"
             print(f"  {state:<7} {kind:<9} {len(json.dumps(body, ensure_ascii=False)):>9,} chars"
                   f"  {len(sources)} pages cited")
+
+        if loaded and not replace_claims:
+            write_claims = False
+            print(f"  claims    {loaded} already loaded ({pending} unreviewed); left as they are."
+                  " --replace-claims replaces the unreviewed ones.")
+        else:
+            write_claims = True
+            anchors = sum(len(c["quotes"]) for _, c in ordered)
+            gone = f", replacing {pending} unreviewed" if loaded else ""
+            print(f"  claims    {len(ordered)} notes with {anchors} quotations{gone}")
+
         if dry_run:
             print("\n  dry run: nothing written")
             return
@@ -1189,7 +1253,43 @@ def load(work_id: str, dry_run: bool, force: bool) -> None:
                         (work_id, kind, json.dumps(body, ensure_ascii=False), sources,
                          doc["model"], generated),
                     )
-    print(f"\n  {len(rows)} sections loaded for {work_id}")
+
+                if write_claims and loaded:
+                    cur.execute(
+                        """
+                        delete from notes n
+                        where 'dossier' = any(n.tags)
+                          and n.reviewed = false and n.rejected_at is null
+                          and exists (select 1 from note_anchors a
+                                      where a.note_id = n.id and a.work_id = %s)
+                        """,
+                        (work_id,),
+                    )
+
+                if write_claims:
+                    anchor_rows = []
+                    for _, c in ordered:
+                        cur.execute(
+                            """
+                            insert into notes (kind, body, attribution, tags, origin, reviewed)
+                            values ('note', %s, 'author', %s, 'assistant', false)
+                            returning id
+                            """,
+                            (claim_body(c), claim_tags(c)),
+                        )
+                        note_id = cur.fetchone()[0]
+                        for n, q in enumerate(c["quotes"], start=1):
+                            anchor_rows.append((note_id, n, work_id, q["page"], q["text"]))
+                    cur.executemany(
+                        """
+                        insert into note_anchors (note_id, ordinal, work_id, printed_page, quote)
+                        values (%s, %s, %s, %s, %s)
+                        """,
+                        anchor_rows,
+                    )
+
+    written = f" and {len(ordered)} claim notes" if write_claims else ""
+    print(f"\n  {len(rows)} sections{written} loaded for {work_id}")
 
 
 # --------------------------------------------------------------------------
@@ -1205,6 +1305,8 @@ def main() -> None:
                         help="write the study aid into dossier_sections")
     parser.add_argument("--force", action="store_true",
                         help="with --load, replace sections already marked reviewed")
+    parser.add_argument("--replace-claims", action="store_true",
+                        help="with --load, replace the claims still unreviewed")
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--units", type=int, metavar="N",
                         help="generate from the first N units only, for a trial")
@@ -1216,7 +1318,7 @@ def main() -> None:
 
     for work_id in works:
         if args.load:
-            load(work_id, args.dry_run, args.force)
+            load(work_id, args.dry_run, args.force, args.replace_claims)
         elif args.condense:
             condense(work_id, args.model)
         elif args.dry_run:

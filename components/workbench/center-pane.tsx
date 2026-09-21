@@ -1,22 +1,30 @@
 import Link from 'next/link';
 
 import { NoteCard } from '@/components/note-card';
-import { ClaimsView, DossierView } from '@/components/workbench/dossier-view';
+import { ClaimCard } from '@/components/claim-card';
+import { DossierView } from '@/components/workbench/dossier-view';
 import { PageView } from '@/components/workbench/page-view';
 import { Tabs } from '@/components/workbench/tabs';
-import { formatBibliography, formatNote, plain } from '@/lib/citation';
+import { formatBibliography, formatNote, formatShortNote, plain } from '@/lib/citation';
 import { getDossier } from '@/lib/dossier';
-import { getAxisTree, listAxesForWork, listNotesForWork } from '@/lib/notes';
+import {
+  claimCounts,
+  getAxisTree,
+  listAxesForWork,
+  listClaimsForWork,
+  listNotesForWork,
+} from '@/lib/notes';
 import { getPage, offsetLooksWrong, pageBounds } from '@/lib/pages';
 import { listSections, sectionAt } from '@/lib/sections';
 import { getWorkWithContainer, listContents, membershipsFor } from '@/lib/works';
 import { href, type WorkbenchParams } from '@/lib/workbench-url';
-import { KIND_LABEL, PURPOSE_LABEL, STANDING_LABEL } from '@/lib/types';
+import { KIND_LABEL, PURPOSE_LABEL, STANDING_LABEL, STATUS_LABEL } from '@/lib/types';
 
 // The centre pane: whatever is selected on the left, in full. A work has tabs
 // (Meta, Contents, Preview, Dossier, Claims, Notes, Axes); an axis shows its
-// tree. Dossier shows the study aid pipeline/dossier.py loaded, and Claims the
-// record it was condensed from, for the works it has run on.
+// tree. Dossier shows the study aid pipeline/dossier.py loaded. Claims shows
+// the dossier claims she has accepted; all of them are reviewed on the book's
+// claims page.
 
 const VIEWS = [
   { id: 'meta', label: 'Meta' },
@@ -134,11 +142,17 @@ export async function CenterPane({ params }: { params: WorkbenchParams }) {
   const preview = view === 'preview' ? await loadPreview(work.id, params.p) : null;
   const sections = view === 'toc' ? await listSections(work.id) : [];
   const inSection = preview ? await sectionAt(work.id, preview.page.printed_page) : null;
-  const dossier =
-    view === 'dossier' || view === 'claims' ? await getDossier(work.id) : null;
+  const dossier = view === 'dossier' ? await getDossier(work.id) : null;
+  const claimsData =
+    view === 'claims'
+      ? await Promise.all([listClaimsForWork(work.id, 'accepted'), claimCounts(work.id)])
+      : null;
+  const accepted = claimsData?.[0] ?? [];
+  const counts = claimsData?.[1] ?? null;
 
   const chicago = formatBibliography(work, work.container, 'chicago');
   const note = formatNote(work, work.container, null);
+  const shortNote = formatShortNote(work, null);
 
   return (
     <div className="space-y-4">
@@ -184,6 +198,10 @@ export async function CenterPane({ params }: { params: WorkbenchParams }) {
             <p className="reading-sm border-l-2 border-rule pl-3">{plain(chicago.text)}</p>
             <p className="text-xs uppercase tracking-wide text-muted pt-1">Footnote, first citation</p>
             <p className="reading-sm border-l-2 border-rule pl-3">{plain(note.text)}</p>
+            <p className="text-xs uppercase tracking-wide text-muted pt-1">Footnote, later citations</p>
+            <p className="reading-sm border-l-2 border-rule pl-3">
+              {plain(shortNote.text).replace(/\.$/, '')}, <span className="text-muted">page</span>.
+            </p>
           </section>
           <dl>
             <Field label="Purpose" value={PURPOSE_LABEL[work.purpose]} />
@@ -195,7 +213,7 @@ export async function CenterPane({ params }: { params: WorkbenchParams }) {
             <Field label="Editor" value={work.author ? work.editor : null} />
             <Field label="Language" value={work.language} />
             <Field label="Source" value={SOURCE_LABEL[work.source_format]} />
-            <Field label="Status" value={work.status} />
+            <Field label="Reading" value={STATUS_LABEL[work.status]} />
           </dl>
           {work.standing_note ? (
             <p className="border-l-2 border-accent pl-3 text-sm">{work.standing_note}</p>
@@ -291,20 +309,50 @@ export async function CenterPane({ params }: { params: WorkbenchParams }) {
 
       {view === 'dossier' ? (
         dossier ? (
-          <DossierView dossier={dossier} params={params} language={work.language} />
+          <DossierView
+            dossier={dossier}
+            params={params}
+            workId={work.id}
+            language={work.language}
+          />
         ) : (
           <p className="text-sm text-muted">No dossier yet for this work.</p>
         )
       ) : null}
 
       {view === 'claims' ? (
-        dossier ? (
-          <ClaimsView dossier={dossier} params={params} language={work.language} />
-        ) : (
+        !counts || counts.all === 0 ? (
           <p className="text-sm text-muted">
             No claims yet: they come with the dossier, which has not been generated
             for this work.
           </p>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-xs text-muted">
+              {counts.accepted === 0
+                ? 'None accepted yet. '
+                : `${counts.accepted} accepted of ${counts.all}. `}
+              <Link href={`/works/${work.id}/claims`} className="text-accent hover:underline underline-offset-2">
+                {counts.unreviewed > 0
+                  ? `Review claims (${counts.unreviewed} unreviewed)`
+                  : 'Review claims'}
+              </Link>
+            </p>
+            {accepted.length > 0 ? (
+              <ol className="divide-y divide-rule border-y border-rule">
+                {accepted.map((c) => (
+                  <ClaimCard
+                    key={c.id}
+                    claim={c}
+                    workId={work.id}
+                    pageHref={(page) => href(params, { view: 'preview', p: String(page) })}
+                    lang={work.language?.split(',')[0]?.trim() || undefined}
+                    mode="read"
+                  />
+                ))}
+              </ol>
+            ) : null}
+          </div>
         )
       ) : null}
 

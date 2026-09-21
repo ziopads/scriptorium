@@ -1,17 +1,17 @@
-// Reads for a work's dossier, written by pipeline/dossier.py into
+// Reads for a work's study aid, written by pipeline/dossier.py into
 // dossier_sections (migration 004).
 //
 // Four kinds, each body JSON in the text column:
 //
 //   summary    { paragraphs: [CitedText] }
-//   argument   { key_arguments: [KeyArgument], groups, claims: { id: Claim } }
+//   argument   { key_arguments: [KeyArgument] }
 //   key_terms  { terms: [KeyTerm] }
 //   themes     { themes: [{ theme, bridges: [CitedText] }] }
 //
-// The study aid is the summary, the key arguments, the key terms and the
-// themes. The claims are the full record behind it. Every quotation, in the
-// aid or the record, was found in the book's own page text, and its page is
-// the printed page where it was found.
+// The claims the aid was condensed from are not here: --load writes each one
+// as an assistant note tagged 'dossier' (lib/notes.ts), reviewed on the book's
+// claims page. Every quotation, in the aid or in a claim, was found in the
+// book's own page text, and its page is the printed page where it was found.
 
 import { db } from '@/lib/db';
 
@@ -20,24 +20,15 @@ export interface DossierQuote {
   page: number;     // printed page where it starts
   pages: string;    // '45', or '45–46' across a page break
   match: string;    // 'exact', or 'close (96%)' for an OCR slip
-  claim?: string;   // in the aid: the claim it was taken from
-}
-
-export interface DossierClaim {
-  claim: string;
-  topic: string;
-  example: string;
-  unit: string;
-  quotes: DossierQuote[];
-  check: { verdict: 'supported' | 'partial'; reason: string };
-  // Capitalised words and numbers in the wording that the book's text does
-  // not contain: a date or name the model may have brought from elsewhere.
-  unfound?: string[];
+  claim?: string;   // the claim it was taken from
 }
 
 export interface CitedText {
   text: string;
   claims: string[];
+  pages?: number[]; // the printed pages its claims quote, worked out at load
+  // Capitalised words and numbers in the wording that the book's text does
+  // not contain: a date or name the model may have brought from elsewhere.
   unfound?: string[];
 }
 
@@ -66,8 +57,6 @@ export interface Dossier {
   keyArguments: KeyArgument[];
   terms: KeyTerm[];
   themes: { theme: string; bridges: CitedText[] }[];
-  groups: { topic: string; claims: string[] }[];
-  claims: Record<string, DossierClaim>;
 }
 
 function parse<T>(body: string | undefined, fallback: T): T {
@@ -79,8 +68,7 @@ function parse<T>(body: string | undefined, fallback: T): T {
   }
 }
 
-// Null unless the argument section exists: it carries the claims every page
-// in the other sections comes from.
+// Null unless the argument section exists: the key arguments are the aid.
 export async function getDossier(workId: string): Promise<Dossier | null> {
   const sql = db();
   const rows = (await sql`
@@ -99,11 +87,7 @@ export async function getDossier(workId: string): Promise<Dossier | null> {
   const argument = byKind.get('argument');
   if (!argument) return null;
 
-  const arg = parse<{
-    key_arguments?: KeyArgument[];
-    groups?: Dossier['groups'];
-    claims?: Dossier['claims'];
-  }>(argument.body, {});
+  const arg = parse<{ key_arguments?: KeyArgument[] }>(argument.body, {});
   const summary = parse<{ paragraphs?: CitedText[] }>(byKind.get('summary')?.body, {});
   const terms = parse<{ terms?: KeyTerm[] }>(byKind.get('key_terms')?.body, {});
   const themes = parse<{ themes?: Dossier['themes'] }>(byKind.get('themes')?.body, {});
@@ -118,17 +102,5 @@ export async function getDossier(workId: string): Promise<Dossier | null> {
     keyArguments: arg.key_arguments ?? [],
     terms: terms.terms ?? [],
     themes: themes.themes ?? [],
-    groups: arg.groups ?? [],
-    claims: arg.claims ?? {},
   };
-}
-
-// The printed pages a set of claims rests on, in order, for citing a
-// paragraph of the summary or a bridge.
-export function pagesOf(dossier: Dossier, ids: string[]): number[] {
-  const pages = new Set<number>();
-  for (const id of ids) {
-    for (const q of dossier.claims[id]?.quotes ?? []) pages.add(q.page);
-  }
-  return [...pages].sort((a, b) => a - b);
 }

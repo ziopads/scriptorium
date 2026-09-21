@@ -97,7 +97,15 @@ async function withRelations(notes: Note[]): Promise<NoteWithRelations[]> {
 
 // ---------------------------------------------------------------------------
 // Reads. Every list excludes rejected proposals unless it is the rejected list.
+//
+// Claims loaded from a dossier (pipeline/dossier.py --load) are assistant notes
+// tagged 'dossier', two hundred or so per book. Until she accepts one it stays
+// out of every list below, the proposals queue included, and is reviewed on
+// the book's claims page instead; otherwise a single book would bury her own
+// notes. Once accepted it is an ordinary note and appears everywhere.
 // ---------------------------------------------------------------------------
+
+export const DOSSIER_TAG = 'dossier';
 
 export async function listNotesForWork(workId: string): Promise<NoteWithRelations[]> {
   const sql = db();
@@ -107,6 +115,7 @@ export async function listNotesForWork(workId: string): Promise<NoteWithRelation
            n.rejected_at, n.created_at, n.updated_at
     from notes n
     where n.rejected_at is null
+      and not (${DOSSIER_TAG} = any(n.tags) and n.reviewed = false)
       and (exists (select 1 from note_anchors a where a.note_id = n.id and a.work_id = ${workId})
         or exists (select 1 from note_works  m where m.note_id = n.id and m.work_id = ${workId}))
     order by n.created_at
@@ -122,6 +131,7 @@ export async function listAllNotes(): Promise<NoteWithRelations[]> {
            tags, origin, reviewed, rejected_at, created_at, updated_at
     from notes
     where rejected_at is null and parent_id is null
+      and not (${DOSSIER_TAG} = any(tags) and reviewed = false)
     order by updated_at desc
   `) as Note[];
   return withRelations(notes);
@@ -145,6 +155,7 @@ export async function listNotesByTag(tag: string): Promise<NoteWithRelations[]> 
            tags, origin, reviewed, rejected_at, created_at, updated_at
     from notes
     where ${tag} = any(tags) and rejected_at is null
+      and not (${DOSSIER_TAG} = any(tags) and reviewed = false)
     order by updated_at desc
   `) as Note[];
   return withRelations(notes);
@@ -163,6 +174,7 @@ export async function searchNotes(query: string): Promise<NoteWithRelations[]> {
     from notes n
     left join note_anchors na on na.note_id = n.id
     where n.rejected_at is null
+      and not (${DOSSIER_TAG} = any(n.tags) and n.reviewed = false)
       and (n.body ilike ${pattern} or n.title ilike ${pattern}
            or na.quote ilike ${pattern} or na.translation ilike ${pattern})
     order by n.updated_at desc
@@ -170,7 +182,8 @@ export async function searchNotes(query: string): Promise<NoteWithRelations[]> {
   return withRelations(notes);
 }
 
-// The proposals queue: assistant notes she has not yet accepted.
+// The proposals queue: assistant notes she has not yet accepted. Dossier
+// claims are reviewed on each book's claims page, not here.
 export async function listUnreviewedNotes(): Promise<NoteWithRelations[]> {
   const sql = db();
   const notes = (await sql`
@@ -178,6 +191,7 @@ export async function listUnreviewedNotes(): Promise<NoteWithRelations[]> {
            tags, origin, reviewed, rejected_at, created_at, updated_at
     from notes
     where reviewed = false and rejected_at is null
+      and not (${DOSSIER_TAG} = any(tags))
     order by created_at desc
   `) as Note[];
   return withRelations(notes);
@@ -190,9 +204,66 @@ export async function listRejectedNotes(): Promise<NoteWithRelations[]> {
            tags, origin, reviewed, rejected_at, created_at, updated_at
     from notes
     where rejected_at is not null
+      and not (${DOSSIER_TAG} = any(tags))
     order by rejected_at desc
   `) as Note[];
   return withRelations(notes);
+}
+
+// ---------------------------------------------------------------------------
+// Dossier claims, for review on a book's claims page and, once accepted, in
+// the workbench's Claims tab. In the book's order: by the first page quoted.
+// ---------------------------------------------------------------------------
+
+export type ClaimFilter = 'unreviewed' | 'accepted' | 'rejected' | 'reviewed' | 'all';
+
+export const CLAIM_FILTERS: { id: ClaimFilter; label: string }[] = [
+  { id: 'unreviewed', label: 'Unreviewed' },
+  { id: 'accepted', label: 'Accepted' },
+  { id: 'rejected', label: 'Rejected' },
+  { id: 'reviewed', label: 'Reviewed' },
+  { id: 'all', label: 'All' },
+];
+
+export async function listClaimsForWork(
+  workId: string,
+  filter: ClaimFilter,
+): Promise<NoteWithRelations[]> {
+  const sql = db();
+  const notes = (await sql`
+    select n.id, n.kind, n.parent_id, n.ordinal, n.title, n.body,
+           n.attribution, n.attributed_to, n.tags, n.origin, n.reviewed,
+           n.rejected_at, n.created_at, n.updated_at
+    from notes n
+    where ${DOSSIER_TAG} = any(n.tags)
+      and exists (select 1 from note_anchors a where a.note_id = n.id and a.work_id = ${workId})
+      and (
+        ${filter} = 'all'
+        or (${filter} = 'unreviewed' and n.reviewed = false and n.rejected_at is null)
+        or (${filter} = 'accepted' and n.reviewed = true and n.rejected_at is null)
+        or (${filter} = 'rejected' and n.rejected_at is not null)
+        or (${filter} = 'reviewed' and (n.reviewed = true or n.rejected_at is not null))
+      )
+    order by (select min(a.printed_page) from note_anchors a
+              where a.note_id = n.id and a.work_id = ${workId}) nulls last, n.id
+  `) as Note[];
+  return withRelations(notes);
+}
+
+export async function claimCounts(workId: string): Promise<Record<ClaimFilter, number>> {
+  const sql = db();
+  const rows = (await sql`
+    select
+      count(*) filter (where n.reviewed = false and n.rejected_at is null)::int as unreviewed,
+      count(*) filter (where n.reviewed = true and n.rejected_at is null)::int as accepted,
+      count(*) filter (where n.rejected_at is not null)::int as rejected,
+      count(*) filter (where n.reviewed = true or n.rejected_at is not null)::int as reviewed,
+      count(*)::int as "all"
+    from notes n
+    where ${DOSSIER_TAG} = any(n.tags)
+      and exists (select 1 from note_anchors a where a.note_id = n.id and a.work_id = ${workId})
+  `) as Record<ClaimFilter, number>[];
+  return rows[0];
 }
 
 // Claims she has not yet said whose they are.
@@ -264,6 +335,7 @@ export async function allTags(): Promise<{ tag: string; count: number }[]> {
     select tag, count(*)::int as count
     from notes, unnest(tags) as tag
     where rejected_at is null
+      and not (${DOSSIER_TAG} = any(tags) and reviewed = false)
     group by tag order by count desc, tag
   `;
   return rows as { tag: string; count: number }[];

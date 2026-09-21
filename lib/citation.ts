@@ -240,6 +240,48 @@ export function plain(text: string): string {
   return text.replaceAll('*', '');
 }
 
+// Chicago's shortened note, for every citation after the first: surname, short
+// title, page. "Rama, *Transculturación narrativa*, 45."
+//
+// The surname is the part before the comma in "Rama, Ángel"; a name with no
+// comma gives its last word. The short title drops the subtitle and a leading
+// article, and stops before the first article, preposition or conjunction
+// after its second word, which keeps the key words Chicago asks for
+// (Transculturación narrativa, Polemics of Possession, Teoría del texto). It
+// is a rule of thumb: an odd title may want shortening by hand.
+const LEADING_ARTICLE = new Set(['the', 'a', 'an', 'el', 'la', 'los', 'las', 'lo', 'un', 'una']);
+const BREAK_WORD = new Set([
+  'de', 'del', 'en', 'e', 'y', 'o', 'u', 'el', 'la', 'los', 'las', 'por', 'para',
+  'con', 'sobre', 'entre', 'a', 'al', 'of', 'in', 'and', 'or', 'the', 'on', 'for',
+  'to', 'from', 'at', 'as', 'an',
+]);
+
+function surname(name: string): string {
+  const trimmed = name.trim();
+  if (trimmed.includes(',')) return trimmed.split(',')[0].trim();
+  const words = trimmed.split(/\s+/);
+  return words[words.length - 1];
+}
+
+function shortTitle(title: string): string {
+  let words = title.trim().split(/\s+/);
+  if (words.length > 1 && LEADING_ARTICLE.has(words[0].toLowerCase())) words = words.slice(1);
+  if (words.length <= 4) return words.join(' ');
+  const cut = words.findIndex((w, i) => i >= 2 && BREAK_WORD.has(w.toLowerCase()));
+  return words.slice(0, cut === -1 ? 4 : cut).join(' ');
+}
+
+export function formatShortNote(work: Work, page?: number | null): Citation {
+  const who = work.author ? surname(work.author) : work.editor ? surname(work.editor) : null;
+  const short = shortTitle(work.title);
+  const title = QUOTED.has(work.kind) ? `"${short}"` : `*${short}*`;
+  const head = who ? `${who}, ${title}` : title;
+  return {
+    text: page === null || page === undefined ? `${head}.` : `${head}, ${page}.`,
+    missing: who ? [] : ['author'],
+  };
+}
+
 // Convenience for a work already carrying its container.
 export function citeWork(
   work: WorkWithContainer,

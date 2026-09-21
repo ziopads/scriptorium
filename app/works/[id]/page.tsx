@@ -6,15 +6,15 @@ import { NoteForm } from '@/components/note-form';
 import { Stars } from '@/components/stars';
 import { changeStatus } from '@/lib/actions';
 import { requireAllowedUser } from '@/lib/auth/guard';
-import { formatBibliography, formatNote, plain } from '@/lib/citation';
-import { listNotesForWork } from '@/lib/notes';
+import { formatBibliography, formatNote, formatShortNote, plain } from '@/lib/citation';
+import { claimCounts, listNotesForWork } from '@/lib/notes';
 import {
   examinableIds,
   getWorkWithContainer,
   listContents,
   membershipsFor,
 } from '@/lib/works';
-import { KIND_LABEL, PURPOSE_LABEL, STANDING_LABEL } from '@/lib/types';
+import { KIND_LABEL, PURPOSE_LABEL, STANDING_LABEL, STATUS_LABEL } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,16 +48,18 @@ export default async function WorkPage({
   const work = await getWorkWithContainer(id);
   if (!work) notFound();
 
-  const [memberships, notes, contents, examinable] = await Promise.all([
+  const [memberships, notes, contents, examinable, claims] = await Promise.all([
     membershipsFor(id),
     listNotesForWork(id),
     listContents(id),
     examinableIds(),
+    claimCounts(id),
   ]);
 
   const chicago = formatBibliography(work, work.container, 'chicago');
   const mla = formatBibliography(work, work.container, 'mla');
   const note = formatNote(work, work.container, null);
+  const shortNote = formatShortNote(work, null);
 
   return (
     <div className="space-y-8">
@@ -109,9 +111,21 @@ export default async function WorkPage({
               Read
             </Link>
           ) : null}
+          {claims.all > 0 ? (
+            <Link
+              href={`/works/${work.id}/claims`}
+              className={`${work.has_pages ? '' : 'ml-auto '}text-accent hover:underline underline-offset-2`}
+              title="Review the claims from this book's dossier"
+            >
+              Claims
+              <span className="pl-1 text-xs text-muted">
+                {claims.unreviewed > 0 ? `${claims.unreviewed} to review` : `${claims.accepted} accepted`}
+              </span>
+            </Link>
+          ) : null}
           <a
             href="#notes"
-            className={`${work.has_pages ? '' : 'ml-auto '}text-accent hover:underline underline-offset-2`}
+            className={`${work.has_pages || claims.all > 0 ? '' : 'ml-auto '}text-accent hover:underline underline-offset-2`}
           >
             Add a note
           </a>
@@ -142,6 +156,12 @@ export default async function WorkPage({
         <div className="space-y-1">
           <p className="text-xs uppercase tracking-wide text-muted">Chicago note</p>
           <p className="border-l-2 border-rule pl-3 text-sm">{plain(note.text)}</p>
+        </div>
+        <div className="space-y-1">
+          <p className="text-xs uppercase tracking-wide text-muted">Chicago note, later citations</p>
+          <p className="border-l-2 border-rule pl-3 text-sm">
+            {plain(shortNote.text).replace(/\.$/, '')}, <span className="text-muted">page</span>.
+          </p>
         </div>
       </section>
 
@@ -211,7 +231,7 @@ export default async function WorkPage({
           <input type="hidden" name="id" value={work.id} />
           <select name="status" defaultValue={work.status} className="w-40">
             {STATUSES.map((s) => (
-              <option key={s} value={s}>{s}</option>
+              <option key={s} value={s}>{STATUS_LABEL[s]}</option>
             ))}
           </select>
           <button type="submit" className="text-accent hover:underline underline-offset-2">

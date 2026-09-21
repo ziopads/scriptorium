@@ -1,25 +1,23 @@
 import Link from 'next/link';
 
-import { pagesOf, type Dossier, type DossierQuote } from '@/lib/dossier';
+import type { Dossier, DossierQuote } from '@/lib/dossier';
 import { href, type WorkbenchParams } from '@/lib/workbench-url';
 
-// Two tabs from one dossier, generated from the book's own text by
-// pipeline/dossier.py.
-//
-// Dossier: the study aid, in the order she would review it: the general
-// argument, the key arguments with their quotations, the key concepts, and
-// the connections to her dissertation themes. The themes are the assistant's
+// The Dossier tab: a study aid generated from the book's own text by
+// pipeline/dossier.py, in the order she would review it: the general argument,
+// the key arguments with their quotations, the key concepts, and the
+// connections to her dissertation themes. The themes are the assistant's
 // proposals and are labelled so, because a bridge repeated in an exam as the
 // author's would be a misattribution.
 //
-// Claims: the full record the aid was condensed from, part by part, with a
-// list of the parts at the top to jump between them.
+// The claims the aid was condensed from are notes, reviewed on the book's
+// claims page; the workbench's Claims tab shows the ones she accepted.
 //
 // Every page shown is a link that opens Preview at that page, so any sentence
 // here can be checked against the book in one click.
 
-function PageLinks({ params, pages }: { params: WorkbenchParams; pages: number[] }) {
-  if (pages.length === 0) return null;
+function PageLinks({ params, pages }: { params: WorkbenchParams; pages?: number[] }) {
+  if (!pages || pages.length === 0) return null;
   return (
     <span className="text-xs text-muted">
       {pages.length === 1 ? 'p. ' : 'pp. '}
@@ -85,10 +83,12 @@ function Quote({
 export function DossierView({
   dossier,
   params,
+  workId,
   language,
 }: {
   dossier: Dossier;
   params: WorkbenchParams;
+  workId: string;
   language: string | null;
 }) {
   const generated = dossier.generated_at
@@ -99,7 +99,6 @@ export function DossierView({
       })
     : null;
   const lang = language?.split(',')[0]?.trim() || undefined;
-  const claimCount = Object.keys(dossier.claims).length;
 
   return (
     <div className="space-y-10">
@@ -119,7 +118,7 @@ export function DossierView({
           <div key={i} className="space-y-1">
             <p className="reading-sm">{para.text}</p>
             <Unfound terms={para.unfound} />
-            <PageLinks params={params} pages={pagesOf(dossier, para.claims)} />
+            <PageLinks params={params} pages={para.pages} />
           </div>
         ))}
       </section>
@@ -183,7 +182,7 @@ export function DossierView({
                   <li key={i} className="space-y-1">
                     <p className="reading-sm">{b.text}</p>
                     <Unfound terms={b.unfound} />
-                    <PageLinks params={params} pages={pagesOf(dossier, b.claims)} />
+                    <PageLinks params={params} pages={b.pages} />
                   </li>
                 ))}
               </ul>
@@ -193,79 +192,12 @@ export function DossierView({
       </section>
 
       <p className="border-t border-rule pt-4 text-xs text-muted">
-        Condensed from {claimCount} claims, each with its quotations: see the
-        Claims tab.
+        Condensed from the book&rsquo;s claims, each with its passages.{' '}
+        <Link href={`/works/${workId}/claims`} className="text-accent hover:underline underline-offset-2">
+          Review the claims
+        </Link>
+        ; the ones you accept appear in the Claims tab.
       </p>
-    </div>
-  );
-}
-
-export function ClaimsView({
-  dossier,
-  params,
-  language,
-}: {
-  dossier: Dossier;
-  params: WorkbenchParams;
-  language: string | null;
-}) {
-  const lang = language?.split(',')[0]?.trim() || undefined;
-  const claimCount = Object.keys(dossier.claims).length;
-
-  return (
-    <div className="space-y-8">
-      <div id="parts" className="scroll-mt-4 space-y-3">
-        <p className="text-xs text-muted">
-          The {claimCount} claims the study aid was condensed from, in the book&rsquo;s
-          order. Every quotation was found in the book; each page number opens that
-          page.
-        </p>
-        <nav aria-label="Parts of the book" className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-          {dossier.groups.map((group, i) => (
-            <a key={group.topic} href={`#part-${i}`} className="text-accent hover:underline underline-offset-2">
-              {group.topic}
-              <span className="pl-1 text-xs text-muted">{group.claims.length}</span>
-            </a>
-          ))}
-        </nav>
-      </div>
-        <div className="space-y-8">
-          {dossier.groups.map((group, i) => (
-            <div key={group.topic} id={`part-${i}`} className="scroll-mt-4 space-y-2">
-              <h4 className="text-sm text-accent">{group.topic}</h4>
-              <ol className="divide-y divide-rule border-y border-rule">
-                {group.claims.map((id) => {
-                  const c = dossier.claims[id];
-                  if (!c) return null;
-                  return (
-                    <li key={id} id={`claim-${id}`} className="space-y-2 py-3">
-                      <p className="reading-sm">
-                        <span className="mr-2 font-mono text-xs text-muted">{id}</span>
-                        {c.claim}
-                      </p>
-                      <Unfound terms={c.unfound} />
-                      {c.example ? (
-                        <p className="text-xs text-muted">Ejemplo: {c.example}</p>
-                      ) : null}
-                      {c.check.verdict === 'partial' ? (
-                        <p className="text-xs text-accent">
-                          Only partly supported by its quotations
-                          {c.check.reason ? `: ${c.check.reason}` : '.'}
-                        </p>
-                      ) : null}
-                      {c.quotes.map((q, j) => (
-                        <Quote key={j} q={q} params={params} lang={lang} />
-                      ))}
-                    </li>
-                  );
-                })}
-              </ol>
-              <p className="text-right text-xs">
-                <a href="#parts" className="text-muted hover:text-accent">back to the parts</a>
-              </p>
-            </div>
-          ))}
-        </div>
     </div>
   );
 }
