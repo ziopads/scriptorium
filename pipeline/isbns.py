@@ -1,26 +1,35 @@
 #!/usr/bin/env python3
-"""Harvest ISBNs from the corpus PDFs.
+"""Harvest ISBNs from the works' own PDFs.
 
-    python3 pipeline/isbns.py            # every PDF in pipeline/corpus
-    python3 pipeline/isbns.py --show     # print context lines as well
+    python3 pipeline/isbns.py                 # every work with a file in ACCOUNTED
+    python3 pipeline/isbns.py <work id> ...   # just these
+    python3 pipeline/isbns.py --show          # print context lines as well
 
-Reads the PDFs directly rather than the extracted pages, so it works on the
-whole corpus before anything has been extracted. Writes pipeline/isbns.csv.
+Writes pipeline/isbns.csv. Touches nothing in Neon: pipeline/enrich.py
+--by-isbn reads the file, looks each pick up, and proposes the imprint.
 
-KEYED BY FILENAME, NOT BOOK ID
-    Same reasoning as triage.csv: the reading list is being re-seeded and work
-    ids will move. A harvest keyed to filenames survives that and joins through
-    mapping.csv, which is the durable record.
+WHICH FILES
+    Neon's works.source_path says which PDF is which work, and a work has a
+    file only if that PDF is in corpus/ACCOUNTED (dbconn.py). Until 21
+    September this scanned every PDF under corpus/ and keyed its output by
+    filename, for joining through mapping.csv; both are retired.
 
 WHICH ISBN TO CITE
-    A copyright page normally prints several — cloth, paper, ebook, sometimes a
+    A copyright page normally prints several: cloth, paper, ebook, sometimes a
     PDF-specific one. They identify different objects. The one to cite is the
     print edition whose folios she is quoting, because that is the pagination
     page_offset maps to. So every candidate is captured with the words around
-    it, and a guess at its kind, rather than the first match winning.
+    it and a guess at its kind, and the pick per work follows these rules:
 
-    An essay does not get its own ISBN. It borrows its container's, which is
-    what the container-aware citation already does.
+        ebook, pdf and epub ISBNs are never picked;
+        if one print ISBN remains, it is the pick;
+        if several remain, nothing is picked and the work is marked
+        "several": cloth and paper usually share a pagination, but that is a
+        person's call, not a script's.
+
+    A work split across several files is read from its first file, which holds
+    the front matter. An essay borrows its container's ISBN, which is what the
+    container-aware citation already does.
 
 VALIDATION
     Both ISBN forms carry a check digit, so a candidate can be verified rather
@@ -42,8 +51,9 @@ try:
 except ImportError:
     sys.exit("PyMuPDF is not installed. Run: pip install pymupdf")
 
+from dbconn import accounted_paths, connect, pdf_paths, resolve, source_paths
+
 PIPELINE = Path(__file__).parent
-CORPUS = PIPELINE / "corpus"
 OUT = PIPELINE / "isbns.csv"
 
 # Copyright pages sit in the front matter; some presses repeat the ISBN on the
@@ -60,6 +70,7 @@ KIND_HINTS = [
     ("paper", ("paperback", "pbk", "paper", "rústica", "rustica", "softcover")),
     ("cloth", ("hardcover", "hardback", "hbk", "cloth", "tapa dura", "encuadernado")),
 ]
+NOT_PRINT = {"ebook", "pdf", "epub"}
 
 
 def digits_of(raw: str) -> str:
@@ -124,7 +135,8 @@ def scan_text(text: str, where: str) -> list[dict]:
             {
                 "isbn13": canonical,
                 "raw": match.group(1).strip(),
-                "kind": guess_kind(context),
+                # The filename's "isbn13 978…" is a label, not a binding.
+                "kind": "" if where == "filename" else guess_kind(context),
                 "where": where,
                 "context": context,
             }
@@ -164,22 +176,51 @@ def scan_pdf(path: Path) -> list[dict]:
     return found
 
 
+def pick(best: dict[str, dict]) -> tuple[str, str]:
+    """The ISBN to propose for the work, and a word on how it was chosen."""
+    printed = [h for h in best.values() if h["kind"] not in NOT_PRINT]
+    if not printed:
+        return "", "only ebook ISBNs" if best else "none found"
+    if len(printed) == 1:
+        return printed[0]["isbn13"], "one print ISBN"
+    return "", "several"
+
+
+def current_isbns(ids: list[str]) -> dict[str, str]:
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute("select id, coalesce(isbn, '') from works where id = any(%s)", (ids,))
+            return dict(cur.fetchall())
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
+    parser.add_argument("work", nargs="*", help="full work ids; none means every work with a file")
     parser.add_argument("--show", action="store_true", help="print context lines")
     args = parser.parse_args()
 
-    if not CORPUS.is_dir():
-        sys.exit(f"{CORPUS} not found")
+    wanted = [resolve(n) for n in args.work] or None
+    sources = source_paths(wanted)
+    accounted = accounted_paths()
 
-    pdfs = sorted(p for p in CORPUS.rglob("*.pdf") if not p.name.startswith("."))
-    if not pdfs:
-        sys.exit(f"no PDFs under {CORPUS}")
+    files: dict[str, Path] = {}
+    refused: list[tuple[str, str]] = []
+    for work_id, source in sorted(sources.items()):
+        found, problems = pdf_paths(source, accounted)
+        if problems or not found:
+            refused.append((work_id, problems[0].split("\n")[0] if problems else "no file"))
+            continue
+        files[work_id] = found[0]
 
+    if not files:
+        sys.exit("no work has a file in ACCOUNTED")
+
+    recorded = current_isbns(list(files))
     rows = []
-    without = []
+    summary = {"one print ISBN": 0, "several": 0, "only ebook ISBNs": 0, "none found": 0}
+    agree = differ = 0
 
-    for path in pdfs:
+    for work_id, path in files.items():
         hits = scan_pdf(path)
 
         # One row per distinct ISBN, keeping the most informative sighting: a
@@ -191,52 +232,65 @@ def main() -> None:
             if existing is None or (not existing["kind"] and hit["kind"]):
                 best[hit["isbn13"]] = hit
 
-        if not best:
-            without.append(path.name)
-            continue
+        choice, how = pick(best)
+        summary[how] += 1
+        now = recorded.get(work_id, "")
+        if now and choice:
+            if now == choice:
+                agree += 1
+            else:
+                differ += 1
 
         for hit in best.values():
             rows.append(
                 {
-                    "filename": path.name,
+                    "work_id": work_id,
                     "isbn13": hit["isbn13"],
                     "kind": hit["kind"],
                     "found_in": hit["where"],
+                    "pick": "yes" if hit["isbn13"] == choice else "",
+                    "why": how,
+                    "recorded": now,
                     "as_printed": hit["raw"],
                     "context": hit["context"],
                 }
             )
+        if not best:
+            rows.append({"work_id": work_id, "why": how, "recorded": now})
 
-        labels = ", ".join(
-            f"{h['isbn13']}{' (' + h['kind'] + ')' if h['kind'] else ''}"
-            for h in best.values()
+        mark = {"one print ISBN": " ", "several": "?", "only ebook ISBNs": "e", "none found": "-"}[how]
+        shown = choice or ", ".join(
+            f"{h['isbn13']}{' (' + h['kind'] + ')' if h['kind'] else ''}" for h in best.values()
         )
-        print(f"  {path.name[:52]:<52} {labels}")
+        note = ""
+        if now and choice and now != choice:
+            note = f"   record has {now}"
+        print(f"  {mark} {work_id[:52]:<52} {shown}{note}")
         if args.show:
             for hit in best.values():
                 print(f"      {hit['where']}: …{hit['context'][:96]}…")
 
+    fields = ["work_id", "isbn13", "kind", "found_in", "pick", "why", "recorded",
+              "as_printed", "context"]
     with OUT.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=["filename", "isbn13", "kind", "found_in", "as_printed", "context"],
-        )
+        writer = csv.DictWriter(handle, fieldnames=fields)
         writer.writeheader()
         writer.writerows(rows)
 
-    multiple = len({r["filename"] for r in rows if
-                    sum(1 for x in rows if x["filename"] == r["filename"]) > 1})
-
-    print(f"\n  {len(rows)} validated ISBNs across {len({r['filename'] for r in rows})} files")
-    print(f"  {multiple} files print more than one — pick the print edition, not the ebook")
-
-    if without:
-        print(f"\n  {len(without)} files with no valid ISBN:")
-        for name in without:
-            print(f"    {name[:78]}")
-        print("  Pre-ISBN editions, scans missing the copyright page, and excerpts.")
+    print(f"\n  {len(files)} works with a file in ACCOUNTED")
+    print(f"    {summary['one print ISBN']:>3} one print ISBN: picked")
+    print(f"    {summary['several']:>3} several print ISBNs: marked ?, nothing picked")
+    print(f"    {summary['only ebook ISBNs']:>3} only ebook ISBNs: marked e, nothing picked")
+    print(f"    {summary['none found']:>3} no valid ISBN: marked -")
+    if agree or differ:
+        print(f"  against the record: {agree} agree, {differ} differ")
+    if refused:
+        print(f"\n  {len(refused)} works whose source_path names no usable file in ACCOUNTED:")
+        for work_id, why in refused:
+            print(f"    {work_id}: {why[:70]}")
 
     print(f"\n  Wrote {OUT}")
+    print("  Next: python3 pipeline/enrich.py --by-isbn, which looks each pick up.")
 
 
 if __name__ == "__main__":

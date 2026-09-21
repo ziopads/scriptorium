@@ -164,6 +164,50 @@ export async function listWorksInList(listId: string): Promise<Work[]> {
   return rows as Work[];
 }
 
+// ---------------------------------------------------------------------------
+// The list page
+// ---------------------------------------------------------------------------
+
+// One row per item on every list, in the order the lists are printed, with
+// what the list page's accordion shows: the exam number, author, title, year,
+// and how many notes touch the work. The count leaves out dossier claims she
+// has not accepted, as every other note count does (lib/notes.ts).
+export interface ListItemRow {
+  list_id: string;
+  section_id: string | null;
+  ordinal: number | null;
+  id: string;
+  author: string | null;
+  editor: string | null;
+  title: string;
+  year: number | null;
+  has_pages: boolean;
+  note_count: number;
+}
+
+export async function listItemsForLists(): Promise<ListItemRow[]> {
+  const sql = db();
+  const rows = await sql`
+    select li.list_id, li.section_id, li.ordinal,
+           w.id, w.author, w.editor, w.title, w.year,
+           exists (select 1 from pages p where p.work_id = w.id) as has_pages,
+           (select count(*)::int from (
+              select note_id from note_anchors where work_id = w.id
+              union
+              select note_id from note_works where work_id = w.id
+            ) t
+            join notes n on n.id = t.note_id
+            where n.rejected_at is null
+              and not ('dossier' = any(n.tags) and n.reviewed = false)) as note_count
+    from list_items li
+    join works w on w.id = li.work_id
+    join exam_lists el on el.id = li.list_id
+    left join list_sections ls on ls.id = li.section_id
+    order by el.sort, ls.sort nulls last, li.ordinal nulls last, coalesce(w.author, w.title)
+  `;
+  return rows as ListItemRow[];
+}
+
 // Examinable is derived, never stored: a work counts if it is on an examinable
 // list, or if its container is. A stored flag would be a second source of truth
 // and would drift the first time an item moved between lists.
@@ -241,13 +285,15 @@ export async function updateImprint(
     publisher: string | null;
     place: string | null;
     year: number | null;
+    isbn: string | null;
   },
 ): Promise<void> {
   const sql = db();
   await sql`
     update works set
       author = ${fields.author}, publisher = ${fields.publisher},
-      place = ${fields.place}, year = ${fields.year}, updated_at = now()
+      place = ${fields.place}, year = ${fields.year}, isbn = ${fields.isbn},
+      updated_at = now()
     where id = ${id}
   `;
 }

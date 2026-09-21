@@ -1,33 +1,48 @@
 #!/usr/bin/env python3
-"""Look up bibliographic data for the reading list against public catalogues.
+"""Look up bibliographic data for the catalogue against public catalogues.
 
-    python3 pipeline/enrich.py --in pipeline/list.csv
-    python3 pipeline/enrich.py --in pipeline/list.csv --only-missing
+    python3 pipeline/enrich.py --by-isbn                  # by ISBN; writes proposals
+    python3 pipeline/enrich.py --apply --dry-run          # what --apply would write
+    python3 pipeline/enrich.py --apply                    # write the accepted proposals
+    python3 pipeline/enrich.py --in pipeline/list.csv     # by title and author (see below)
 
-Queries Open Library first, then Google Books for anything it missed. Writes
-pipeline/catalogue.csv with one row per candidate — never straight to the
-database.
+Queries Open Library first, then Google Books for anything it missed. Every
+lookup writes proposals to a CSV; nothing reaches the database until --apply,
+and --apply fills only fields that are blank.
 
 WHY IT PROPOSES RATHER THAN WRITES
     A wrong ISBN is worse than no ISBN. It looks authoritative, it sends her to
     the wrong edition, and edition decides pagination. Blank beats a guess is
-    the standing rule here, and an automated title match is exactly the kind of
-    guess that reads as fact once it is in a field.
+    the standing rule here, and an automated match is exactly the kind of guess
+    that reads as fact once it is in a field.
 
-    So every candidate carries a confidence and the matched title as the
-    catalogue spells it, and a person accepts or rejects.
+BY ISBN FIRST
+    An ISBN names one edition, so a lookup by ISBN returns that edition's
+    publisher, place and year, not the nearest title a search engine found.
+    --by-isbn takes each examinable book's ISBN from the record, or failing
+    that from the pick in pipeline/isbns.csv (read from the book's own PDF by
+    pipeline/isbns.py), and writes:
 
-WHAT IT IS GOOD FOR AND WHAT IT IS NOT
-    Good: English-language academic monographs and anything with a recent
-    edition. Open Library's coverage there is strong and the data is clean.
+        pipeline/imprints.csv    one row per book looked up: the record's
+                                 values, the catalogue's, the title each gives,
+                                 and an accept column. accept is filled with y
+                                 when the catalogue's title matches the
+                                 record's; otherwise it is left for a person.
+        pipeline/outstanding.csv every examinable book still missing a
+                                 citation field after the lookup, and why: no
+                                 ISBN, several ISBNs, nothing in the catalogues.
 
-    Weak: Spanish-language editions from Mexican and Spanish presses, older
-    imprints, and university press reprints. Expect gaps on Fondo de Cultura
-    Económica, Siglo XXI, Ediciones Era. That is most of this list, so treat a
-    miss as normal rather than as a failure.
+    Read imprints.csv, change accept where you disagree, then --apply.
+
+BY TITLE ONLY ON PURPOSE
+    --in runs the older search by title and author, which proposes candidates
+    with a confidence. It is weak for Spanish-language editions from Mexican
+    and Spanish presses (Fondo de Cultura Económica, Siglo XXI, Era), which is
+    most of this list. It is kept for the books outstanding.csv lists, to be
+    run once that list has been read, and never as part of --by-isbn.
 
     Both APIs are free and need no key. Open Library asks for a User-Agent that
-    identifies you; be a good citizen and leave it set.
+    identifies you; leave it set.
 """
 
 from __future__ import annotations
@@ -46,6 +61,9 @@ from pathlib import Path
 
 PIPELINE = Path(__file__).parent
 OUT = PIPELINE / "catalogue.csv"
+ISBNS = PIPELINE / "isbns.csv"
+IMPRINTS = PIPELINE / "imprints.csv"
+OUTSTANDING = PIPELINE / "outstanding.csv"
 
 UA = "Scriptorium/0.1 (doctoral reading-list tool; contact via github.com/ziopads)"
 
@@ -53,6 +71,10 @@ UA = "Scriptorium/0.1 (doctoral reading-list tool; contact via github.com/ziopad
 # 0.6s was too fast and got nine refusals in ten calls.
 PAUSE = 1.5
 RETRIES = 4
+
+# A catalogue title this close to the record's is taken as the same book, and
+# its proposal is marked accepted for review. Below it, a person decides.
+TITLE_MATCH = 0.5
 
 
 def fold(s: str) -> str:
@@ -82,6 +104,11 @@ def surname(author: str) -> str:
     return parts[-1] if parts else ""
 
 
+def year_of(value) -> str:
+    m = re.search(r"\b(1[5-9]\d\d|20\d\d)\b", str(value or ""))
+    return m.group(1) if m else ""
+
+
 def fetch(url: str) -> dict | None:
     """With backoff. A 429 is not a failure, it is a request to wait — and the
     Retry-After header says how long, when the server bothers to send one."""
@@ -104,6 +131,258 @@ def fetch(url: str) -> dict | None:
             time.sleep(2)
     return None
 
+
+# --------------------------------------------------------------------------
+# By ISBN
+
+def open_library_isbn(isbn: str) -> dict | None:
+    data = fetch(
+        "https://openlibrary.org/api/books?"
+        + urllib.parse.urlencode({"bibkeys": f"ISBN:{isbn}", "format": "json", "jscmd": "data"})
+    )
+    record = (data or {}).get(f"ISBN:{isbn}")
+    if not record:
+        return None
+    return {
+        "source": "openlibrary",
+        "title": record.get("title", ""),
+        "publisher": ((record.get("publishers") or [{}])[0]).get("name", ""),
+        "place": ((record.get("publish_places") or [{}])[0]).get("name", ""),
+        "year": year_of(record.get("publish_date")),
+        "ref": record.get("url", ""),
+    }
+
+
+def google_books_isbn(isbn: str) -> dict | None:
+    data = fetch(
+        "https://www.googleapis.com/books/v1/volumes?"
+        + urllib.parse.urlencode({"q": f"isbn:{isbn}", "maxResults": 1})
+    )
+    items = (data or {}).get("items") or []
+    if not items:
+        return None
+    info = items[0].get("volumeInfo", {})
+    return {
+        "source": "googlebooks",
+        "title": info.get("title", ""),
+        "publisher": info.get("publisher", ""),
+        "place": "",
+        "year": year_of(info.get("publishedDate")),
+        "ref": info.get("infoLink", ""),
+    }
+
+
+def isbn_picks() -> dict[str, tuple[str, str]]:
+    """work_id -> (isbn picked from its PDF, or '', and why), from isbns.csv."""
+    if not ISBNS.exists():
+        return {}
+    out: dict[str, tuple[str, str]] = {}
+    with ISBNS.open(encoding="utf-8") as handle:
+        for row in csv.DictReader(handle):
+            work_id = row.get("work_id", "")
+            if not work_id:
+                continue
+            if row.get("pick") == "yes":
+                out[work_id] = (row["isbn13"], row.get("why", ""))
+            else:
+                out.setdefault(work_id, ("", row.get("why", "")))
+    return out
+
+
+def by_isbn() -> None:
+    from dbconn import connect
+
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                select w.id, coalesce(w.author, w.editor, ''), w.title,
+                       coalesce(w.publisher, ''), coalesce(w.place, ''),
+                       coalesce(w.year::text, ''), coalesce(w.isbn, ''),
+                       w.source_path is not null
+                from works w
+                where w.container_id is null and w.kind <> 'film'
+                  and exists (select 1 from examinable_works e where e.id = w.id)
+                order by coalesce(w.author, w.title)
+                """
+            )
+            works = cur.fetchall()
+
+    if not ISBNS.exists():
+        print(f"  {ISBNS.name} not found: only ISBNs already in the record will be looked up.")
+        print("  Run pipeline/isbns.py first to read ISBNs from the PDFs.\n")
+    picks = isbn_picks()
+
+    proposals: list[dict] = []
+    outstanding: list[dict] = []
+
+    for (work_id, author, title, publisher, place, year, isbn_now, has_file) in works:
+        missing = [f for f, v in (("publisher", publisher), ("place", place), ("year", year)) if not v]
+        pdf_isbn, why = picks.get(work_id, ("", ""))
+        isbn = isbn_now or pdf_isbn
+        isbn_from = "record" if isbn_now else ("pdf" if pdf_isbn else "")
+
+        if not missing and isbn_now:
+            continue
+
+        if not isbn:
+            reason = (
+                "no file, so no ISBN from a PDF" if not has_file
+                else f"no ISBN from the PDF ({why})" if why
+                else "PDF not scanned by isbns.py"
+            )
+            if missing or not isbn_now:
+                outstanding.append({"work_id": work_id, "author": author, "title": title,
+                                    "missing": ", ".join(missing + ["isbn"]), "reason": reason})
+            continue
+
+        print(f"  {work_id[:56]:<56} {isbn}", end="", flush=True)
+        found = open_library_isbn(isbn)
+        time.sleep(PAUSE)
+        if not found or not (found["publisher"] and found["year"]):
+            more = google_books_isbn(isbn)
+            time.sleep(PAUSE)
+            if more and not found:
+                found = more
+            elif more and found:
+                found = {**more, **{k: v for k, v in found.items() if v}}
+
+        if not found:
+            print("  nothing in the catalogues")
+            outstanding.append({"work_id": work_id, "author": author, "title": title,
+                                "missing": ", ".join(missing), "reason": f"ISBN {isbn} not in the catalogues"})
+            if isbn_from == "pdf":
+                proposals.append({"work_id": work_id, "accept": "", "title_match": "",
+                                  "isbn": isbn, "isbn_from": isbn_from,
+                                  "title_record": title, "title_found": "",
+                                  "publisher_record": publisher, "publisher_found": "",
+                                  "place_record": place, "place_found": "",
+                                  "year_record": year, "year_found": "",
+                                  "source": "", "ref": ""})
+            continue
+
+        match = round(similarity(title, found["title"]), 2)
+        accept = "y" if match >= TITLE_MATCH else ""
+        print(f"  {found['source']}  title match {match}{'' if accept else '  (check)'}")
+        proposals.append({
+            "work_id": work_id, "accept": accept, "title_match": match,
+            "isbn": isbn, "isbn_from": isbn_from,
+            "title_record": title, "title_found": found["title"],
+            "publisher_record": publisher, "publisher_found": found["publisher"],
+            "place_record": place, "place_found": found["place"],
+            "year_record": year, "year_found": found["year"],
+            "source": found["source"], "ref": found["ref"],
+        })
+
+        still = [f for f in missing if not found.get(f)]
+        if still:
+            outstanding.append({"work_id": work_id, "author": author, "title": title,
+                                "missing": ", ".join(still),
+                                "reason": f"{found['source']} has no {', '.join(still)}"})
+
+    fields = ["work_id", "accept", "title_match", "isbn", "isbn_from",
+              "title_record", "title_found",
+              "publisher_record", "publisher_found",
+              "place_record", "place_found",
+              "year_record", "year_found", "source", "ref"]
+    with IMPRINTS.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(proposals)
+    with OUTSTANDING.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["work_id", "author", "title", "missing", "reason"])
+        writer.writeheader()
+        writer.writerows(outstanding)
+
+    accepted = sum(1 for p in proposals if p["accept"] == "y")
+    print(f"\n  {len(proposals)} books looked up by ISBN: {accepted} marked y, "
+          f"{len(proposals) - accepted} left for you to decide")
+    print(f"  {len(outstanding)} books still outstanding")
+    reasons: dict[str, int] = {}
+    for o in outstanding:
+        key = re.sub(r"\(.*\)|ISBN \d+|openlibrary|googlebooks", "", o["reason"]).strip()
+        reasons[key] = reasons.get(key, 0) + 1
+    for reason, count in sorted(reasons.items(), key=lambda kv: -kv[1]):
+        print(f"    {count:>3}  {reason}")
+    print(f"\n  Wrote {IMPRINTS} and {OUTSTANDING}")
+    print("  Read imprints.csv and set accept to y or blank, then --apply --dry-run.")
+
+
+# --------------------------------------------------------------------------
+# Apply
+
+def apply(dry_run: bool) -> None:
+    """Write the accepted rows of imprints.csv into Neon, filling only fields
+    that are blank. A field already recorded is never overwritten, whatever
+    the catalogue says: a disagreement is for a person to settle on the
+    Citations tab."""
+    from dbconn import connect
+
+    if not IMPRINTS.exists():
+        sys.exit(f"{IMPRINTS.name} not found: run --by-isbn first")
+    with IMPRINTS.open(encoding="utf-8") as handle:
+        rows = [r for r in csv.DictReader(handle)
+                if r.get("accept", "").strip().lower() in ("y", "yes")]
+    if not rows:
+        sys.exit("no rows marked y in imprints.csv")
+
+    with connect() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "select id, coalesce(isbn, ''), coalesce(publisher, ''), coalesce(place, ''),"
+                " year from works where id = any(%s)",
+                ([r["work_id"] for r in rows],),
+            )
+            now = {r[0]: r[1:] for r in cur.fetchall()}
+
+        changes: list[tuple[str, dict]] = []
+        for r in rows:
+            if r["work_id"] not in now:
+                print(f"  ! {r['work_id']}: no such work, skipped")
+                continue
+            isbn, publisher, place, year = now[r["work_id"]]
+            fill = {}
+            if not isbn and r.get("isbn"):
+                fill["isbn"] = r["isbn"]
+            if not publisher and r.get("publisher_found"):
+                fill["publisher"] = r["publisher_found"]
+            if not place and r.get("place_found"):
+                fill["place"] = r["place_found"]
+            if year is None and year_of(r.get("year_found")):
+                fill["year"] = int(year_of(r["year_found"]))
+            if fill:
+                changes.append((r["work_id"], fill))
+
+        for work_id, fill in changes:
+            shown = "; ".join(f"{k} = {v}" for k, v in fill.items())
+            print(f"  {work_id[:52]:<52} {shown}")
+        print(f"\n  {len(changes)} books, "
+              f"{sum(len(f) for _, f in changes)} blank fields to fill")
+        if dry_run:
+            print("  dry run: nothing written")
+            return
+
+        with conn.transaction():
+            with conn.cursor() as cur:
+                for work_id, fill in changes:
+                    cur.execute(
+                        """
+                        update works set
+                          isbn = coalesce(nullif(isbn, ''), %s),
+                          publisher = coalesce(nullif(publisher, ''), %s),
+                          place = coalesce(nullif(place, ''), %s),
+                          year = coalesce(year, %s),
+                          updated_at = now()
+                        where id = %s
+                        """,
+                        (fill.get("isbn"), fill.get("publisher"), fill.get("place"),
+                         fill.get("year"), work_id),
+                    )
+    print(f"  {len(changes)} books updated")
+
+
+# --------------------------------------------------------------------------
+# By title and author: the older search, for outstanding books only
 
 def open_library(title: str, author: str) -> list[dict]:
     query = urllib.parse.urlencode(
@@ -184,24 +463,15 @@ def best(item: dict, candidates: list[dict]) -> tuple[dict | None, float]:
     return max(scored, key=lambda pair: pair[1])
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--in", dest="source", required=True,
-                        help="CSV with columns: id,author,title,year")
-    parser.add_argument("--only-missing", action="store_true",
-                        help="skip rows that already have an isbn column filled")
-    parser.add_argument("--restart", action="store_true",
-                        help="ignore previous results and look everything up again")
-    args = parser.parse_args()
-
-    with Path(args.source).open(encoding="utf-8") as handle:
+def by_title(source: str, only_missing: bool, restart: bool) -> None:
+    with Path(source).open(encoding="utf-8") as handle:
         items = list(csv.DictReader(handle))
 
-    # Resumable. 156 lookups across two rate-limited APIs will be interrupted
+    # Resumable. Lookups across two rate-limited APIs will be interrupted
     # sooner or later, and redoing the completed ones wastes the quota that
     # caused the interruption.
     done: dict[str, dict] = {}
-    if OUT.exists() and not args.restart:
+    if OUT.exists() and not restart:
         with OUT.open(encoding="utf-8") as handle:
             for row in csv.DictReader(handle):
                 if row.get("id"):
@@ -221,7 +491,7 @@ def main() -> None:
     for index, item in enumerate(items, start=1):
         if item.get("id") in done:
             continue
-        if args.only_missing and item.get("isbn", "").strip():
+        if only_missing and item.get("isbn", "").strip():
             continue
 
         title = item.get("title", "").strip()
@@ -285,6 +555,32 @@ def main() -> None:
     print(f"\n  Wrote {OUT}")
     print("  Read the 'check' rows before accepting. A wrong ISBN points at the")
     print("  wrong edition, and edition decides pagination.")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--by-isbn", action="store_true",
+                        help="look up each examinable book by its ISBN; writes imprints.csv")
+    parser.add_argument("--apply", action="store_true",
+                        help="write the accepted rows of imprints.csv, blank fields only")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="with --apply: report, write nothing")
+    parser.add_argument("--in", dest="source",
+                        help="by title and author: CSV with columns id,author,title,year")
+    parser.add_argument("--only-missing", action="store_true",
+                        help="by title: skip rows that already have an isbn column filled")
+    parser.add_argument("--restart", action="store_true",
+                        help="by title: ignore previous results and look everything up again")
+    args = parser.parse_args()
+
+    if args.by_isbn:
+        by_isbn()
+    elif args.apply:
+        apply(args.dry_run)
+    elif args.source:
+        by_title(args.source, args.only_missing, args.restart)
+    else:
+        parser.error("choose --by-isbn, --apply, or --in FILE")
 
 
 if __name__ == "__main__":

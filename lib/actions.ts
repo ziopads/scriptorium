@@ -168,6 +168,31 @@ export async function saveWork(form: FormData): Promise<void> {
   redirect(`/works/${id}`);
 }
 
+// An ISBN as typed or pasted, checked by its check digit and stored in the
+// 13-digit form, as pipeline/isbns.py stores it. A number that fails its check
+// digit is refused rather than saved: a wrong ISBN names the wrong edition,
+// and edition decides pagination.
+function isbn(form: FormData): string | null {
+  const raw = text(form, 'isbn');
+  if (raw === null) return null;
+  const digits = raw.replace(/[^0-9Xx]/g, '').toUpperCase();
+  if (digits.length === 13 && /^\d{13}$/.test(digits)) {
+    const sum = [...digits].reduce((s, c, i) => s + Number(c) * (i % 2 === 0 ? 1 : 3), 0);
+    if (sum % 10 === 0) return digits;
+  } else if (digits.length === 10 && /^\d{9}[\dX]$/.test(digits)) {
+    const sum = [...digits].reduce(
+      (s, c, i) => s + (c === 'X' ? 10 : Number(c)) * (10 - i),
+      0,
+    );
+    if (sum % 11 === 0) {
+      const body = `978${digits.slice(0, 9)}`;
+      const check = [...body].reduce((s, c, i) => s + Number(c) * (i % 2 === 0 ? 1 : 3), 0);
+      return body + String((10 - (check % 10)) % 10);
+    }
+  }
+  throw new Error(`${raw} is not a valid ISBN: its check digit does not match.`);
+}
+
 export async function saveImprint(form: FormData): Promise<void> {
   await requireAllowedUser();
 
@@ -179,6 +204,7 @@ export async function saveImprint(form: FormData): Promise<void> {
     publisher: text(form, 'publisher'),
     place: text(form, 'place'),
     year: number(form, 'year'),
+    isbn: isbn(form),
   });
 
   revalidatePath('/gaps');
