@@ -76,17 +76,32 @@ function imprintOf(work: Work, container: Work | null): Work {
   return container ?? work;
 }
 
+// What a record lacks for a complete citation. One rule, used by the book
+// page's warning, the Gaps Citations tab (incompleteWorks) and the workbench's
+// green bar (listWorkbenchRows, which states it again in SQL): author or
+// editor, publisher, place and year, taken from the volume for an essay, and
+// an access date for anything cited by URL. A film needs its director and
+// year.
+//
+// Place is required although Chicago's 18th edition lets a citation omit it:
+// the record keeps what both editions need, and the style chosen decides
+// what is printed.
 function missingFields(work: Work, container: Work | null): string[] {
   const im = imprintOf(work, container);
   const missing: string[] = [];
   if (!work.author && !work.editor && !im.editor) missing.push('author');
-  if (work.kind !== 'film') {
-    if (!im.publisher) missing.push('publisher');
+  if (work.kind === 'film') {
+    if (work.year === null) missing.push('year');
+  } else {
+    if (!im.publisher?.trim()) missing.push('publisher');
+    if (!im.place?.trim()) missing.push('place');
     if (im.year === null) missing.push('year');
   }
   if (work.url && !work.accessed) missing.push('access date');
   return missing;
 }
+
+export { missingFields };
 
 function imprint(work: Work, container: Work | null, style: Style): string {
   const im = imprintOf(work, container);

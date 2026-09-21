@@ -14,6 +14,10 @@ import { attached, href, withAttached, type WorkbenchParams } from '@/lib/workbe
 // centre and right panes follow); pressing + on a work row attaches it to the
 // note being written without changing the selection. Arrow keys move a
 // highlight, Enter selects it.
+//
+// A green bar down a row's left edge means its citation is complete: author,
+// publisher, place and year, by the rule in lib/citation.ts. "cited" shows
+// only those.
 
 export interface LeftAxis { id: number; title: string | null; ficha_count: number; reviewed: boolean }
 export interface LeftNote { id: number; kind: string; title: string | null; body: string; reviewed: boolean; origin: string; attribution: string | null }
@@ -47,6 +51,7 @@ export function LeftPane({
   const [fileOnly, setFileOnly] = useState(false);
   const [starred, setStarred] = useState(false);
   const [noPdf, setNoPdf] = useState(false);
+  const [cited, setCited] = useState(false);
   const [active, setActive] = useState<number>(-1);
   const listRef = useRef<HTMLUListElement>(null);
 
@@ -109,7 +114,8 @@ export function LeftPane({
       if (list && r.list_id !== list) return false;
       if (fileOnly && !r.has_file) return false;
       if (starred && (r.priority ?? 0) < 4) return false;
-      if (noPdf && r.pdf_state !== 'none') return false;
+      if (noPdf && r.has_file) return false;
+      if (cited && !r.citation_complete) return false;
       if (!needle) return true;
       return (
         r.title.toLowerCase().includes(needle) ||
@@ -118,9 +124,9 @@ export function LeftPane({
         r.id.includes(needle)
       );
     });
-  }, [rows, q, list, fileOnly, starred, noPdf]);
+  }, [rows, q, list, fileOnly, starred, noPdf, cited]);
 
-  useEffect(() => { setActive(-1); }, [q, list, fileOnly, starred, noPdf, pane]);
+  useEffect(() => { setActive(-1); }, [q, list, fileOnly, starred, noPdf, cited, pane]);
 
   // Keep the highlighted row in view.
   useEffect(() => {
@@ -206,9 +212,18 @@ export function LeftPane({
                 type="button"
                 onClick={() => setNoPdf((v) => !v)}
                 className={`border px-2 py-0.5 ${noPdf ? 'border-accent text-accent' : 'border-rule text-muted hover:text-accent'}`}
-                title="On a list, and nobody has found a copy"
+                title="No file recorded for the work"
               >
                 no pdf
+              </button>
+              <button
+                type="button"
+                onClick={() => setCited((v) => !v)}
+                className={`flex items-center gap-1 border px-2 py-0.5 ${cited ? 'border-accent text-accent' : 'border-rule text-muted hover:text-accent'}`}
+                title="Citation complete: author, publisher, place and year all recorded"
+              >
+                <span aria-hidden="true" className="inline-block h-3 w-0.5 bg-green-700" />
+                cited {rows.filter((r) => r.citation_complete).length}
               </button>
             </div>
             <p className="text-[11px] text-muted">
@@ -223,9 +238,10 @@ export function LeftPane({
               return (
                 <li
                   key={r.id}
-                  className={`group flex items-start gap-2 py-1.5 pr-1 text-xs ${
-                    selected ? 'bg-white' : i === active ? 'bg-white/60' : ''
-                  }`}
+                  title={r.citation_complete ? 'Citation complete' : undefined}
+                  className={`group flex items-start gap-2 border-l-2 py-1.5 pl-1.5 pr-1 text-xs ${
+                    r.citation_complete ? 'border-green-700' : 'border-transparent'
+                  } ${selected ? 'bg-white' : i === active ? 'bg-white/60' : ''}`}
                 >
                   <Link
                     href={href(params, {

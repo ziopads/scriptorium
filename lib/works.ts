@@ -7,6 +7,7 @@
 // rather than held in a constant, because the Neon tagged template interpolates
 // values and not identifiers. Writes use `returning *`.
 
+import { missingFields } from '@/lib/citation';
 import { db } from '@/lib/db';
 import type {
   ExamList,
@@ -460,19 +461,17 @@ export async function worksWithOffsetProblems(): Promise<WorkWithOffsetProblem[]
   return rows as WorkWithOffsetProblem[];
 }
 
+// Records the citation rule finds incomplete (missingFields in lib/citation.ts,
+// the same rule as the book page's warning and the workbench's green bar). An
+// essay is judged by its volume's imprint.
 export async function incompleteWorks(): Promise<{ work: Work; missing: string[] }[]> {
   const works = await listWorks();
   const byId = new Map(works.map((w) => [w.id, w]));
 
   return works
     .map((work) => {
-      const imprint = work.container_id ? byId.get(work.container_id) ?? work : work;
-      const missing: string[] = [];
-      if (!work.author && !work.editor && !imprint.editor) missing.push('author');
-      if (!imprint.publisher) missing.push('publisher');
-      if (!imprint.place) missing.push('place');
-      if (imprint.year === null) missing.push('year');
-      return { work, missing };
+      const container = work.container_id ? byId.get(work.container_id) ?? null : null;
+      return { work, missing: missingFields(work, container) };
     })
     .filter((entry) => entry.missing.length > 0);
 }
@@ -517,6 +516,9 @@ export interface WorkbenchRow {
   standing: string;
   priority: number | null;
   pdf_state: string | null;
+  // Author, publisher, place and year all present (the rule in
+  // lib/citation.ts missingFields, restated in the query below).
+  citation_complete: boolean;
 }
 
 export async function listWorkbenchRows(): Promise<WorkbenchRow[]> {
@@ -526,7 +528,10 @@ export async function listWorkbenchRows(): Promise<WorkbenchRow[]> {
            w.priority, w.pdf_state,
            m.list_id,
            m.code,
-           (w.source_format <> 'none') as has_file,
+           -- A file is held when the record names one: the test the Gaps
+           -- Files tab uses (lib/gaps.ts), rather than source_format, a label
+           -- set once at seeding.
+           (w.source_path is not null) as has_file,
            (select count(*)::int from (
               select note_id from note_anchors where work_id = w.id
               union
@@ -535,8 +540,23 @@ export async function listWorkbenchRows(): Promise<WorkbenchRow[]> {
             join notes n on n.id = t.note_id
             where n.rejected_at is null
               and not ('dossier' = any(n.tags) and n.reviewed = false)) as note_count,
-           exists (select 1 from examinable_works e where e.id = w.id) as examinable
+           exists (select 1 from examinable_works e where e.id = w.id) as examinable,
+           -- The citation rule of lib/citation.ts missingFields: author or
+           -- editor; publisher, place and year from the volume for an essay;
+           -- director and year for a film; an access date for a URL.
+           (
+             coalesce(nullif(btrim(w.author), ''), nullif(btrim(w.editor), ''),
+                      nullif(btrim(c.editor), '')) is not null
+             and case
+               when w.kind = 'film' then w.year is not null
+               else nullif(btrim(coalesce(c.publisher, case when c.id is null then w.publisher end, '')), '') is not null
+                and nullif(btrim(coalesce(c.place, case when c.id is null then w.place end, '')), '') is not null
+                and (case when c.id is not null then c.year else w.year end) is not null
+             end
+             and (w.url is null or w.accessed is not null)
+           ) as citation_complete
     from works w
+    left join works c on c.id = w.container_id
     left join lateral (
       select li.list_id,
              case el.id
