@@ -2,13 +2,13 @@
 """Look up bibliographic data for the catalogue against public catalogues.
 
     python3 pipeline/enrich.py --by-isbn                  # by ISBN; writes proposals
+    python3 pipeline/enrich.py --by-isbn --google         # and ask Google Books too
     python3 pipeline/enrich.py --apply --dry-run          # what --apply would write
     python3 pipeline/enrich.py --apply                    # write the accepted proposals
     python3 pipeline/enrich.py --in pipeline/list.csv     # by title and author (see below)
 
-Queries Open Library first, then Google Books for anything it missed. Every
-lookup writes proposals to a CSV; nothing reaches the database until --apply,
-and --apply fills only fields that are blank.
+Every lookup writes proposals to a CSV; nothing reaches the database until
+--apply, and --apply fills only fields that are blank.
 
 WHY IT PROPOSES RATHER THAN WRITES
     A wrong ISBN is worse than no ISBN. It looks authoritative, it sends her to
@@ -34,6 +34,16 @@ BY ISBN FIRST
 
     Read imprints.csv, change accept where you disagree, then --apply.
 
+    Open Library is asked at its per-edition address, /isbn/<isbn>.json, which
+    redirects to the edition and answers 404 when it has none. Its older books
+    API (/api/books?bibkeys=ISBN:...) was found retired on 21 September,
+    answering 404 for everything.
+
+    Google Books is asked only with --google. Without an API key it shares a
+    small anonymous quota and refuses almost every call, and each refusal
+    costs the retries' waiting. With GOOGLE_BOOKS_API_KEY in the environment or
+    .env.local the quota is the key's own.
+
 BY TITLE ONLY ON PURPOSE
     --in runs the older search by title and author, which proposes candidates
     with a confidence. It is weak for Spanish-language editions from Mexican
@@ -41,8 +51,7 @@ BY TITLE ONLY ON PURPOSE
     most of this list. It is kept for the books outstanding.csv lists, to be
     run once that list has been read, and never as part of --by-isbn.
 
-    Both APIs are free and need no key. Open Library asks for a User-Agent that
-    identifies you; leave it set.
+    Open Library asks for a User-Agent that identifies you; leave it set.
 """
 
 from __future__ import annotations
@@ -50,6 +59,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import re
 import sys
 import time
@@ -75,6 +85,8 @@ RETRIES = 4
 # A catalogue title this close to the record's is taken as the same book, and
 # its proposal is marked accepted for review. Below it, a person decides.
 TITLE_MATCH = 0.5
+
+GOOGLE_KEY_LINE = re.compile(r'^\s*GOOGLE_BOOKS_API_KEY\s*=\s*"?([^"\s]+)"?\s*\Z')
 
 
 def fold(s: str) -> str:
@@ -110,8 +122,9 @@ def year_of(value) -> str:
 
 
 def fetch(url: str) -> dict | None:
-    """With backoff. A 429 is not a failure, it is a request to wait — and the
-    Retry-After header says how long, when the server bothers to send one."""
+    """With backoff. A 429 is not a failure, it is a request to wait, and the
+    Retry-After header says how long when the server bothers to send one. A
+    404 is an answer: the catalogue has no such record."""
     request = urllib.request.Request(url, headers={"User-Agent": UA})
 
     for attempt in range(RETRIES):
@@ -119,6 +132,8 @@ def fetch(url: str) -> dict | None:
             with urllib.request.urlopen(request, timeout=25) as response:
                 return json.loads(response.read().decode("utf-8"))
         except urllib.error.HTTPError as exc:
+            if exc.code == 404:
+                return None
             if exc.code == 429:
                 wait = float(exc.headers.get("Retry-After") or 0) or (2 ** attempt) * 3
                 print(f"    rate limited, waiting {wait:.0f}s")
@@ -136,28 +151,46 @@ def fetch(url: str) -> dict | None:
 # By ISBN
 
 def open_library_isbn(isbn: str) -> dict | None:
-    data = fetch(
-        "https://openlibrary.org/api/books?"
-        + urllib.parse.urlencode({"bibkeys": f"ISBN:{isbn}", "format": "json", "jscmd": "data"})
-    )
-    record = (data or {}).get(f"ISBN:{isbn}")
+    record = fetch(f"https://openlibrary.org/isbn/{isbn}.json")
     if not record:
         return None
+
+    def first(values) -> str:
+        if not values:
+            return ""
+        value = values[0]
+        return value.get("name", "") if isinstance(value, dict) else str(value)
+
+    key = record.get("key", "")
     return {
         "source": "openlibrary",
         "title": record.get("title", ""),
-        "publisher": ((record.get("publishers") or [{}])[0]).get("name", ""),
-        "place": ((record.get("publish_places") or [{}])[0]).get("name", ""),
+        "publisher": first(record.get("publishers")),
+        "place": first(record.get("publish_places")),
         "year": year_of(record.get("publish_date")),
-        "ref": record.get("url", ""),
+        "ref": f"https://openlibrary.org{key}" if key else "",
     }
 
 
+def google_key() -> str:
+    value = os.environ.get("GOOGLE_BOOKS_API_KEY", "")
+    if not value:
+        env = PIPELINE.parent / ".env.local"
+        if env.exists():
+            for line in env.read_text(encoding="utf-8").splitlines():
+                m = GOOGLE_KEY_LINE.match(line)
+                if m:
+                    value = m.group(1)
+                    break
+    return value
+
+
 def google_books_isbn(isbn: str) -> dict | None:
-    data = fetch(
-        "https://www.googleapis.com/books/v1/volumes?"
-        + urllib.parse.urlencode({"q": f"isbn:{isbn}", "maxResults": 1})
-    )
+    params = {"q": f"isbn:{isbn}", "maxResults": 1}
+    key = google_key()
+    if key:
+        params["key"] = key
+    data = fetch("https://www.googleapis.com/books/v1/volumes?" + urllib.parse.urlencode(params))
     items = (data or {}).get("items") or []
     if not items:
         return None
@@ -189,7 +222,7 @@ def isbn_picks() -> dict[str, tuple[str, str]]:
     return out
 
 
-def by_isbn() -> None:
+def by_isbn(use_google: bool) -> None:
     from dbconn import connect
 
     with connect() as conn:
@@ -231,15 +264,14 @@ def by_isbn() -> None:
                 else f"no ISBN from the PDF ({why})" if why
                 else "PDF not scanned by isbns.py"
             )
-            if missing or not isbn_now:
-                outstanding.append({"work_id": work_id, "author": author, "title": title,
-                                    "missing": ", ".join(missing + ["isbn"]), "reason": reason})
+            outstanding.append({"work_id": work_id, "author": author, "title": title,
+                                "missing": ", ".join(missing + ["isbn"]), "reason": reason})
             continue
 
         print(f"  {work_id[:56]:<56} {isbn}", end="", flush=True)
         found = open_library_isbn(isbn)
         time.sleep(PAUSE)
-        if not found or not (found["publisher"] and found["year"]):
+        if use_google and (not found or not (found["publisher"] and found["year"])):
             more = google_books_isbn(isbn)
             time.sleep(PAUSE)
             if more and not found:
@@ -415,8 +447,11 @@ def google_books(title: str, author: str) -> list[dict]:
     q = f'intitle:"{title}"'
     if author:
         q += f' inauthor:"{author}"'
-    query = urllib.parse.urlencode({"q": q, "maxResults": 5})
-    data = fetch(f"https://www.googleapis.com/books/v1/volumes?{query}")
+    params = {"q": q, "maxResults": 5}
+    key = google_key()
+    if key:
+        params["key"] = key
+    data = fetch("https://www.googleapis.com/books/v1/volumes?" + urllib.parse.urlencode(params))
     if not data:
         return []
 
@@ -561,6 +596,8 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--by-isbn", action="store_true",
                         help="look up each examinable book by its ISBN; writes imprints.csv")
+    parser.add_argument("--google", action="store_true",
+                        help="by ISBN: ask Google Books when Open Library has nothing")
     parser.add_argument("--apply", action="store_true",
                         help="write the accepted rows of imprints.csv, blank fields only")
     parser.add_argument("--dry-run", action="store_true",
@@ -574,7 +611,7 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.by_isbn:
-        by_isbn()
+        by_isbn(args.google)
     elif args.apply:
         apply(args.dry_run)
     elif args.source:

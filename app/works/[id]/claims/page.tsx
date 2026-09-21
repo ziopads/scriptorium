@@ -1,7 +1,7 @@
-import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { ClaimCard } from '@/components/claim-card';
+import { FilterChips } from '@/components/filter-chips';
 import { requireAllowedUser } from '@/lib/auth/guard';
 import { CLAIM_FILTERS, claimCounts, listClaimsForWork, type ClaimFilter } from '@/lib/notes';
 import { listSections } from '@/lib/sections';
@@ -122,22 +122,16 @@ export default async function WorkClaimsPage({
         assistant&rsquo;s.
       </p>
 
-      <nav aria-label="Filter claims" className="flex flex-wrap gap-2 text-sm">
-        {CLAIM_FILTERS.map((f) => (
-          <Link
-            key={f.id}
-            href={`/works/${id}/claims${f.id === 'unreviewed' ? '' : `?show=${f.id}`}`}
-            aria-current={f.id === filter ? 'page' : undefined}
-            className={
-              f.id === filter
-                ? 'border border-accent px-2.5 py-1 text-accent'
-                : 'border border-rule px-2.5 py-1 text-muted hover:text-accent'
-            }
-          >
-            {f.label} <span className="text-xs">{counts[f.id]}</span>
-          </Link>
-        ))}
-      </nav>
+      <FilterChips
+        label="Filter claims"
+        active={filter}
+        chips={CLAIM_FILTERS.map((f) => ({
+          id: f.id,
+          label: f.label,
+          count: counts[f.id],
+          href: `/works/${id}/claims${f.id === 'unreviewed' ? '' : `?show=${f.id}`}`,
+        }))}
+      />
 
       {claims.length === 0 ? (
         <p className="text-sm text-muted">

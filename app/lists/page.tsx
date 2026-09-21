@@ -1,5 +1,6 @@
 import Link from 'next/link';
 
+import { ExpandAll } from '@/components/expand-all';
 import { requireAllowedUser } from '@/lib/auth/guard';
 import { day } from '@/lib/dates';
 import { documentInfo } from '@/lib/documents';
@@ -72,9 +73,9 @@ function Items({
             <span className="min-w-0 flex-1">
               <span className="italic">{w.title}</span>
               {w.year !== null ? <span className="text-muted">, {w.year}</span> : null}
-              <span className="pl-2 text-xs text-muted">
-                ({w.note_count} {w.note_count === 1 ? 'note' : 'notes'})
-              </span>
+            </span>
+            <span className="w-20 shrink-0 text-right text-xs text-muted">
+              {w.note_count} {w.note_count === 1 ? 'note' : 'notes'}
             </span>
             <span className="flex shrink-0 gap-3 text-xs">
               <Link href={`/works/${w.id}`} className="text-accent hover:underline underline-offset-2">
@@ -126,6 +127,9 @@ export default async function ListsPage() {
       </section>
 
       <section className="space-y-4">
+        <div className="flex justify-end">
+          <ExpandAll group="lists" />
+        </div>
         {lists.map((list) => {
           const own = sections.filter((s) => s.list_id === list.id);
           const listItems = items.filter((i) => i.list_id === list.id);
@@ -148,7 +152,7 @@ export default async function ListsPage() {
                 {own.map((section) => {
                   const inSection = listItems.filter((i) => i.section_id === section.id);
                   return (
-                    <details key={section.id} className="group">
+                    <details key={section.id} data-group="lists" className="group">
                       <summary className="flex cursor-pointer list-none items-baseline gap-2 text-sm text-muted hover:text-accent [&::-webkit-details-marker]:hidden">
                         <Chevron />
                         <span>
@@ -168,7 +172,7 @@ export default async function ListsPage() {
                 })}
 
                 {loose.length > 0 ? (
-                  <details className="group">
+                  <details data-group="lists" className="group">
                     <summary className="flex cursor-pointer list-none items-baseline gap-2 text-sm text-muted hover:text-accent [&::-webkit-details-marker]:hidden">
                       <Chevron />
                       <span>{own.length > 0 ? 'Not in a section' : 'Items'}</span>
