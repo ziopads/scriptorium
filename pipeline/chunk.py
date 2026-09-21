@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
 """Chunk page text into search windows.
 
-    python3 pipeline/chunk.py                    # every page file
-    python3 pipeline/chunk.py rael               # a substring of a work id
-    python3 pipeline/chunk.py --dry-run          # report, write nothing
-    python3 pipeline/chunk.py --show rael --page 40
+    python3 pipeline/chunk.py --pending 5 --list I
+                                                 # extracted, not yet chunked
+    python3 pipeline/chunk.py <work id> ...      # named works, by full id
+    python3 pipeline/chunk.py --dry-run --pending 5  # report, write nothing
+    python3 pipeline/chunk.py --show <work id> --page 40
                                                  # print the chunks touching a page
+
+With no work named and no --pending it refuses.
 
 Input:  pipeline/pages/{work_id}.json   (the durable artifact)
 Output: pipeline/chunks/{work_id}.json  (derived; rebuilt whenever the rules
                                          change, and stamped with the version)
 
-Deterministic and local: no network, no key, no database. load_chunks.py
-writes the result to Postgres.
+Deterministic and local. The database is read only to resolve work ids and,
+with --pending, to choose the works; load_chunks.py writes the result.
 
 WHAT A CHUNK IS
     A run of whole paragraphs, in one language, of roughly TARGET characters,
@@ -54,7 +57,7 @@ import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 
-from dbconn import resolve
+from dbconn import announce_pending, pending, resolve
 
 CHUNKER_VERSION = 1
 
@@ -232,21 +235,47 @@ def show(doc: dict, chunks: list[dict], page: int) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("work", nargs="*", help="work ids, or a substring of one")
+    parser.add_argument("work", nargs="*", help="full work ids")
+    parser.add_argument(
+        "--pending",
+        type=int,
+        metavar="N",
+        help="the next N works extracted and not yet chunked",
+    )
+    parser.add_argument(
+        "--list",
+        dest="which",
+        metavar="CODE",
+        help="limit --pending to a list or section: I, II, II.C, Supl. III",
+    )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--show", metavar="WORK", help="print chunks touching --page")
     parser.add_argument("--page", type=int, help="page index, with --show")
     args = parser.parse_args()
+
+    if args.pending and args.work:
+        parser.error("--pending chooses the works itself; do not also name works")
+    if not args.pending and not args.work and not args.show:
+        parser.error("name the works by full id, or use --pending N")
 
     if args.show:
         doc = json.loads((PAGES / f"{resolve(args.show)}.json").read_text(encoding="utf-8"))
         show(doc, chunk_book(doc), args.page or 1)
         return
 
-    files = sorted(PAGES.glob("*.json"))
-    if args.work:
-        wanted = {resolve(n) for n in args.work}
-        files = [f for f in files if f.stem in wanted]
+    by_stem = {f.stem: f for f in PAGES.glob("*.json")}
+    if args.pending:
+        wanted = pending("chunk", args.pending, args.which)
+        if not wanted:
+            print("  nothing pending — every extraction on disk is chunked")
+            return
+        announce_pending(wanted, set(by_stem), "")
+    else:
+        wanted = [resolve(n) for n in args.work]
+        for work_id in wanted:
+            if work_id not in by_stem:
+                print(f"  {work_id}: no extraction in pipeline/pages — run extract.py first")
+    files = [by_stem[w] for w in wanted if w in by_stem]
     if not files:
         sys.exit("nothing to chunk")
 
@@ -278,8 +307,8 @@ def main() -> None:
         print("\n  dry run: nothing written")
     else:
         print(f"\n  Wrote {CHUNKS}/")
-        print("  Read Rael's around a facing pair before loading:")
-        print("    python3 pipeline/chunk.py --show rael --page 40")
+        print("  Read one around a page break before loading:")
+        print("    pipeline/.venv/bin/python3 pipeline/chunk.py --show <work id> --page 40")
 
 
 if __name__ == "__main__":

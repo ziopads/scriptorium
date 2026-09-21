@@ -1,14 +1,20 @@
 #!/usr/bin/env python3
-"""Extract page text from the mapped PDFs into one JSON file per work.
+"""Extract page text from each work's PDF into one JSON file per work.
 
-    python3 pipeline/extract.py                  # every mapped work
     python3 pipeline/extract.py --pending 5      # the next five needing text
     python3 pipeline/extract.py --pending 5 --list I
-    python3 pipeline/extract.py anzaldua         # a substring of a work id
-    python3 pipeline/extract.py --dry-run        # report, write nothing
-    python3 pipeline/extract.py --chapters       # show the chapter sources
-    python3 pipeline/extract.py --glyphs         # list suspect characters
-                                                 # sitting inside words
+    python3 pipeline/extract.py <work id> ...    # named works, by full id
+    python3 pipeline/extract.py --dry-run <work id>   # report, write nothing
+    python3 pipeline/extract.py --chapters <work id>  # show the chapter sources
+    python3 pipeline/extract.py --glyphs <work id>    # list suspect characters
+                                                      # sitting inside words
+
+With no work named and no --pending it refuses.
+
+WHICH FILE
+    works.source_path in Neon, and only a PDF of that name in corpus/ACCOUNTED.
+    A name missing from ACCOUNTED, or present there twice, refuses the work
+    and says where the name was seen. books.csv and mapping.csv are not read.
 
 Output: pipeline/pages/{work_id}.json, keyed by the catalogue id — the same id
 the app, the notes and the anchors use — so that no accented, 200-character
@@ -16,8 +22,9 @@ download name, and no second identifier, ever propagates past this boundary.
 That is the durable artifact. Everything downstream — chunks, vectors, the
 database — is derived from it and can be rebuilt without touching a PDF again.
 
-Deterministic and local. No network, no key, no database. Runs on files and
-writes files, so it can be tested by reading its output beside the source (O-4).
+Local apart from one read: the database is asked which file each work is.
+Extraction itself runs on files and writes files, so it can be tested by
+reading its output beside the source (O-4).
 
 WHAT IS REPAIRED, AND WHAT IS LEFT ALONE
     Repaired here: artifacts of typesetting and encoding — ligatures the font
@@ -55,7 +62,6 @@ WHY get_text("dict") AND NOT get_text("text")
 from __future__ import annotations
 
 import argparse
-import csv
 import json
 import re
 import sys
@@ -64,7 +70,14 @@ from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
 
-from dbconn import resolve
+from dbconn import (
+    accounted_paths,
+    announce_pending,
+    pdf_paths,
+    pending,
+    resolve,
+    source_paths,
+)
 
 try:
     import fitz  # PyMuPDF
@@ -73,8 +86,6 @@ except ImportError:
 
 PIPELINE = Path(__file__).parent
 CORPUS = PIPELINE / "corpus"
-MAPPING = PIPELINE / "mapping.csv"
-BOOKS = PIPELINE.parent / "books.csv"
 PAGES = PIPELINE / "pages"
 
 # A first or last line appearing on at least this share of pages, once folios
@@ -707,156 +718,29 @@ def folio_from(text: str, heads: set[str]) -> int | None:
     return None
 
 
-def pending_from_books(limit: int, which: str | None = None) -> list[str]:
-    """The next works needing extraction, read from books.csv.
+def works_to_extract(ids: list[str]) -> dict[str, dict]:
+    """work_id -> {files, page_offset, conflicts} for the named works, from
+    works.source_path in Neon.
 
-    books.csv holds a pdf column and a pages column, so it already knows which
-    works have a file and no text. Reading the queue from there beats typing
-    author names on a command line: a name is ambiguous the moment two works
-    share an author — derrida matches both Mal de archivo and Specters of Marx —
-    and it is on a person to remember which books are already loaded. The CSV
-    remembers.
+    A work whose source_path names a file that is not a PDF in ACCOUNTED, or
+    names one that sits there twice, carries the problem in conflicts and no
+    files; main() prints it and skips the work. A work with no source_path at
+    all carries neither, and is reported as having no file."""
+    sources = source_paths(ids)
+    accounted = accounted_paths()
+    if not accounted:
+        sys.exit(f"no PDFs in {CORPUS / 'ACCOUNTED'}")
 
-    Ordered as the file is, which inventory.py writes in list and section order,
-    so --pending works down the examination lists rather than alphabetically.
-    """
-    if not BOOKS.exists():
-        sys.exit(f"{BOOKS} not found — run pipeline/inventory.py first")
-
-    out: list[str] = []
-    with BOOKS.open(encoding="utf-8-sig") as handle:
-        for row in csv.DictReader(handle):
-            work_id = (row.get("work_id") or "").strip()
-            pdf = (row.get("pdf") or "").strip()
-            pages = (row.get("pages") or "0").strip()
-            verdict = (row.get("pdf_verdict") or "").casefold()
-            code = (row.get("code") or "")
-
-            if not work_id or not pdf:
-                continue
-            if pages.isdigit() and int(pages) > 0:
-                continue          # already loaded
-            if "ocr" in verdict:
-                continue          # waiting on recognition; extracting is wasted
-            if which and not code.casefold().startswith(which.casefold()):
-                continue
-
-            out.append(work_id)
-            if len(out) >= limit:
-                break
+    out: dict[str, dict] = {}
+    for work_id in ids:
+        source = sources.get(work_id, "")
+        files, problems = pdf_paths(source, accounted) if source else ([], [])
+        out[work_id] = {
+            "files": [] if problems else files,
+            "page_offset": 0,
+            "conflicts": problems,
+        }
     return out
-
-
-def read_books_csv() -> dict[str, list[str]]:
-    """work_id -> exact filenames, from books.csv.
-
-    books.csv is the register a person edits: one row per book on the lists,
-    with a pdf column holding the filename. A value there is used verbatim, by
-    name, with no matching and no scoring — because the whole point of typing it
-    is to stop a matcher from choosing.
-
-    A work with no entry here falls back to the match strings in mapping.csv.
-    """
-    out: dict[str, list[str]] = {}
-    if not BOOKS.exists():
-        return out
-    # utf-8-sig: books.csv carries a byte-order mark so Excel reads it as UTF-8.
-    with BOOKS.open(encoding="utf-8-sig") as handle:
-        for row in csv.DictReader(handle):
-            work_id = (row.get("work_id") or "").strip()
-            pdf = (row.get("pdf") or "").strip()
-            if work_id and pdf:
-                out[work_id] = [f.strip() for f in pdf.split("|") if f.strip()]
-    return out
-
-
-def read_mapping() -> dict[str, dict]:
-    if not MAPPING.exists():
-        sys.exit(f"missing {MAPPING}")
-
-    pdfs = sorted(p for p in CORPUS.rglob("*.pdf") if not p.name.startswith("."))
-    if not pdfs:
-        sys.exit(f"no PDFs in {CORPUS}")
-
-    # macOS stores filenames decomposed — á as a plus a combining accent — while
-    # a CSV written by a spreadsheet holds them composed. The two are the same
-    # name and compare unequal, so an exact match on the raw string fails on
-    # every Spanish title. Both sides are normalised before comparing.
-    def key(name: str) -> str:
-        return unicodedata.normalize("NFC", name).strip().casefold()
-
-    by_name = {key(p.name): p for p in pdfs}
-
-    named = read_books_csv()
-
-    books: dict[str, dict] = {}
-    with MAPPING.open(encoding="utf-8") as handle:
-        rules = csv.DictReader(l for l in handle if not l.lstrip().startswith("#"))
-        for rule in rules:
-            work_id = (rule.get("work_id") or "").strip()
-            match = (rule.get("match") or "").strip()
-            if not work_id or not match:
-                if match:
-                    print(f"  ! {match!r}: no work_id in mapping.csv, skipped")
-                continue
-
-            needle = fold(match)
-            hits = [p for p in pdfs if needle in fold(p.name)]
-
-            entry = books.setdefault(
-                work_id, {"files": [], "page_offset": 0, "conflicts": []}
-            )
-
-            # A rule matching several files used to concatenate them into one
-            # book without saying so: "Borderlands" caught both Anzaldúa and
-            # Meléndez's Hidden Chicano Cinema, and 290 pages of the wrong book
-            # were extracted, chunked and embedded under Anzaldúa's id. A book
-            # genuinely split across files gets one row per file, each naming
-            # its own.
-            #
-            # Recorded rather than raised, because mapping.csv describes the
-            # whole corpus and one bad rule must not stop the extraction of a
-            # different book. main() refuses only the books actually asked for.
-            if len(hits) > 1:
-                entry["conflicts"].append((match, [p.name for p in hits]))
-                continue
-
-            entry["files"].extend(hits)
-
-    for entry in books.values():
-        # Sorted so that a work split across several files assembles in a stable
-        # order rather than whatever the filesystem returned.
-        entry["files"] = sorted(set(entry["files"]), key=lambda p: p.name)
-
-    # books.csv wins. A filename typed there replaces whatever the match string
-    # found, and a work named there that has no mapping row still extracts.
-    for work_id, filenames in named.items():
-        found, missing = [], []
-        for name in filenames:
-            path = by_name.get(key(name))
-            if path is None:
-                # A name that is close but not equal — truncated by a spreadsheet
-                # column, or missing its extension — still identifies the file
-                # when it matches exactly one. Anything else is reported.
-                near = [p for k, p in by_name.items() if key(name) in k]
-                path = near[0] if len(near) == 1 else None
-            (found if path else missing).append(path or name)
-
-        entry = books.setdefault(
-            work_id, {"files": [], "page_offset": 0, "conflicts": []}
-        )
-        if missing:
-            entry["conflicts"] = [(
-                "books.csv",
-                [f"{m}\n          — named in books.csv, no such file in pipeline/corpus"
-                 for m in missing],
-            )]
-            entry["files"] = []
-        else:
-            entry["files"] = found
-            entry["conflicts"] = []
-
-    return books
 
 
 def extract_book(work_id: str, entry: dict, dry_run: bool) -> dict:
@@ -873,6 +757,8 @@ def extract_book(work_id: str, entry: dict, dry_run: bool) -> dict:
             provenance.append(
                 {
                     "file": path.name,
+                    # Which copy, when one name exists in several folders.
+                    "folder": str(path.parent.relative_to(CORPUS)),
                     "first_page": start,
                     "last_page": len(raw_pages),
                 }
@@ -983,22 +869,18 @@ def report_chapters(doc: dict) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "work",
-        nargs="*",
-        help="work ids, or any substring of one — anzaldua, lotman, saldana",
-    )
+    parser.add_argument("work", nargs="*", help="full work ids")
     parser.add_argument(
         "--pending",
         type=int,
         metavar="N",
-        help="the next N works in books.csv that have a PDF and no pages yet",
+        help="the next N works with a PDF in ACCOUNTED and no extraction yet",
     )
     parser.add_argument(
         "--list",
         dest="which",
         metavar="CODE",
-        help="limit --pending to one list, by the start of its code: I, II, III",
+        help="limit --pending to a list or section: I, II, II.C, Supl. III",
     )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument(
@@ -1013,26 +895,20 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    if not MAPPING.exists():
-        sys.exit(f"{MAPPING} not found.")
-
-    books = read_mapping()
+    if args.pending and args.work:
+        parser.error("--pending chooses the works itself; do not also name works")
+    if not args.pending and not args.work:
+        parser.error("name the works by full id, or use --pending N")
 
     if args.pending:
-        wanted = set(pending_from_books(args.pending, args.which))
+        wanted = pending("extract", args.pending, args.which)
         if not wanted:
-            print("  nothing pending — every mapped work with a PDF has pages")
+            print("  nothing pending — every work with a PDF in ACCOUNTED is extracted")
             return
-        books = {k: v for k, v in books.items() if k in wanted}
-        print(f"  {len(books)} pending:")
-        for work_id in sorted(books):
-            print(f"    {work_id}")
-        print()
-    elif args.work:
-        wanted = {resolve(n) for n in args.work}
-        books = {k: v for k, v in books.items() if k in wanted}
-    elif not (args.chapters or args.glyphs or args.dry_run):
-        print(f"  extracting all {len(books)} mapped works. Name one to do less.")
+        books = works_to_extract(wanted)
+        announce_pending(wanted, set(books), "")
+    else:
+        books = works_to_extract([resolve(n) for n in args.work])
 
     if not books:
         sys.exit("nothing to extract")
@@ -1043,20 +919,14 @@ def main() -> None:
 
     for work_id, entry in sorted(books.items()):
         if entry.get("conflicts"):
-            for match, names in entry["conflicts"]:
-                listing = "\n        ".join(n[:120] for n in names)
-                if match == "books.csv":
-                    print(f"  ! {work_id}: books.csv names a file that is not there:")
-                    print(f"        {listing}")
-                else:
-                    print(f"  ! {work_id}: match {match!r} hits {len(names)} files:")
-                    print(f"        {listing}")
-                    print("    Narrow the match column until it names one file.")
+            print(f"  ! {work_id}: its source_path names a file that cannot be used:")
+            for problem in entry["conflicts"]:
+                print(f"        {problem}")
             print("    Skipped.")
             continue
 
         if not entry["files"]:
-            print(f"  {work_id}: no file found, skipped")
+            print(f"  {work_id}: no source_path in Neon, skipped")
             continue
 
         # Dict-mode extraction is slow on a scanned book, where the OCR text

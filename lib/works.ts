@@ -386,6 +386,31 @@ export async function worksWithoutPdf(): Promise<{
   };
 }
 
+// Works whose page numbering pipeline/offsets.py could not settle (migration
+// 014). Each stays out of sections, chunks and embeddings until its offset is
+// fixed and offsets.py is run on it again, which clears the problem. Listed
+// together so they can be settled in one sitting.
+export interface WorkWithOffsetProblem {
+  id: string;
+  author: string | null;
+  title: string;
+  year: number | null;
+  page_offset: number;
+  offset_problem: string;
+  offset_checked_at: string;
+}
+
+export async function worksWithOffsetProblems(): Promise<WorkWithOffsetProblem[]> {
+  const sql = db();
+  const rows = await sql`
+    select id, author, title, year, page_offset, offset_problem, offset_checked_at
+    from works
+    where offset_problem is not null
+    order by coalesce(author, title), year nulls last
+  `;
+  return rows as WorkWithOffsetProblem[];
+}
+
 export async function incompleteWorks(): Promise<{ work: Work; missing: string[] }[]> {
   const works = await listWorks();
   const byId = new Map(works.map((w) => [w.id, w]));

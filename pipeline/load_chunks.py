@@ -1,9 +1,14 @@
 #!/usr/bin/env python3
 """Load pipeline/chunks/*.json into the chunks table, with no embeddings.
 
-    python3 pipeline/load_chunks.py                    # every mapped chunk file
-    python3 pipeline/load_chunks.py rael               # a substring of a work id
-    python3 pipeline/load_chunks.py --dry-run
+    python3 pipeline/load_chunks.py --pending 5 --list I
+                                                   # numbering checked, no chunks yet
+    python3 pipeline/load_chunks.py <work id> ...  # named works, by full id
+    python3 pipeline/load_chunks.py --dry-run --pending 5
+
+With no work named and no --pending it refuses. A work whose page numbering
+offsets.py could not settle is skipped, named or not: its chunks would carry
+the wrong printed pages.
 
 One work per transaction: its chunks are deleted and reinserted. start_page
 and end_page are PRINTED pages, as the schema requires, and they are read from
@@ -25,7 +30,7 @@ import json
 import sys
 from pathlib import Path
 
-from dbconn import connect, resolve, work_ids
+from dbconn import announce_pending, connect, pending, resolve, skip_offset_problems
 
 CHUNKS = Path(__file__).parent / "chunks"
 
@@ -95,20 +100,44 @@ def load_one(cur, work_id: str, doc: dict) -> int:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("work", nargs="*", help="work ids, or a substring of one")
+    parser.add_argument("work", nargs="*", help="full work ids")
+    parser.add_argument(
+        "--pending",
+        type=int,
+        metavar="N",
+        help="the next N works with numbering checked and no chunks loaded",
+    )
+    parser.add_argument(
+        "--list",
+        dest="which",
+        metavar="CODE",
+        help="limit --pending to a list or section: I, II, II.C, Supl. III",
+    )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
-    files = sorted(CHUNKS.glob("*.json"))
-    if args.work:
-        wanted = {resolve(n) for n in args.work}
-        files = [f for f in files if f.stem in wanted]
+    if args.pending and args.work:
+        parser.error("--pending chooses the works itself; do not also name works")
+    if not args.pending and not args.work:
+        parser.error("name the works by full id, or use --pending N")
 
-    mapped = set(work_ids())
-    for f in files:
-        if f.stem not in mapped:
-            print(f"  {f.stem}: not in mapping.csv, skipped")
-    files = [f for f in files if f.stem in mapped]
+    by_stem = {f.stem: f for f in CHUNKS.glob("*.json")}
+    if args.pending:
+        wanted = pending("load_chunks", args.pending, args.which)
+        if not wanted:
+            print("  nothing pending — no checked work is waiting for chunks")
+            return
+        announce_pending(
+            wanted, set(by_stem),
+            "no chunk file in pipeline/chunks — run chunk.py for it first",
+        )
+    else:
+        wanted = skip_offset_problems([resolve(n) for n in args.work])
+        for work_id in wanted:
+            if work_id not in by_stem:
+                print(f"  {work_id}: no chunk file in pipeline/chunks — run chunk.py first")
+
+    files = [by_stem[w] for w in wanted if w in by_stem]
     if not files:
         sys.exit("nothing to load")
 

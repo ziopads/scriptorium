@@ -1,9 +1,17 @@
 #!/usr/bin/env python3
 """Load the chapter map from pipeline/pages/*.json into the sections table.
 
-    python3 pipeline/load_sections.py                  # every mapped page file
-    python3 pipeline/load_sections.py adorno-polemics-possession-2007
-    python3 pipeline/load_sections.py --dry-run
+    python3 pipeline/load_sections.py --pending 5 --list I
+                                                   # numbering checked, no chunks yet
+    python3 pipeline/load_sections.py <work id> ...  # named works, by full id
+    python3 pipeline/load_sections.py --dry-run --pending 5
+
+With no work named and no --pending it refuses.
+
+Run after load_pages.py and offsets.py for the same works: the printed pages
+come from the pages table, so a work whose pages are not in yet gets none and
+says so. A work whose page numbering offsets.py could not settle is skipped,
+named or not, until the numbering is fixed and offsets.py run on it again.
 
 One work per transaction: its sections are deleted and reinserted, so a rerun
 after re-extraction replaces rather than duplicates. A book whose extract found
@@ -25,7 +33,7 @@ import json
 import sys
 from pathlib import Path
 
-from dbconn import connect, resolve, work_ids
+from dbconn import announce_pending, connect, pending, resolve, skip_offset_problems
 
 PAGES = Path(__file__).parent / "pages"
 
@@ -89,17 +97,44 @@ def load_one(cur, book_id: str, work_id: str, doc: dict) -> int:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("book_id", nargs="*")
+    parser.add_argument("work", nargs="*", help="full work ids")
+    parser.add_argument(
+        "--pending",
+        type=int,
+        metavar="N",
+        help="the next N works with numbering checked and no chunks loaded",
+    )
+    parser.add_argument(
+        "--list",
+        dest="which",
+        metavar="CODE",
+        help="limit --pending to a list or section: I, II, II.C, Supl. III",
+    )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
-    files = sorted(PAGES.glob("*.json"))
-    if args.book_id:
-        wanted = {resolve(n) for n in args.book_id}
-        files = [f for f in files if f.stem in wanted]
+    if args.pending and args.work:
+        parser.error("--pending chooses the works itself; do not also name works")
+    if not args.pending and not args.work:
+        parser.error("name the works by full id, or use --pending N")
 
-    mapped = set(work_ids())
-    files = [f for f in files if f.stem in mapped]
+    by_stem = {f.stem: f for f in PAGES.glob("*.json")}
+    if args.pending:
+        wanted = pending("load_sections", args.pending, args.which)
+        if not wanted:
+            print("  nothing pending — no checked work is waiting for sections")
+            return
+        announce_pending(
+            wanted, set(by_stem),
+            "no extraction in pipeline/pages — run extract.py for it first",
+        )
+    else:
+        wanted = skip_offset_problems([resolve(n) for n in args.work])
+        for work_id in wanted:
+            if work_id not in by_stem:
+                print(f"  {work_id}: no extraction in pipeline/pages — run extract.py first")
+
+    files = [by_stem[w] for w in wanted if w in by_stem]
     if not files:
         sys.exit("nothing to load")
 

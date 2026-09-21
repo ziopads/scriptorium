@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 
 import { NoteCard } from '@/components/note-card';
 import { NoteForm } from '@/components/note-form';
+import { Stars } from '@/components/stars';
 import { changeStatus } from '@/lib/actions';
 import { requireAllowedUser } from '@/lib/auth/guard';
 import { formatBibliography, formatNote, plain } from '@/lib/citation';
@@ -77,6 +78,11 @@ export default async function WorkPage({
           {work.kind !== 'monograph' ? ` · ${KIND_LABEL[work.kind]}` : null}
           {examinable.has(work.id) ? null : ' · not examinable'}
         </p>
+
+        <div className="flex items-baseline gap-2 text-sm">
+          <span className="text-muted">Rating</span>
+          <Stars id={work.id} value={work.priority} />
+        </div>
 
         <div className="flex flex-wrap items-baseline gap-3 pt-2 text-sm">
           {memberships.map((m) => (

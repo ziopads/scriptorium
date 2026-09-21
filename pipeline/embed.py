@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """Embed chunks that have no embedding yet.
 
-    python3 pipeline/embed.py                      # every unembedded chunk
-    python3 pipeline/embed.py rael                 # a substring of a work id
-    python3 pipeline/embed.py --dry-run            # count, no API call
-    python3 pipeline/embed.py --model voyage-4-large --dim 1024
+    python3 pipeline/embed.py --pending 5 --list I # checked works with unembedded chunks
+    python3 pipeline/embed.py <work id> ...        # named works, by full id
+    python3 pipeline/embed.py --dry-run --pending 5  # count, no API call
+    python3 pipeline/embed.py --model voyage-4-large --dim 1024 <work id>
+
+This is the stage that costs money, so it is the one where naming the works
+matters most. With no work named and no --pending it refuses. A work whose page
+numbering offsets.py could not settle is skipped, named or not.
 
 Idempotent and resumable: it selects rows where embedding is null (or where
 embedding_model differs from the requested model, with --replace), embeds
@@ -31,7 +35,7 @@ import sys
 import time
 from pathlib import Path
 
-from dbconn import connect, resolve
+from dbconn import announce_pending, connect, pending, resolve, skip_offset_problems
 
 DEFAULT_MODEL = "voyage-4"
 DEFAULT_DIM = 1024
@@ -57,7 +61,19 @@ def api_key() -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("work", nargs="*", help="work ids, or a substring of one")
+    parser.add_argument("work", nargs="*", help="full work ids")
+    parser.add_argument(
+        "--pending",
+        type=int,
+        metavar="N",
+        help="the next N checked works with chunks not yet embedded",
+    )
+    parser.add_argument(
+        "--list",
+        dest="which",
+        metavar="CODE",
+        help="limit --pending to a list or section: I, II, II.C, Supl. III",
+    )
     parser.add_argument("--model", default=DEFAULT_MODEL)
     parser.add_argument("--dim", type=int, default=DEFAULT_DIM)
     parser.add_argument("--replace", action="store_true",
@@ -65,7 +81,21 @@ def main() -> None:
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
-    works = [resolve(n) for n in args.work] if args.work else None
+    if args.pending and args.work:
+        parser.error("--pending chooses the works itself; do not also name works")
+    if not args.pending and not args.work:
+        parser.error("name the works by full id, or use --pending N")
+
+    if args.pending:
+        works = pending("embed", args.pending, args.which)
+        if not works:
+            print("  nothing pending — no checked work has unembedded chunks")
+            return
+    else:
+        works = skip_offset_problems([resolve(n) for n in args.work])
+        if not works:
+            print("  nothing to embed")
+            return
 
     with connect() as conn:
         with conn.cursor() as cur:
@@ -82,12 +112,24 @@ def main() -> None:
                     f"Run: alter table chunks alter column embedding type vector({args.dim});"
                 )
 
+            if args.pending:
+                cur.execute(
+                    "select distinct work_id from chunks where work_id = any(%s)",
+                    (works,),
+                )
+                works = announce_pending(
+                    works,
+                    {row[0] for row in cur.fetchall()},
+                    "no chunks in the database — run load_chunks.py for it first",
+                )
+                if not works:
+                    print("  nothing to embed")
+                    return
+
             where = "embedding is null" if not args.replace else \
                     "(embedding is null or embedding_model is distinct from %(model)s)"
-            params = {"model": args.model}
-            if works is not None:
-                where += " and work_id = any(%(works)s)"
-                params["works"] = works
+            params = {"model": args.model, "works": works}
+            where += " and work_id = any(%(works)s)"
             cur.execute(f"select count(*) from chunks where {where}", params)
             todo = cur.fetchone()[0]
 

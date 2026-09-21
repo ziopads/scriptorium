@@ -1,13 +1,23 @@
 #!/usr/bin/env python3
 """Load page text from pipeline/pages/*.json into the pages table.
 
-    python3 pipeline/load_pages.py                     # every page file with a work_id
-    python3 pipeline/load_pages.py anzaldua            # a substring of a work id
-    python3 pipeline/load_pages.py --dry-run           # report, write nothing
+    python3 pipeline/load_pages.py --pending 5 --list I
+                                                       # extracted, not yet loaded
+    python3 pipeline/load_pages.py <work id> ...       # named works, by full id
+    python3 pipeline/load_pages.py --dry-run --pending 5
+
+With no work named and no --pending it refuses.
 
 One work per transaction: its rows are deleted and reinserted, so a rerun
 after re-extraction replaces rather than duplicates. page_loads records which
 extractor run the rows came from.
+
+New pages clear the work's offset check (offset_checked_at, offset_problem),
+because the folios it was judged on have been replaced. Run offsets.py next.
+
+works.source_path is not written. Neon is where a person records which file a
+work is; a loader copying back whatever the extraction read would overwrite
+that decision with the file the pipeline happened to open.
 
 The printed page is not written. It is page_index + works.page_offset, in the
 printed_pages view; this loader neither reads nor trusts the printed_page the
@@ -24,7 +34,7 @@ import json
 import sys
 from pathlib import Path
 
-from dbconn import connect, resolve, work_ids
+from dbconn import announce_pending, connect, pending, resolve
 
 PAGES = Path(__file__).parent / "pages"
 
@@ -65,40 +75,51 @@ def load_one(cur, work_id: str, doc: dict) -> int:
         ),
     )
 
-    # Which file this work is. works.source_path has existed since the first
-    # schema and nothing ever filled it, so the only record of the association
-    # lived in mapping.csv and in the extract's provenance — neither visible
-    # from the application, which is why answering "which PDF is this book?"
-    # meant grepping a JSON file.
-    #
-    # Several files for one work — Saldaña's three chapter PDFs — join with a
-    # pipe. This is a record for a reader, not a key.
-    files = " | ".join(s["file"] for s in doc.get("sources", []) if s.get("file"))
-    if files:
-        cur.execute(
-            "update works set source_path = %s, updated_at = now() where id = %s",
-            (files, work_id),
-        )
+    cur.execute(
+        "update works set offset_checked_at = null, offset_problem = null where id = %s",
+        (work_id,),
+    )
 
     return len(pages)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("work", nargs="*", help="work ids, or a substring of one")
+    parser.add_argument("work", nargs="*", help="full work ids")
+    parser.add_argument(
+        "--pending",
+        type=int,
+        metavar="N",
+        help="the next N works extracted and not yet loaded",
+    )
+    parser.add_argument(
+        "--list",
+        dest="which",
+        metavar="CODE",
+        help="limit --pending to a list or section: I, II, II.C, Supl. III",
+    )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
-    files = sorted(PAGES.glob("*.json"))
-    if args.work:
-        wanted = {resolve(n) for n in args.work}
-        files = [f for f in files if f.stem in wanted]
+    if args.pending and args.work:
+        parser.error("--pending chooses the works itself; do not also name works")
+    if not args.pending and not args.work:
+        parser.error("name the works by full id, or use --pending N")
 
-    mapped = set(work_ids())
-    skipped = [f.stem for f in files if f.stem not in mapped]
-    files = [f for f in files if f.stem in mapped]
-    for s in skipped:
-        print(f"  {s}: not in mapping.csv, skipped")
+    by_stem = {f.stem: f for f in PAGES.glob("*.json")}
+    if args.pending:
+        wanted = pending("load_pages", args.pending, args.which)
+        if not wanted:
+            print("  nothing pending — every extraction on disk is loaded")
+            return
+        announce_pending(wanted, set(by_stem), "")
+    else:
+        wanted = [resolve(n) for n in args.work]
+        for work_id in wanted:
+            if work_id not in by_stem:
+                print(f"  {work_id}: no extraction in pipeline/pages — run extract.py first")
+
+    files = [by_stem[w] for w in wanted if w in by_stem]
     if not files:
         sys.exit("nothing to load")
 
@@ -121,6 +142,7 @@ def main() -> None:
             print(f"  {work_id:<52} {n:>4}p")
 
     print(f"\n  {total:,} pages loaded")
+    print("  Next: offsets.py for the same works, before sections and chunks.")
 
 
 if __name__ == "__main__":

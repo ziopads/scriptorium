@@ -36,7 +36,7 @@ import csv
 import unicodedata
 from pathlib import Path
 
-from dbconn import connect
+from dbconn import connect, repair_mojibake
 
 ROOT = Path(__file__).parent
 CORPUS = ROOT / "corpus"
@@ -57,33 +57,6 @@ def read(path: Path) -> list[dict]:
     # than arriving as a stray character on the first column name.
     with path.open(encoding="utf-8-sig") as fh:
         return list(csv.DictReader(l for l in fh if not l.lstrip().startswith("#")))
-
-
-def repair_mojibake(name: str, names: set, key) -> str:
-    """Undo a UTF-8 file read as MacRoman, verified against the corpus.
-
-    A spreadsheet that guesses the encoding on open turns a curly apostrophe
-    and a combining accent into runs of Latin-1 punctuation, then saves the
-    garbage back as real characters. The damage is mechanical and exactly
-    reversible: those characters are the UTF-8 bytes of the original, so
-    encoding back and decoding as UTF-8 returns the filename.
-
-    An earlier version looked for the damage by its characters and never fired,
-    because I guessed the wrong ones. This does not guess. It tries the
-    reversal and keeps the result only if it names a file that exists: a repair
-    that produces nothing real is not a repair, and one that produces a real
-    file is right whatever the damage looked like.
-    """
-    if not name or key(name) in names:
-        return name
-    for encoding in ("mac_roman", "cp1252", "latin-1"):
-        try:
-            fixed = name.encode(encoding).decode("utf-8")
-        except (UnicodeEncodeError, UnicodeDecodeError):
-            continue
-        if key(fixed) in names:
-            return fixed
-    return name
 
 
 def main() -> None:

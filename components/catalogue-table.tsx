@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useMemo, useRef, useState, useTransition } from 'react';
+import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 
 import { Stars } from '@/components/stars';
 import { characterizeSelection } from '@/lib/actions';
@@ -63,6 +63,16 @@ const CLEAR_RATING = '__clear__';
 const PURPOSES: Purpose[] = ['comps', 'both', 'dissertation', 'unassigned'];
 const STANDINGS: Standing[] = ['assigned', 'added', 'excluded'];
 
+// The selection is kept in session storage, so it survives a search, the filter
+// links above the table (which reload the page), a reload, and a visit to a
+// work page. It lasts until cleared, applied, or the tab is closed.
+const SELECTION_KEY = 'scriptorium:catalogue-selection';
+
+// Lowercased, accents removed: "anzaldua" finds Anzaldúa.
+function fold(value: string): string {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
 export function CatalogueTable({ rows }: { rows: Row[] }) {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkPurpose, setBulkPurpose] = useState<string>(NO_CHANGE);
@@ -77,6 +87,35 @@ export function CatalogueTable({ rows }: { rows: Row[] }) {
   const [minStars, setMinStars] = useState<number | null>(null);
   const [unratedOnly, setUnratedOnly] = useState(false);
   const [byRating, setByRating] = useState(false);
+  const [query, setQuery] = useState('');
+  const [showSelected, setShowSelected] = useState(false);
+
+  // Read the saved selection once, after the first render: session storage does
+  // not exist on the server, and reading it during render would make the server
+  // and browser disagree. Writing waits for the read, so an empty first render
+  // cannot overwrite what was saved.
+  const [restored, setRestored] = useState(false);
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(SELECTION_KEY);
+      if (raw) setSelected(new Set(JSON.parse(raw) as string[]));
+    } catch {
+      // Unreadable or unavailable storage: start with nothing selected.
+    }
+    setRestored(true);
+  }, []);
+  useEffect(() => {
+    if (!restored) return;
+    try {
+      if (selected.size > 0) {
+        sessionStorage.setItem(SELECTION_KEY, JSON.stringify([...selected]));
+      } else {
+        sessionStorage.removeItem(SELECTION_KEY);
+      }
+    } catch {
+      // The selection still works for this page; it just will not persist.
+    }
+  }, [selected, restored]);
 
   function priorityOf(row: Row): number | null {
     return rated.has(row.id) ? rated.get(row.id)! : row.priority;
@@ -85,7 +124,15 @@ export function CatalogueTable({ rows }: { rows: Row[] }) {
   // What is on screen. Shift-click ranges and select-all follow this rather
   // than the full list, so a range never reaches a row she cannot see.
   const visible = useMemo(() => {
+    const needle = fold(query.trim());
     const kept = rows.filter((r) => {
+      if (showSelected && !selected.has(r.id)) return false;
+      if (
+        needle &&
+        !fold(`${r.author ?? ''} ${r.title} ${r.container_title ?? ''} ${r.id}`).includes(needle)
+      ) {
+        return false;
+      }
       const p = rated.has(r.id) ? rated.get(r.id)! : r.priority;
       if (unratedOnly) return p === null;
       if (minStars !== null) return p !== null && p >= minStars;
@@ -97,7 +144,15 @@ export function CatalogueTable({ rows }: { rows: Row[] }) {
       const pb = (rated.has(b.id) ? rated.get(b.id)! : b.priority) ?? -1;
       return pb - pa;
     });
-  }, [rows, rated, minStars, unratedOnly, byRating]);
+  }, [rows, rated, minStars, unratedOnly, byRating, query, showSelected, selected]);
+
+  // Selected works not on screen, so Apply never changes a book she cannot
+  // account for: those hidden by the search or the rating filters, and those
+  // outside the list or filter the page was loaded with.
+  const visibleIds = new Set(visible.map((r) => r.id));
+  const rowIds = new Set(rows.map((r) => r.id));
+  const hiddenHere = [...selected].filter((id) => rowIds.has(id) && !visibleIds.has(id)).length;
+  const elsewhere = [...selected].filter((id) => !rowIds.has(id)).length;
 
   // A ref, not state: read during a click, never rendered, and state would
   // rerender every row on each tick.
@@ -169,6 +224,7 @@ export function CatalogueTable({ rows }: { rows: Row[] }) {
 
       setNote(`${updated} updated`);
       setSelected(new Set());
+      setShowSelected(false);
       setBulkPurpose(NO_CHANGE);
       setBulkStanding(NO_CHANGE);
       setBulkRating(NO_CHANGE);
@@ -182,6 +238,15 @@ export function CatalogueTable({ rows }: { rows: Row[] }) {
 
   return (
     <div className="space-y-3">
+      <input
+        type="search"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search by author, title or identifier"
+        aria-label="Search the catalogue"
+        className="w-full text-sm"
+      />
+
       <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs text-muted">
         <label className="flex items-center gap-2">
           <input type="checkbox" checked={allSelected} onChange={toggleAll} className="w-auto" />
@@ -235,10 +300,15 @@ export function CatalogueTable({ rows }: { rows: Row[] }) {
         >
           sort by rating
         </button>
-        {minStars !== null || unratedOnly || byRating ? (
+        {minStars !== null || unratedOnly || byRating || query ? (
           <button
             type="button"
-            onClick={() => { setMinStars(null); setUnratedOnly(false); setByRating(false); }}
+            onClick={() => {
+              setMinStars(null);
+              setUnratedOnly(false);
+              setByRating(false);
+              setQuery('');
+            }}
             className="px-2 py-0.5 text-muted hover:text-accent"
           >
             clear
@@ -251,7 +321,25 @@ export function CatalogueTable({ rows }: { rows: Row[] }) {
 
       {selected.size > 0 ? (
         <div className="sticky top-0 z-20 flex flex-wrap items-center gap-3 border border-accent/40 bg-background px-3 py-2 text-sm">
-          <span>{selected.size} selected</span>
+          <span>
+            {selected.size} selected
+            {hiddenHere > 0 ? (
+              <span className="text-accent"> · {hiddenHere} hidden by the search or filters</span>
+            ) : null}
+            {elsewhere > 0 ? (
+              <span className="text-accent">
+                {' '}· {elsewhere} outside this list or filter (open All lists to see them)
+              </span>
+            ) : null}
+          </span>
+
+          <button
+            type="button"
+            onClick={() => setShowSelected((v) => !v)}
+            className={`text-sm ${showSelected ? 'text-accent' : 'text-muted hover:text-accent'}`}
+          >
+            {showSelected ? 'Show all' : 'Show selected'}
+          </button>
 
           <label className="flex items-center gap-2">
             Purpose
@@ -299,7 +387,11 @@ export function CatalogueTable({ rows }: { rows: Row[] }) {
 
           <button
             type="button"
-            onClick={() => { setSelected(new Set()); anchorRef.current = null; }}
+            onClick={() => {
+              setSelected(new Set());
+              setShowSelected(false);
+              anchorRef.current = null;
+            }}
             className="text-muted hover:text-accent"
           >
             Clear
