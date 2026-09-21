@@ -2,9 +2,44 @@ import Link from 'next/link';
 
 import { saveImprint } from '@/lib/actions';
 import { requireAllowedUser } from '@/lib/auth/guard';
-import { incompleteWorks } from '@/lib/works';
+import { incompleteWorks, worksWithoutPdf } from '@/lib/works';
 
 export const dynamic = 'force-dynamic';
+
+function NoPdf({
+  works,
+  heading,
+  blurb,
+}: {
+  works: Awaited<ReturnType<typeof worksWithoutPdf>>['none'];
+  heading: string;
+  blurb: string;
+}) {
+  if (works.length === 0) return null;
+  return (
+    <section className="space-y-2">
+      <h2 className="text-lg">
+        {heading} <span className="text-sm text-muted">({works.length})</span>
+      </h2>
+      <p className="text-sm text-muted">{blurb}</p>
+      <ul className="divide-y divide-rule border-y border-rule">
+        {works.map((w) => (
+          <li key={w.id} className="flex flex-wrap items-baseline gap-x-3 py-1.5 text-sm">
+            <span className="w-20 shrink-0 font-mono text-xs text-muted">{w.code}</span>
+            <span className="shrink-0">{w.author ?? '\u2014'}</span>
+            <Link href={`/works/${w.id}`} className="min-w-0 flex-1 italic hover:text-accent">
+              {w.title}
+            </Link>
+            {w.year ? <span className="text-xs text-muted">{w.year}</span> : null}
+            {w.pdf_verdict ? (
+              <span className="text-xs text-accent">{w.pdf_verdict}</span>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
 
 // One row per incomplete record, each its own form, so a save writes one work
 // and leaves the page where it was. The point of this screen is working down a
@@ -12,11 +47,33 @@ export const dynamic = 'force-dynamic';
 export default async function GapsPage() {
   await requireAllowedUser();
 
-  const entries = await incompleteWorks();
+  const [entries, pdfs] = await Promise.all([incompleteWorks(), worksWithoutPdf()]);
 
   return (
-    <div className="space-y-6">
-      <header className="space-y-1">
+    <div className="space-y-8">
+      <NoPdf
+        works={pdfs.none}
+        heading="No copy yet"
+        blurb="On an examination list, and nobody has found a PDF. This is the list to
+               go shopping from — a library, an interlibrary loan, a bookshop."
+      />
+
+      <NoPdf
+        works={pdfs.queued}
+        heading="Waiting on OCR"
+        blurb="A copy exists but its text cannot be read yet: either no text layer at
+               all, or recognition poor enough that the words are not the book's.
+               Being worked on; nothing to do here."
+      />
+
+      <NoPdf
+        works={pdfs.unknown}
+        heading="Not yet looked at"
+        blurb="Nobody has said whether a copy exists. Not the same as having looked
+               and found nothing."
+      />
+
+      <header className="space-y-1 pt-2">
         <h1 className="text-2xl">Gaps</h1>
         <p className="text-sm text-muted">
           {entries.length} records missing a field a citation needs. The reading list did

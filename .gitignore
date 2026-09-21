@@ -67,9 +67,15 @@ pipeline/citability.csv
 pipeline/triage.csv
 pipeline/isbns.csv
 pipeline/viability.csv
+pipeline/reconcile.csv
+books.csv
 db/seed.sql
 db/seed-books.sql
 db/link-sources.sql
+
+# Generated migrations carry the whole list — every author, title and number —
+# as data and as comments. The generator is tracked; what it emits is not.
+db/010-lists-*.sql
 
 # Her reading notes and mapa de cruces, transcribed as notes and axes. Entirely
 # her prose; the loader pattern lives in the tracked files above.
@@ -92,5 +98,4 @@ pipeline/chunks/
 *.lcpdf
 *.mobi
 *.zip
-backups/
 backups/

@@ -23,3 +23,75 @@ Borderlands _ the new Mestiza,anzaldua-borderlands-la-frontera-the-new-1987,"the
 The corn woman,vigil-the-corn-woman-stories-and-1994,
 The extractive zone,gomez-barris-the-extractive-zone-social-ecologies-2017,"two files in the corpus — narrow the match to one before extracting"
 Women%27s_Tales,rebolledo-women-s-tales-from-the-2000,filename says PART_I — likely incomplete
+#
+# Added 17 Sept from coverage.py --ready. Every line below is a work whose
+# candidate scored at or near 1.0 with nothing close behind it. Read against the
+# corpus listing before extracting; a wrong line here concatenates a book.
+#
+# I. THEORY
+Los trabajos de la memoria,jelin-los-trabajos-de-la-memoria-2002,
+Fieldnotes _ the Makings of Anthropology,sanjek-fieldnotes-the-makings-of-anthropology-1990,
+El malestar en la cultura,freud-el-malestar-en-la-cultura-1978,
+El relato en perspectiva,pimentel-el-relato-en-perspectiva-estudio-1998,
+"RAMA, ÁNGEL - Transculturación",rama-transculturacion-narrativa-en-america-la-1982,
+Ghostly Matters,gordon-ghostly-matters-haunting-and-the-1997,
+Acto de presencia,molloy-acto-de-presencia-la-escritura-1996,
+Along the Archival Grain,stoler-along-the-archival-grain-epistemic-2009,
+El archivo y el repertorio,taylor-the-archive-and-the-repertoire-2003,"Spanish translation; the catalogue record is the English original, so pagination will not match it"
+"Shamanism, colonialism, and the wild man",taussig-shamanism-colonialism-and-the-wild-1987,
+Massacre of the Dreamers,castillo-massacre-of-the-dreamers-essays-1994,
+La Llorona's Children,leon-la-llorona-s-children-religion-2004,
+Borderlands curanderos,seman-border-curanderos-2021,"catalogued as Border Curanderos; the file is Borderlands Curanderos: The Worlds of Santa Teresa Urrea"
+Mohawk interruptus,simpson-mohawk-interruptus-political-life-across-2014,
+Unsettled Borders,schaeffer-unsettled-borders-the-militarized-scienc-2022,
+# II. DISSERTATION
+Paper Knowledge,gitelman-paper-knowledge-toward-a-media-2014,
+Scales of Captivity,brady-scales-of-captivity-racial-capitalism-2022,
+Never Whistle at Night,hawk-never-whistle-at-night-an-2023,
+So All Is Not Lost,melendez-so-all-is-not-lost-1997,
+Ghosts of My Life,fisher-ghosts-of-my-life-writings-2014,
+Contemporary Gothic,spooner-contemporary-gothic-2006,
+Teoría del texto e interpretación,mignolo-teoria-del-texto-e-interpretacion-1986,
+Singing for my echo,rodriguez-singing-for-my-echo-memories-1987,
+Naufragios de Alvar Núñez,cabeza-de-vaca-naufragios-1989,
+Historia de la Nueva México,villagra-historia-de-la-nueva-mexico-2010,
+The Folklore of Spain in the American Southwest,espinosa-the-folklore-of-spain-in-1985,
+Cuentos de Cuanto Hay,espinosa-cuentos-de-cuanto-hay-tales-1998,
+The Weeping woman,kraul-the-weeping-woman-encounters-with-1988,
+The Weird and the Eerie,fisher-the-weird-and-the-eerie-2017,
+Magical Realism in Contemporary Chicano Fiction,walter-magical-realism-in-contemporary-chicano-1993,
+Ghost-Watching American Modernity,blanco-ghost-watching-american-modernity-haunti-2012,
+Extinct Lands,brady-extinct-lands-temporal-geographies-chica-2002,
+There Was a Woman,perez-there-was-a-woman-la-2008,
+Colonialism past and present,bolanos-colonialism-past-and-present-reading-2002,
+Coloniality at Large,morana-coloniality-at-large-latin-america-2008,
+Nación Ǵenízara,gonzales-nacion-genizara-ethnogenesis-place-and-2019,
+# III. TEACHING
+Los niños perdidos,luiselli-los-ninos-perdidos-un-ensayo-2016,ePub conversion — searchable, no printed pagination
+Postcolonial Love Poem,diaz-postcolonial-love-poem-2020,
+"Irma Pineda, Nostalgia",pineda-nostalgia-doesn-t-flow-away-2024,ePub conversion — searchable, no printed pagination
+A Xicana Codex of Changing Consciousness,moraga-a-xicana-codex-of-changing-2011,
+Woman Hollering Creek,cisneros-woman-hollering-creek-and-other-1991,
+El Periquillo Sarniento,fernandez-de-lizardi-el-periquillo-sarniento-1816,
+Tomochic,frias-tomochic-1893,
+Los de abajo,azuela-los-de-abajo-1915,
+La Raza Cósmica,vasconcelos-la-raza-cosmica-1925,
+Cartucho,campobello-cartucho-1931,
+El luto humano,revueltas-el-luto-humano-1943,ePub conversion — searchable, no printed pagination
+la muerte de artemio cruz,fuentes-la-muerte-de-artemio-cruz-1962,
+Crónicas diabólicas,arce-cronicas-diabolicas-1916-1926-1982,
+Las Aventuras de Don Chipote,venegas-las-aventuras-de-don-chipote-1928,
+With His Pistol in His Hand,paredes-with-his-pistol-in-his-1958,
+I am Joaquín,gonzales-yo-soy-joaquin-1967,
+y no se lo tragó la tierra,rivera-y-no-se-lo-trago-1996,
+Palabras de mediodía,corpi-palabras-de-mediodia-noon-words-1980,
+Por el amor de Pedro Infante,chavez-loving-pedro-infante-2001,
+Sabrina & Corina,fajardo-anstine-sabrina-corina-stories-2019,
+Cajas de cartón,jimenez-cajas-de-carton-2002,
+From the Other Side of Night,alarcon-from-the-other-side-of-2002,
+Pedro Páramo ; y El llano en llamas,rulfo-el-llano-en-llamas-1955,"one file holds both novels; Pedro Páramo points at the same file and is extracted separately"
+Pedro Páramo ; y El llano en llamas,rulfo-pedro-paramo-1955,"same file as El llano en llamas — the volume contains both"
+"Bless me, Ultima",anaya-bless-me-ultima-1972,
+Prie tita and the ghost woman,anzaldua-prietita-and-the-ghost-woman-1995,
+Eat the Mouth that Feeds You,fragoza-eat-the-mouth-that-feeds-2021,
+Cuentos reunidos,davila-cuentos-reunidos,ePub conversion — searchable, no printed pagination

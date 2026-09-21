@@ -38,6 +38,7 @@ from pathlib import Path
 PIPELINE = Path(__file__).parent
 ROOT = PIPELINE.parent
 MAPPING = PIPELINE / "mapping.csv"
+BOOKS = ROOT / "books.csv"
 
 
 def database_url() -> str:
@@ -64,23 +65,50 @@ def connect():
 
 
 def books() -> dict[str, dict]:
-    """work_id -> {matches: [str], note: str}, from mapping.csv.
+    """work_id -> {matches: [str], note: str}, from books.csv and mapping.csv.
 
-    A work split across several files has several rows, each naming its own
-    file; they collapse to one entry with several match strings. A row with no
-    work_id is skipped here and reported by status.py, because a file nobody
-    has identified should be visible rather than silently processed."""
+    books.csv is the register a person edits: one row per book on the lists,
+    with the filename of its PDF in the pdf column. A filename there is the
+    decision, and it wins — exactly, by name, with no matching.
+
+    mapping.csv holds match strings, which is how most works were mapped before
+    books.csv existed. Still read, so nothing that works today stops working.
+
+    A work in neither is skipped here and reported by status.py, because a file
+    nobody has identified should be visible rather than silently processed."""
     out: dict[str, dict] = {}
-    with MAPPING.open(encoding="utf-8") as handle:
-        for row in csv.DictReader(handle):
-            work_id = (row.get("work_id") or "").strip()
-            match = (row.get("match") or "").strip()
-            if not work_id or not match:
-                continue
-            entry = out.setdefault(work_id, {"matches": [], "note": ""})
-            entry["matches"].append(match)
-            if (row.get("note") or "").strip():
-                entry["note"] = row["note"].strip()
+
+    if MAPPING.exists():
+        with MAPPING.open(encoding="utf-8") as handle:
+            rows = csv.DictReader(l for l in handle if not l.lstrip().startswith("#"))
+            for row in rows:
+                work_id = (row.get("work_id") or "").strip()
+                match = (row.get("match") or "").strip()
+                if not work_id or not match:
+                    continue
+                entry = out.setdefault(work_id, {"matches": [], "note": ""})
+                entry["matches"].append(match)
+                if (row.get("note") or "").strip():
+                    entry["note"] = row["note"].strip()
+
+    if BOOKS.exists():
+        # utf-8-sig: inventory.py writes books.csv with a byte-order mark so a
+        # spreadsheet reads it as UTF-8 instead of guessing. Reading it back
+        # without -sig puts the mark on the first column name.
+        with BOOKS.open(encoding="utf-8-sig") as handle:
+            for row in csv.DictReader(handle):
+                work_id = (row.get("work_id") or "").strip()
+                pdf = (row.get("pdf") or "").strip()
+                if not work_id or not pdf:
+                    continue
+                entry = out.setdefault(work_id, {"matches": [], "note": ""})
+                # Replaces rather than adds: a filename typed into books.csv is
+                # a decision about which file this book is, not another guess to
+                # put alongside the old one.
+                entry["matches"] = [f.strip() for f in pdf.split("|") if f.strip()]
+                if (row.get("note") or "").strip():
+                    entry["note"] = row["note"].strip()
+
     return out
 
 

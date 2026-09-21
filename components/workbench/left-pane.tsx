@@ -46,6 +46,7 @@ export function LeftPane({
   const [list, setList] = useState<string | null>(null);
   const [fileOnly, setFileOnly] = useState(false);
   const [starred, setStarred] = useState(false);
+  const [noPdf, setNoPdf] = useState(false);
   const [active, setActive] = useState<number>(-1);
   const listRef = useRef<HTMLUListElement>(null);
 
@@ -108,6 +109,7 @@ export function LeftPane({
       if (list && r.list_id !== list) return false;
       if (fileOnly && !r.has_file) return false;
       if (starred && (r.priority ?? 0) < 4) return false;
+      if (noPdf && r.pdf_state !== 'none') return false;
       if (!needle) return true;
       return (
         r.title.toLowerCase().includes(needle) ||
@@ -116,9 +118,9 @@ export function LeftPane({
         r.id.includes(needle)
       );
     });
-  }, [rows, q, list, fileOnly, starred]);
+  }, [rows, q, list, fileOnly, starred, noPdf]);
 
-  useEffect(() => { setActive(-1); }, [q, list, fileOnly, starred, pane]);
+  useEffect(() => { setActive(-1); }, [q, list, fileOnly, starred, noPdf, pane]);
 
   // Keep the highlighted row in view.
   useEffect(() => {
@@ -199,6 +201,14 @@ export function LeftPane({
                 title="Rated four stars or more — the works she is leaning on"
               >
                 ★★★★+
+              </button>
+              <button
+                type="button"
+                onClick={() => setNoPdf((v) => !v)}
+                className={`border px-2 py-0.5 ${noPdf ? 'border-accent text-accent' : 'border-rule text-muted hover:text-accent'}`}
+                title="On a list, and nobody has found a copy"
+              >
+                no pdf
               </button>
             </div>
             <p className="text-[11px] text-muted">

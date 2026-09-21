@@ -52,6 +52,27 @@ MAPPING = ROOT / "mapping.csv"
 CITABILITY = ROOT / "citability.csv"
 DECISIONS = ROOT / "decisions.csv"
 
+# Folders inside the corpus that are not a pool of candidates.
+#
+#   ACCOUNTED  files already spoken for. Moving one here is how a person says
+#              "dealt with", and it is a better record than any report: the
+#              folder shrinks as the work is done, visibly, without a command.
+#   OCR        files queued for re-recognition. Still the work's PDF, so still
+#              extractable, but not something to propose as a fresh candidate.
+#
+# Extraction still reads both — a file's location says nothing about which book
+# it is. This only stops the scorer offering files whose question is settled.
+SET_ASIDE = {"ACCOUNTED", "OCR"}
+
+
+def candidate_pdfs() -> list[Path]:
+    """PDFs still looking for a work."""
+    return sorted(
+        p for p in CORPUS.rglob("*.pdf")
+        if not p.name.startswith(".")
+        and not SET_ASIDE & set(p.relative_to(CORPUS).parts[:-1])
+    )
+
 STOP = {
     "the", "a", "an", "of", "and", "in", "to", "for", "from", "on", "with", "at",
     "la", "el", "los", "las", "de", "del", "y", "en", "un", "una", "al", "por",
@@ -153,7 +174,7 @@ def mapping_rows() -> tuple[dict[str, list[str]], list[str]]:
     if not MAPPING.exists():
         return by_work, every
     with MAPPING.open(encoding="utf-8") as fh:
-        for row in csv.DictReader(fh):
+        for row in csv.DictReader(l for l in fh if not l.lstrip().startswith("#")):
             match = (row.get("match") or "").strip()
             work_id = (row.get("work_id") or "").strip()
             if match:
@@ -180,7 +201,7 @@ def main() -> None:
     by_work, all_matches = mapping_rows()
     judged = verdicts()
     decided = decisions()
-    pdfs = sorted(p for p in CORPUS.rglob("*.pdf") if not p.name.startswith("."))
+    pdfs = candidate_pdfs()
 
     with connect() as conn:
         with conn.cursor() as cur:
@@ -225,8 +246,10 @@ def main() -> None:
             continue
 
         if work["id"] in by_work:
+            # A mapped work's file may well be in ACCOUNTED by now, so this
+            # looks across the whole corpus rather than the candidate pool.
             for needle in by_work[work["id"]]:
-                for p in pdfs:
+                for p in CORPUS.rglob("*.pdf"):
                     if fold(needle) in fold(p.name):
                         claimed.add(p.name)
             state = "loaded" if pages_db.get(work["id"], 0) else "mapped"

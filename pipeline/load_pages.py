@@ -64,6 +64,22 @@ def load_one(cur, work_id: str, doc: dict) -> int:
             doc.get("running_heads_removed", []),
         ),
     )
+
+    # Which file this work is. works.source_path has existed since the first
+    # schema and nothing ever filled it, so the only record of the association
+    # lived in mapping.csv and in the extract's provenance — neither visible
+    # from the application, which is why answering "which PDF is this book?"
+    # meant grepping a JSON file.
+    #
+    # Several files for one work — Saldaña's three chapter PDFs — join with a
+    # pipe. This is a record for a reader, not a key.
+    files = " | ".join(s["file"] for s in doc.get("sources", []) if s.get("file"))
+    if files:
+        cur.execute(
+            "update works set source_path = %s, updated_at = now() where id = %s",
+            (files, work_id),
+        )
+
     return len(pages)
 
 

@@ -313,6 +313,79 @@ export async function removeFromList(listId: string, workId: string): Promise<vo
 // The fields a citation needs. language and source_format describe the file
 // rather than the entry, so they are deliberately absent. An essay is judged on
 // its container's imprint, not its own.
+export interface WorkWithoutPdf {
+  id: string;
+  author: string | null;
+  title: string;
+  year: number | null;
+  code: string;
+  list_name: string;
+  supplementary: boolean;
+  pdf_state: string | null;
+  pdf_verdict: string | null;
+  source_path: string | null;
+}
+
+// Works on an examination list with no usable PDF, and works whose PDF is
+// waiting on OCR. The first group is a shopping list — nobody but her can act
+// on it, and until now it existed only in a terminal.
+//
+// pdf_state is written by pipeline/sync_books.py from books.csv, which is the
+// register a person edits. A null state means nobody has looked yet, which is
+// different from having looked and found nothing, so it is reported apart.
+export async function worksWithoutPdf(): Promise<{
+  none: WorkWithoutPdf[];
+  queued: WorkWithoutPdf[];
+  unknown: WorkWithoutPdf[];
+}> {
+  const sql = db();
+  const rows = (await sql`
+    select w.id, w.author, w.title, w.year,
+           w.pdf_state, w.pdf_verdict, w.source_path,
+           coalesce(el.name, '') as list_name,
+           coalesce(s.title, '') as section,
+           coalesce(s.letter, '') as letter,
+           li.ordinal,
+           coalesce(el.sort, 99) as list_sort
+    from list_items li
+    join works w on w.id = li.work_id
+    join exam_lists el on el.id = li.list_id and el.examinable
+    left join list_sections s on s.id = li.section_id
+    where w.pdf_state is distinct from 'loaded'
+      and w.pdf_state is distinct from 'ready'
+    order by el.sort, li.ordinal
+  `) as {
+    id: string; author: string | null; title: string; year: number | null;
+    pdf_state: string | null; pdf_verdict: string | null; source_path: string | null;
+    list_name: string; section: string; letter: string; ordinal: number;
+  }[];
+
+  const shaped = rows.map((r) => {
+    const numeral = r.list_name.split('.')[0];
+    const supplementary = r.section === 'Supplementary';
+    return {
+      id: r.id,
+      author: r.author,
+      title: r.title,
+      year: r.year,
+      list_name: r.list_name,
+      supplementary,
+      pdf_state: r.pdf_state,
+      pdf_verdict: r.pdf_verdict,
+      source_path: r.source_path,
+      code: supplementary
+        ? `${numeral}.Supl.${r.ordinal}`
+        : `${numeral}.${r.letter}.${r.ordinal}`,
+    };
+  });
+
+  return {
+    none: shaped.filter((w) => w.pdf_state === 'none'),
+    queued: shaped.filter((w) => w.pdf_state === 'queued'),
+    unknown: shaped.filter((w) => w.pdf_state === null),
+  };
+}
+
 export async function incompleteWorks(): Promise<{ work: Work; missing: string[] }[]> {
   const works = await listWorks();
   const byId = new Map(works.map((w) => [w.id, w]));
@@ -369,13 +442,14 @@ export interface WorkbenchRow {
   examinable: boolean;
   standing: string;
   priority: number | null;
+  pdf_state: string | null;
 }
 
 export async function listWorkbenchRows(): Promise<WorkbenchRow[]> {
   const sql = db();
   const rows = await sql`
     select w.id, w.title, w.author, w.year, w.kind, w.container_id, w.standing,
-           w.priority,
+           w.priority, w.pdf_state,
            m.list_id,
            m.code,
            (w.source_format <> 'none') as has_file,

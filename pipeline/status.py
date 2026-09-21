@@ -61,7 +61,7 @@ def words(value: str) -> set[str]:
 
 def rows_of_mapping() -> list[dict]:
     with MAPPING.open(encoding="utf-8") as fh:
-        return list(csv.DictReader(fh))
+        return list(csv.DictReader(l for l in fh if not l.lstrip().startswith("#")))
 
 
 def name_parts(name: str) -> tuple[str, str]:
@@ -125,15 +125,17 @@ def candidates(name: str, catalogue: list[dict], limit: int = 3):
 def unmatched_pdfs(rules: list[str]) -> list[Path]:
     """Every PDF in the corpus that no rule in mapping.csv would find.
 
-    The pipeline only ever sees a file some rule names, so a PDF with no rule
-    is not skipped or reported — it is invisible. Dozens were sitting in the
-    corpus while the loaders reported nothing left to do."""
+    Files under ACCOUNTED or OCR are left out. Moving a file into one of those
+    folders is how a person records "dealt with", and a report that keeps
+    offering it afterwards makes the folder pointless."""
     if not CORPUS.exists():
         return []
     needles = [fold(r) for r in rules if r]
     out = []
     for path in sorted(CORPUS.rglob("*.pdf")):
         if path.name.startswith("."):
+            continue
+        if {"ACCOUNTED", "OCR"} & set(path.relative_to(CORPUS).parts[:-1]):
             continue
         name = fold(path.name)
         if not any(n in name for n in needles):
@@ -197,7 +199,8 @@ def main() -> None:
                         help="PDFs no rule finds, with proposed mapping.csv rows")
     parser.add_argument("--limit", type=int, default=40,
                         help="how many to propose at once, with --new")
-    parser.add_argument("--files", action="store_true", help="work id and filename only")
+    parser.add_argument("--files", action="store_true",
+                        help="work id and filename for every mapped work; · marks not yet extracted")
     args = parser.parse_args()
 
     mapping = rows_of_mapping()
@@ -213,17 +216,30 @@ def main() -> None:
         if (row.get("note") or "").strip():
             entry["note"] = row["note"].strip()
 
-    # The extract knows which file it read.
+    # The extract knows which file it read; mapping.csv knows which file it
+    # WILL read. Reporting only the former meant --files said "(not extracted)"
+    # for fifty works whose PDF is perfectly well known — the question "which
+    # file is this book?" has an answer long before anything is extracted.
+    corpus = sorted(p for p in CORPUS.rglob("*.pdf") if not p.name.startswith(".")) \
+        if CORPUS.exists() else []
+
     for work_id, entry in books.items():
         path = PAGES / f"{work_id}.json"
         entry["files"] = []
         entry["pages_file"] = 0
         entry["chapters"] = 0
+        entry["extracted"] = path.exists()
         if path.exists():
             doc = json.loads(path.read_text(encoding="utf-8"))
             entry["files"] = [s["file"] for s in doc.get("sources", [])]
             entry["pages_file"] = len(doc.get("pages", []))
             entry["chapters"] = len(doc.get("chapters", []))
+        else:
+            for needle in entry["matches"]:
+                folded = fold(needle)
+                entry["files"].extend(
+                    p.name for p in corpus if folded in fold(p.name)
+                )
         chunk_path = CHUNKS / f"{work_id}.json"
         entry["chunks_file"] = (
             len(json.loads(chunk_path.read_text(encoding="utf-8"))["chunks"])
@@ -274,8 +290,9 @@ def main() -> None:
         shown += 1
 
         if args.files:
-            for f in entry["files"] or ["(not extracted)"]:
-                print(f"  {work_id:<52} {f}")
+            mark = " " if entry.get("extracted") else "·"
+            for f in entry["files"] or ["(no file in the corpus matches this rule)"]:
+                print(f"  {mark} {work_id:<52} {f}")
             continue
 
         print(f"\n  {work_id}")

@@ -2,6 +2,8 @@
 """Extract page text from the mapped PDFs into one JSON file per work.
 
     python3 pipeline/extract.py                  # every mapped work
+    python3 pipeline/extract.py --pending 5      # the next five needing text
+    python3 pipeline/extract.py --pending 5 --list I
     python3 pipeline/extract.py anzaldua         # a substring of a work id
     python3 pipeline/extract.py --dry-run        # report, write nothing
     python3 pipeline/extract.py --chapters       # show the chapter sources
@@ -72,6 +74,7 @@ except ImportError:
 PIPELINE = Path(__file__).parent
 CORPUS = PIPELINE / "corpus"
 MAPPING = PIPELINE / "mapping.csv"
+BOOKS = PIPELINE.parent / "books.csv"
 PAGES = PIPELINE / "pages"
 
 # A first or last line appearing on at least this share of pages, once folios
@@ -254,6 +257,19 @@ def fold(value: str) -> str:
 
 
 def clean_page(text: str, subs: dict[str, str], figures: dict[str, str] | None = None) -> str:
+    # Drop NUL bytes and unpaired surrogates before anything else.
+    #
+    # A broken font encoding can make pymupdf return a zero byte, or a code
+    # point in the D800–DFFF range, which is not a character at all: it exists
+    # only as half of a UTF-16 pair. Python holds both happily in a str, and
+    # then Postgres refuses the NUL and UTF-8 refuses the surrogate — so the
+    # failure surfaces at load time, one book into a batch, having already
+    # written the JSON.
+    if "\x00" in text:
+        text = text.replace("\x00", "")
+    if any(0xD800 <= ord(c) <= 0xDFFF for c in text):
+        text = text.encode("utf-8", "ignore").decode("utf-8")
+
     # Compose accented characters into single code points. PDF extraction often
     # yields decomposed forms, and a decomposed á will not match a composed one
     # in any later comparison.
@@ -691,6 +707,69 @@ def folio_from(text: str, heads: set[str]) -> int | None:
     return None
 
 
+def pending_from_books(limit: int, which: str | None = None) -> list[str]:
+    """The next works needing extraction, read from books.csv.
+
+    books.csv holds a pdf column and a pages column, so it already knows which
+    works have a file and no text. Reading the queue from there beats typing
+    author names on a command line: a name is ambiguous the moment two works
+    share an author — derrida matches both Mal de archivo and Specters of Marx —
+    and it is on a person to remember which books are already loaded. The CSV
+    remembers.
+
+    Ordered as the file is, which inventory.py writes in list and section order,
+    so --pending works down the examination lists rather than alphabetically.
+    """
+    if not BOOKS.exists():
+        sys.exit(f"{BOOKS} not found — run pipeline/inventory.py first")
+
+    out: list[str] = []
+    with BOOKS.open(encoding="utf-8-sig") as handle:
+        for row in csv.DictReader(handle):
+            work_id = (row.get("work_id") or "").strip()
+            pdf = (row.get("pdf") or "").strip()
+            pages = (row.get("pages") or "0").strip()
+            verdict = (row.get("pdf_verdict") or "").casefold()
+            code = (row.get("code") or "")
+
+            if not work_id or not pdf:
+                continue
+            if pages.isdigit() and int(pages) > 0:
+                continue          # already loaded
+            if "ocr" in verdict:
+                continue          # waiting on recognition; extracting is wasted
+            if which and not code.casefold().startswith(which.casefold()):
+                continue
+
+            out.append(work_id)
+            if len(out) >= limit:
+                break
+    return out
+
+
+def read_books_csv() -> dict[str, list[str]]:
+    """work_id -> exact filenames, from books.csv.
+
+    books.csv is the register a person edits: one row per book on the lists,
+    with a pdf column holding the filename. A value there is used verbatim, by
+    name, with no matching and no scoring — because the whole point of typing it
+    is to stop a matcher from choosing.
+
+    A work with no entry here falls back to the match strings in mapping.csv.
+    """
+    out: dict[str, list[str]] = {}
+    if not BOOKS.exists():
+        return out
+    # utf-8-sig: books.csv carries a byte-order mark so Excel reads it as UTF-8.
+    with BOOKS.open(encoding="utf-8-sig") as handle:
+        for row in csv.DictReader(handle):
+            work_id = (row.get("work_id") or "").strip()
+            pdf = (row.get("pdf") or "").strip()
+            if work_id and pdf:
+                out[work_id] = [f.strip() for f in pdf.split("|") if f.strip()]
+    return out
+
+
 def read_mapping() -> dict[str, dict]:
     if not MAPPING.exists():
         sys.exit(f"missing {MAPPING}")
@@ -699,9 +778,21 @@ def read_mapping() -> dict[str, dict]:
     if not pdfs:
         sys.exit(f"no PDFs in {CORPUS}")
 
+    # macOS stores filenames decomposed — á as a plus a combining accent — while
+    # a CSV written by a spreadsheet holds them composed. The two are the same
+    # name and compare unequal, so an exact match on the raw string fails on
+    # every Spanish title. Both sides are normalised before comparing.
+    def key(name: str) -> str:
+        return unicodedata.normalize("NFC", name).strip().casefold()
+
+    by_name = {key(p.name): p for p in pdfs}
+
+    named = read_books_csv()
+
     books: dict[str, dict] = {}
     with MAPPING.open(encoding="utf-8") as handle:
-        for rule in csv.DictReader(handle):
+        rules = csv.DictReader(l for l in handle if not l.lstrip().startswith("#"))
+        for rule in rules:
             work_id = (rule.get("work_id") or "").strip()
             match = (rule.get("match") or "").strip()
             if not work_id or not match:
@@ -736,6 +827,34 @@ def read_mapping() -> dict[str, dict]:
         # Sorted so that a work split across several files assembles in a stable
         # order rather than whatever the filesystem returned.
         entry["files"] = sorted(set(entry["files"]), key=lambda p: p.name)
+
+    # books.csv wins. A filename typed there replaces whatever the match string
+    # found, and a work named there that has no mapping row still extracts.
+    for work_id, filenames in named.items():
+        found, missing = [], []
+        for name in filenames:
+            path = by_name.get(key(name))
+            if path is None:
+                # A name that is close but not equal — truncated by a spreadsheet
+                # column, or missing its extension — still identifies the file
+                # when it matches exactly one. Anything else is reported.
+                near = [p for k, p in by_name.items() if key(name) in k]
+                path = near[0] if len(near) == 1 else None
+            (found if path else missing).append(path or name)
+
+        entry = books.setdefault(
+            work_id, {"files": [], "page_offset": 0, "conflicts": []}
+        )
+        if missing:
+            entry["conflicts"] = [(
+                "books.csv",
+                [f"{m}\n          — named in books.csv, no such file in pipeline/corpus"
+                 for m in missing],
+            )]
+            entry["files"] = []
+        else:
+            entry["files"] = found
+            entry["conflicts"] = []
 
     return books
 
@@ -812,14 +931,17 @@ def extract_book(work_id: str, entry: dict, dry_run: bool) -> dict:
     if not dry_run:
         PAGES.mkdir(exist_ok=True)
         out = PAGES / f"{work_id}.json"
-        out.write_text(
-            json.dumps(
-                {k: v for k, v in document.items() if not k.startswith("_")},
-                ensure_ascii=False,
-                indent=1,
-            ),
-            encoding="utf-8",
+        payload = json.dumps(
+            {k: v for k, v in document.items() if not k.startswith("_")},
+            ensure_ascii=False,
+            indent=1,
         )
+        # Written to a temporary file and moved into place, so a failure
+        # leaves the previous extraction intact rather than a half-written
+        # file that every later reader crashes on.
+        tmp = out.with_suffix(".json.part")
+        tmp.write_text(payload, encoding="utf-8")
+        tmp.replace(out)
 
     return document
 
@@ -866,6 +988,18 @@ def main() -> None:
         nargs="*",
         help="work ids, or any substring of one — anzaldua, lotman, saldana",
     )
+    parser.add_argument(
+        "--pending",
+        type=int,
+        metavar="N",
+        help="the next N works in books.csv that have a PDF and no pages yet",
+    )
+    parser.add_argument(
+        "--list",
+        dest="which",
+        metavar="CODE",
+        help="limit --pending to one list, by the start of its code: I, II, III",
+    )
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument(
         "--chapters",
@@ -883,7 +1017,18 @@ def main() -> None:
         sys.exit(f"{MAPPING} not found.")
 
     books = read_mapping()
-    if args.work:
+
+    if args.pending:
+        wanted = set(pending_from_books(args.pending, args.which))
+        if not wanted:
+            print("  nothing pending — every mapped work with a PDF has pages")
+            return
+        books = {k: v for k, v in books.items() if k in wanted}
+        print(f"  {len(books)} pending:")
+        for work_id in sorted(books):
+            print(f"    {work_id}")
+        print()
+    elif args.work:
         wanted = {resolve(n) for n in args.work}
         books = {k: v for k, v in books.items() if k in wanted}
     elif not (args.chapters or args.glyphs or args.dry_run):
@@ -899,10 +1044,15 @@ def main() -> None:
     for work_id, entry in sorted(books.items()):
         if entry.get("conflicts"):
             for match, names in entry["conflicts"]:
-                listing = "\n        ".join(n[:96] for n in names)
-                print(f"  ! {work_id}: match {match!r} hits {len(names)} files:")
-                print(f"        {listing}")
-            print("    Narrow the match column until it names one file. Skipped.")
+                listing = "\n        ".join(n[:120] for n in names)
+                if match == "books.csv":
+                    print(f"  ! {work_id}: books.csv names a file that is not there:")
+                    print(f"        {listing}")
+                else:
+                    print(f"  ! {work_id}: match {match!r} hits {len(names)} files:")
+                    print(f"        {listing}")
+                    print("    Narrow the match column until it names one file.")
+            print("    Skipped.")
             continue
 
         if not entry["files"]:
