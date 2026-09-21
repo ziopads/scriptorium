@@ -103,10 +103,17 @@ export interface Work {
 
   created_at: Timestamp;
   updated_at: Timestamp;
+
+  // Whether the pipeline has loaded any pages, computed in the query from the
+  // pages table and never stored. Optional because upsertWork's `returning *`
+  // does not carry it. Says the text can be opened in the workbench; says
+  // nothing about whether its page numbers are the printed edition's, which is
+  // what source_format records.
+  has_pages?: boolean;
 }
 
 export type WorkInput = { id: string; title: string } & Partial<
-  Omit<Work, 'id' | 'title' | 'created_at' | 'updated_at'>
+  Omit<Work, 'id' | 'title' | 'created_at' | 'updated_at' | 'has_pages'>
 >;
 
 // A work with its container resolved, for citation. An essay cites through its

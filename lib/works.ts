@@ -36,7 +36,8 @@ export async function listWorks(): Promise<Work[]> {
            isbn, volume, series, original_year, url, doi, accessed,
            status, purpose, standing, standing_note, priority, source_format, source_path,
            r2_pages_key, page_offset, vivarium_item_id, notes_internal,
-           created_at, updated_at
+           created_at, updated_at,
+           exists (select 1 from pages p where p.work_id = works.id) as has_pages
     from works
     order by coalesce(author, title), year nulls last
   `;
@@ -51,7 +52,8 @@ export async function getWork(id: string): Promise<Work | null> {
            isbn, volume, series, original_year, url, doi, accessed,
            status, purpose, standing, standing_note, priority, source_format, source_path,
            r2_pages_key, page_offset, vivarium_item_id, notes_internal,
-           created_at, updated_at
+           created_at, updated_at,
+           exists (select 1 from pages p where p.work_id = works.id) as has_pages
     from works
     where id = ${id}
   `) as Work[];
@@ -151,7 +153,8 @@ export async function listWorksInList(listId: string): Promise<Work[]> {
            w.isbn, w.volume, w.series, w.original_year, w.url, w.doi, w.accessed,
            w.status, w.purpose, w.standing, w.standing_note, w.priority, w.source_format,
            w.source_path, w.r2_pages_key, w.page_offset, w.vivarium_item_id,
-           w.notes_internal, w.created_at, w.updated_at
+           w.notes_internal, w.created_at, w.updated_at,
+           exists (select 1 from pages p where p.work_id = w.id) as has_pages
     from works w
     join list_items li on li.work_id = w.id
     left join list_sections ls on ls.id = li.section_id

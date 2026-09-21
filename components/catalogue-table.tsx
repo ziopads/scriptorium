@@ -35,6 +35,8 @@ export interface Row {
   standing: Standing;
   examinable: boolean;
   source_format: string;
+  // Pages loaded by the pipeline: the text opens in the workbench.
+  has_pages: boolean;
   priority: number | null;
   missing: string[];
 }
@@ -462,6 +464,15 @@ export function CatalogueTable({ rows }: { rows: Row[] }) {
                       </span>
                     ) : null}
                     <span>{row.status}</span>
+                    {row.has_pages ? (
+                      <Link
+                        href={`/?w=${encodeURIComponent(row.id)}`}
+                        className="text-accent hover:underline underline-offset-2"
+                        title="Open the text in the workbench"
+                      >
+                        read
+                      </Link>
+                    ) : null}
                   </span>
                 </div>
               </div>

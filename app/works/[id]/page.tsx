@@ -100,7 +100,19 @@ export default async function WorkPage({
               ) : null}
             </Link>
           ))}
-          <a href="#notes" className="ml-auto text-accent hover:underline underline-offset-2">
+          {work.has_pages ? (
+            <Link
+              href={`/?w=${encodeURIComponent(work.id)}`}
+              className="ml-auto text-accent hover:underline underline-offset-2"
+              title="Open the text in the workbench"
+            >
+              Read
+            </Link>
+          ) : null}
+          <a
+            href="#notes"
+            className={`${work.has_pages ? '' : 'ml-auto '}text-accent hover:underline underline-offset-2`}
+          >
             Add a note
           </a>
           <Link href={`/works/${work.id}/edit`} className="text-muted hover:text-accent">
