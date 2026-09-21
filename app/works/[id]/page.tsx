@@ -45,8 +45,10 @@ export default async function WorkMetaPage({
   const contents = await listContents(id);
 
   const chicago = formatBibliography(work, work.container, 'chicago');
+  const chicago18 = formatBibliography(work, work.container, 'chicago18');
   const mla = formatBibliography(work, work.container, 'mla');
   const note = formatNote(work, work.container, null);
+  const note18 = formatNote(work, work.container, null, 'chicago18');
   const shortNote = formatShortNote(work, null);
 
   return (
@@ -62,19 +64,27 @@ export default async function WorkMetaPage({
         ) : null}
 
         <div className="space-y-1">
-          <p className="text-xs uppercase tracking-wide text-muted">Bibliography entry · Chicago</p>
+          <p className="text-xs uppercase tracking-wide text-muted">Bibliography entry · Chicago 17</p>
           <p className="border-l-2 border-rule pl-3 text-sm">{plain(chicago.text)}</p>
+        </div>
+        <div className="space-y-1">
+          <p className="text-xs uppercase tracking-wide text-muted">Bibliography entry · Chicago 18</p>
+          <p className="border-l-2 border-rule pl-3 text-sm">{plain(chicago18.text)}</p>
         </div>
         <div className="space-y-1">
           <p className="text-xs uppercase tracking-wide text-muted">Works cited · MLA</p>
           <p className="border-l-2 border-rule pl-3 text-sm">{plain(mla.text)}</p>
         </div>
         <div className="space-y-1">
-          <p className="text-xs uppercase tracking-wide text-muted">Footnote, first citation · Chicago</p>
+          <p className="text-xs uppercase tracking-wide text-muted">Footnote, first citation · Chicago 17</p>
           <p className="border-l-2 border-rule pl-3 text-sm">{plain(note.text)}</p>
         </div>
         <div className="space-y-1">
-          <p className="text-xs uppercase tracking-wide text-muted">Footnote, later citations · Chicago</p>
+          <p className="text-xs uppercase tracking-wide text-muted">Footnote, first citation · Chicago 18</p>
+          <p className="border-l-2 border-rule pl-3 text-sm">{plain(note18.text)}</p>
+        </div>
+        <div className="space-y-1">
+          <p className="text-xs uppercase tracking-wide text-muted">Footnote, later citations · Chicago, both editions</p>
           <p className="border-l-2 border-rule pl-3 text-sm">
             {plain(shortNote.text).replace(/\.$/, '')}, <span className="text-muted">page</span>.
           </p>

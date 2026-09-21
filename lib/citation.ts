@@ -14,7 +14,12 @@
 
 import type { Work, WorkWithContainer } from '@/lib/types';
 
-export type Style = 'chicago' | 'mla';
+// Chicago comes in two editions. The 17th prints the place of publication
+// before the publisher (Madrid: Trotta, 1997); the 18th (2024) omits it
+// (Trotta, 1997). The record keeps place either way, so she can cite by
+// whichever edition her department asks for. 'chicago' is the 17th.
+export type Style = 'chicago' | 'chicago18' | 'mla';
+type ChicagoEdition = 'chicago' | 'chicago18';
 
 export interface Citation {
   text: string;
@@ -122,9 +127,10 @@ function imprint(work: Work, container: Work | null, style: Style): string {
   return year === null ? '' : String(year);
 }
 
-// Chicago 17th, bibliography form. Titles come back in Markdown italics; strip
-// the asterisks for plain text.
-function chicago(work: Work, container: Work | null): string {
+// Chicago 17th or 18th, bibliography form. Titles come back in Markdown
+// italics; strip the asterisks for plain text. The two editions differ here
+// only in the imprint: imprint() prints place for the 17th and not the 18th.
+function chicago(work: Work, container: Work | null, edition: ChicagoEdition): string {
   const parts: string[] = [];
 
   if (work.kind === 'film') {
@@ -156,7 +162,7 @@ function chicago(work: Work, container: Work | null): string {
     if (work.series) parts.push(stop(work.series));
   }
 
-  const house = imprint(work, container, 'chicago');
+  const house = imprint(work, container, edition);
   if (house) parts.push(`${house}.`);
   if (work.url) {
     parts.push(work.accessed ? `Accessed ${work.accessed}. ${work.url}.` : `${work.url}.`);
@@ -215,17 +221,19 @@ export function formatBibliography(
   style: Style = 'chicago',
 ): Citation {
   return {
-    text: style === 'mla' ? mla(work, container) : chicago(work, container),
+    text: style === 'mla' ? mla(work, container) : chicago(work, container, style),
     missing: missingFields(work, container),
   };
 }
 
-// Note form, for a footnote. Chicago only — MLA uses parenthetical citation,
+// Note form, for a footnote: Chicago 17th ('chicago') or 18th, differing in
+// the imprint as the bibliography does. MLA uses parenthetical citation,
 // which is a different thing and belongs with the passage, not here.
 export function formatNote(
   work: Work,
   container: Work | null = null,
   page?: number | null,
+  edition: ChicagoEdition = 'chicago',
 ): Citation {
   const parts: string[] = [];
 
@@ -241,7 +249,7 @@ export function formatNote(
     if (work.edition) parts.push(work.edition.trim());
   }
 
-  const house = imprint(work, container, 'chicago');
+  const house = imprint(work, container, edition);
   if (house) parts.push(`(${house})`);
 
   const head = parts.join(', ');

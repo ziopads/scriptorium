@@ -240,7 +240,7 @@ export function LeftPane({
                   key={r.id}
                   title={r.citation_complete ? 'Citation complete' : undefined}
                   className={`group flex items-start gap-2 border-l-2 py-1.5 pl-1.5 pr-1 text-xs ${
-                    r.citation_complete ? 'border-green-700' : 'border-transparent'
+                    r.citation_complete ? 'border-l-green-700' : 'border-l-transparent'
                   } ${selected ? 'bg-white' : i === active ? 'bg-white/60' : ''}`}
                 >
                   <Link

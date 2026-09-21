@@ -139,7 +139,9 @@ export async function CenterPane({ params }: { params: WorkbenchParams }) {
   const counts = claimsData?.[1] ?? null;
 
   const chicago = formatBibliography(work, work.container, 'chicago');
+  const chicago18 = formatBibliography(work, work.container, 'chicago18');
   const note = formatNote(work, work.container, null);
+  const note18 = formatNote(work, work.container, null, 'chicago18');
   const shortNote = formatShortNote(work, null);
 
   return (
@@ -182,11 +184,15 @@ export async function CenterPane({ params }: { params: WorkbenchParams }) {
         <div className="space-y-4 text-sm">
           <section className="space-y-1">
             <h3 className="text-sm">Citations</h3>
-            <p className="text-xs uppercase tracking-wide text-muted">Bibliography entry · Chicago</p>
+            <p className="text-xs uppercase tracking-wide text-muted">Bibliography entry · Chicago 17</p>
             <p className="reading-sm border-l-2 border-rule pl-3">{plain(chicago.text)}</p>
-            <p className="text-xs uppercase tracking-wide text-muted pt-1">Footnote, first citation</p>
+            <p className="text-xs uppercase tracking-wide text-muted pt-1">Bibliography entry · Chicago 18</p>
+            <p className="reading-sm border-l-2 border-rule pl-3">{plain(chicago18.text)}</p>
+            <p className="text-xs uppercase tracking-wide text-muted pt-1">Footnote, first citation · Chicago 17</p>
             <p className="reading-sm border-l-2 border-rule pl-3">{plain(note.text)}</p>
-            <p className="text-xs uppercase tracking-wide text-muted pt-1">Footnote, later citations</p>
+            <p className="text-xs uppercase tracking-wide text-muted pt-1">Footnote, first citation · Chicago 18</p>
+            <p className="reading-sm border-l-2 border-rule pl-3">{plain(note18.text)}</p>
+            <p className="text-xs uppercase tracking-wide text-muted pt-1">Footnote, later citations · both editions</p>
             <p className="reading-sm border-l-2 border-rule pl-3">
               {plain(shortNote.text).replace(/\.$/, '')}, <span className="text-muted">page</span>.
             </p>
