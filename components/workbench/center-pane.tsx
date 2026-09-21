@@ -1,9 +1,11 @@
 import Link from 'next/link';
 
 import { NoteCard } from '@/components/note-card';
+import { DossierView } from '@/components/workbench/dossier-view';
 import { PageView } from '@/components/workbench/page-view';
 import { Tabs } from '@/components/workbench/tabs';
 import { formatBibliography, formatNote, plain } from '@/lib/citation';
+import { getDossier } from '@/lib/dossier';
 import { getAxisTree, listAxesForWork, listNotesForWork } from '@/lib/notes';
 import { getPage, offsetLooksWrong, pageBounds } from '@/lib/pages';
 import { listSections, sectionAt } from '@/lib/sections';
@@ -13,7 +15,7 @@ import { KIND_LABEL, PURPOSE_LABEL, STANDING_LABEL } from '@/lib/types';
 
 // The centre pane: whatever is selected on the left, in full. A work has tabs
 // (Meta, Contents, Preview, Dossier, Notes, Axes); an axis shows its tree.
-// Dossier is a placeholder until there are dossiers.
+// Dossier shows what pipeline/dossier.py loaded, for the works it has run on.
 
 const VIEWS = [
   { id: 'meta', label: 'Meta' },
@@ -130,6 +132,7 @@ export async function CenterPane({ params }: { params: WorkbenchParams }) {
   const preview = view === 'preview' ? await loadPreview(work.id, params.p) : null;
   const sections = view === 'toc' ? await listSections(work.id) : [];
   const inSection = preview ? await sectionAt(work.id, preview.page.printed_page) : null;
+  const dossier = view === 'dossier' ? await getDossier(work.id) : null;
 
   const chicago = formatBibliography(work, work.container, 'chicago');
   const note = formatNote(work, work.container, null);
@@ -283,7 +286,11 @@ export async function CenterPane({ params }: { params: WorkbenchParams }) {
       ) : null}
 
       {view === 'dossier' ? (
-        <p className="text-sm text-muted">No dossier yet for this work.</p>
+        dossier ? (
+          <DossierView dossier={dossier} params={params} language={work.language} />
+        ) : (
+          <p className="text-sm text-muted">No dossier yet for this work.</p>
+        )
       ) : null}
 
       {view === 'notes' ? (

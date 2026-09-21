@@ -310,7 +310,8 @@ export type DossierKind =
   | 'argument'
   | 'key_terms'
   | 'reception'
-  | 'context';
+  | 'context'
+  | 'themes';
 
 export const DOSSIER_LABEL: Record<DossierKind, string> = {
   summary: 'What it is',
@@ -319,6 +320,7 @@ export const DOSSIER_LABEL: Record<DossierKind, string> = {
   key_terms: 'Key terms',
   reception: 'Reception',
   context: 'Context',
+  themes: 'Bearing on the dissertation themes',
 };
 
 export interface DossierSection {

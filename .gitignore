@@ -92,6 +92,10 @@ pipeline/corpus/
 pipeline/.venv/
 pipeline/pages/
 pipeline/chunks/
+# Dossiers quote the books, and the themes file states her dissertation's
+# central themes. The script that uses both is tracked; neither is.
+pipeline/dossiers/
+pipeline/dossier-themes.txt
 *.pdf
 *.epub
 *.azw3
