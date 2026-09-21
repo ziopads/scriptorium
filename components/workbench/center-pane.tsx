@@ -1,7 +1,7 @@
 import Link from 'next/link';
 
 import { NoteCard } from '@/components/note-card';
-import { DossierView } from '@/components/workbench/dossier-view';
+import { ClaimsView, DossierView } from '@/components/workbench/dossier-view';
 import { PageView } from '@/components/workbench/page-view';
 import { Tabs } from '@/components/workbench/tabs';
 import { formatBibliography, formatNote, plain } from '@/lib/citation';
@@ -14,14 +14,16 @@ import { href, type WorkbenchParams } from '@/lib/workbench-url';
 import { KIND_LABEL, PURPOSE_LABEL, STANDING_LABEL } from '@/lib/types';
 
 // The centre pane: whatever is selected on the left, in full. A work has tabs
-// (Meta, Contents, Preview, Dossier, Notes, Axes); an axis shows its tree.
-// Dossier shows what pipeline/dossier.py loaded, for the works it has run on.
+// (Meta, Contents, Preview, Dossier, Claims, Notes, Axes); an axis shows its
+// tree. Dossier shows the study aid pipeline/dossier.py loaded, and Claims the
+// record it was condensed from, for the works it has run on.
 
 const VIEWS = [
   { id: 'meta', label: 'Meta' },
   { id: 'toc', label: 'Contents' },
   { id: 'preview', label: 'Preview' },
   { id: 'dossier', label: 'Dossier' },
+  { id: 'claims', label: 'Claims' },
   { id: 'notes', label: 'Notes' },
   { id: 'axes', label: 'Axes' },
 ] as const;
@@ -132,7 +134,8 @@ export async function CenterPane({ params }: { params: WorkbenchParams }) {
   const preview = view === 'preview' ? await loadPreview(work.id, params.p) : null;
   const sections = view === 'toc' ? await listSections(work.id) : [];
   const inSection = preview ? await sectionAt(work.id, preview.page.printed_page) : null;
-  const dossier = view === 'dossier' ? await getDossier(work.id) : null;
+  const dossier =
+    view === 'dossier' || view === 'claims' ? await getDossier(work.id) : null;
 
   const chicago = formatBibliography(work, work.container, 'chicago');
   const note = formatNote(work, work.container, null);
@@ -175,12 +178,13 @@ export async function CenterPane({ params }: { params: WorkbenchParams }) {
 
       {view === 'meta' ? (
         <div className="space-y-4 text-sm">
-          <div className="space-y-1">
-            <p className="text-xs uppercase tracking-wide text-muted">Chicago</p>
+          <section className="space-y-1">
+            <h3 className="text-sm">Citations</h3>
+            <p className="text-xs uppercase tracking-wide text-muted">Bibliography entry · Chicago</p>
             <p className="reading-sm border-l-2 border-rule pl-3">{plain(chicago.text)}</p>
-            <p className="text-xs uppercase tracking-wide text-muted pt-1">Note</p>
+            <p className="text-xs uppercase tracking-wide text-muted pt-1">Footnote, first citation</p>
             <p className="reading-sm border-l-2 border-rule pl-3">{plain(note.text)}</p>
-          </div>
+          </section>
           <dl>
             <Field label="Purpose" value={PURPOSE_LABEL[work.purpose]} />
             <Field label="Standing" value={STANDING_LABEL[work.standing]} />
@@ -290,6 +294,17 @@ export async function CenterPane({ params }: { params: WorkbenchParams }) {
           <DossierView dossier={dossier} params={params} language={work.language} />
         ) : (
           <p className="text-sm text-muted">No dossier yet for this work.</p>
+        )
+      ) : null}
+
+      {view === 'claims' ? (
+        dossier ? (
+          <ClaimsView dossier={dossier} params={params} language={work.language} />
+        ) : (
+          <p className="text-sm text-muted">
+            No claims yet: they come with the dossier, which has not been generated
+            for this work.
+          </p>
         )
       ) : null}
 

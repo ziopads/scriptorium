@@ -7,7 +7,7 @@
 //   a     selected axis id (the right pane becomes the ficha composer)
 //   ws    comma-separated works attached to the note being written
 //   pane  left pane tab: catalogue | notes | axes
-//   view  centre tab: meta | preview | dossier | notes | axes
+//   view  centre tab: meta | toc | preview | dossier | claims | notes | axes
 //   p     preview page, as the printed folio
 //   quote a passage captured in the preview, already normalized, which the
 //         note form takes as the quotation's default

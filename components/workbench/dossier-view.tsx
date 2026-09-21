@@ -3,15 +3,17 @@ import Link from 'next/link';
 import { pagesOf, type Dossier, type DossierQuote } from '@/lib/dossier';
 import { href, type WorkbenchParams } from '@/lib/workbench-url';
 
-// The Dossier tab: a study aid generated from the book's own text by
+// Two tabs from one dossier, generated from the book's own text by
 // pipeline/dossier.py.
 //
-// The aid comes first, in the order she would review it: the general
+// Dossier: the study aid, in the order she would review it: the general
 // argument, the key arguments with their quotations, the key concepts, and
 // the connections to her dissertation themes. The themes are the assistant's
 // proposals and are labelled so, because a bridge repeated in an exam as the
-// author's would be a misattribution. The full record of claims the aid was
-// condensed from sits folded at the bottom.
+// author's would be a misattribution.
+//
+// Claims: the full record the aid was condensed from, part by part, with a
+// list of the parts at the top to jump between them.
 //
 // Every page shown is a link that opens Preview at that page, so any sentence
 // here can be checked against the book in one click.
@@ -190,13 +192,46 @@ export function DossierView({
         ))}
       </section>
 
-      <details className="border-t border-rule pt-4">
-        <summary className="cursor-pointer text-sm text-muted hover:text-accent">
-          All {claimCount} claims the aid was condensed from, by part of the book
-        </summary>
-        <div className="mt-4 space-y-6">
-          {dossier.groups.map((group) => (
-            <div key={group.topic} className="space-y-2">
+      <p className="border-t border-rule pt-4 text-xs text-muted">
+        Condensed from {claimCount} claims, each with its quotations: see the
+        Claims tab.
+      </p>
+    </div>
+  );
+}
+
+export function ClaimsView({
+  dossier,
+  params,
+  language,
+}: {
+  dossier: Dossier;
+  params: WorkbenchParams;
+  language: string | null;
+}) {
+  const lang = language?.split(',')[0]?.trim() || undefined;
+  const claimCount = Object.keys(dossier.claims).length;
+
+  return (
+    <div className="space-y-8">
+      <div id="parts" className="scroll-mt-4 space-y-3">
+        <p className="text-xs text-muted">
+          The {claimCount} claims the study aid was condensed from, in the book&rsquo;s
+          order. Every quotation was found in the book; each page number opens that
+          page.
+        </p>
+        <nav aria-label="Parts of the book" className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
+          {dossier.groups.map((group, i) => (
+            <a key={group.topic} href={`#part-${i}`} className="text-accent hover:underline underline-offset-2">
+              {group.topic}
+              <span className="pl-1 text-xs text-muted">{group.claims.length}</span>
+            </a>
+          ))}
+        </nav>
+      </div>
+        <div className="space-y-8">
+          {dossier.groups.map((group, i) => (
+            <div key={group.topic} id={`part-${i}`} className="scroll-mt-4 space-y-2">
               <h4 className="text-sm text-accent">{group.topic}</h4>
               <ol className="divide-y divide-rule border-y border-rule">
                 {group.claims.map((id) => {
@@ -225,10 +260,12 @@ export function DossierView({
                   );
                 })}
               </ol>
+              <p className="text-right text-xs">
+                <a href="#parts" className="text-muted hover:text-accent">back to the parts</a>
+              </p>
             </div>
           ))}
         </div>
-      </details>
     </div>
   );
 }
