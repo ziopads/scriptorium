@@ -49,9 +49,11 @@ ACCOUNTED = CORPUS / "ACCOUNTED"
 PAGES = PIPELINE / "pages"
 CHUNKS = PIPELINE / "chunks"
 
-# Not touched by any --pending run. Lotman's file sits outside ACCOUNTED but was
-# added by hand and is the right book; it stays as it is.
-LEAVE_ALONE = ("lotman-estructura-texto-artistico-1982",)
+# Works excluded from every --pending run. Empty since 22 Sept: Lotman's
+# Estructura del texto artístico was the one exception, kept out while its PDF
+# sat outside ACCOUNTED. The file is in ACCOUNTED now, so it runs like any
+# other work.
+LEAVE_ALONE: tuple[str, ...] = ()
 
 
 # --------------------------------------------------------------------------
