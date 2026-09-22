@@ -102,55 +102,51 @@ export default async function GapsPagesPage({
                       {w.title}
                     </Link>
                     {w.pagination_accepted_at ? (
-                      <span className="shrink-0 text-xs text-accent">
-                        {w.pagination_basis === 'hand_set'
-                          ? 'offset set by hand'
-                          : 'pages unverified'}
-                      </span>
+                      <span className="shrink-0 text-xs text-muted">accepted</span>
                     ) : null}
                     <span className="font-mono text-xs text-muted">offset {w.page_offset}</span>
                     <Link href={`/works/${w.id}/edit`} className="text-xs text-muted hover:text-accent">
                       Edit
                     </Link>
+                  </div>
+
+                  {/* The basis is a two-state control: both options always in
+                      the same order, the one in force marked and inert, the
+                      other a button that switches to it. A single button
+                      labelled with the other state reads as the state. */}
+                  <div className="flex flex-wrap items-baseline gap-x-2 text-xs">
+                    <span className="text-muted">Page numbers:</span>
+                    {(['hand_set', 'none_printed'] as const).map((basis) =>
+                      w.pagination_basis === basis ? (
+                        <span key={basis} className="border border-accent px-2 py-0.5 text-accent">
+                          {basis === 'hand_set'
+                            ? 'offset set by hand'
+                            : 'none printed \u2014 shown with *'}
+                        </span>
+                      ) : (
+                        <form key={basis} action={setPagination}>
+                          <input type="hidden" name="id" value={w.id} />
+                          <input type="hidden" name="basis" value={basis} />
+                          <button
+                            type="submit"
+                            className="border border-rule px-2 py-0.5 text-muted hover:border-accent hover:text-accent"
+                          >
+                            {basis === 'hand_set'
+                              ? 'offset set by hand'
+                              : 'none printed \u2014 shown with *'}
+                          </button>
+                        </form>
+                      ),
+                    )}
                     {w.pagination_accepted_at ? (
-                      <>
-                        <form action={setPagination}>
-                          <input type="hidden" name="id" value={w.id} />
-                          <input
-                            type="hidden"
-                            name="basis"
-                            value={w.pagination_basis === 'hand_set' ? 'none_printed' : 'hand_set'}
-                          />
-                          <button type="submit" className="text-xs text-muted hover:text-accent">
-                            {w.pagination_basis === 'hand_set'
-                              ? 'Mark: no printed numbers'
-                              : 'Mark: offset set by hand'}
-                          </button>
-                        </form>
-                        <form action={setPagination}>
-                          <input type="hidden" name="id" value={w.id} />
-                          <button type="submit" className="text-xs text-muted hover:text-accent">
-                            Withdraw
-                          </button>
-                        </form>
-                      </>
+                      <form action={setPagination}>
+                        <input type="hidden" name="id" value={w.id} />
+                        <button type="submit" className="text-muted hover:text-accent">
+                          Withdraw
+                        </button>
+                      </form>
                     ) : (
-                      <>
-                        <form action={setPagination}>
-                          <input type="hidden" name="id" value={w.id} />
-                          <input type="hidden" name="basis" value="hand_set" />
-                          <button type="submit" className="text-xs text-muted hover:text-accent">
-                            Accept: offset set by hand
-                          </button>
-                        </form>
-                        <form action={setPagination}>
-                          <input type="hidden" name="id" value={w.id} />
-                          <input type="hidden" name="basis" value="none_printed" />
-                          <button type="submit" className="text-xs text-muted hover:text-accent">
-                            Accept: no printed numbers
-                          </button>
-                        </form>
-                      </>
+                      <span className="text-muted">not accepted &mdash; held out of search</span>
                     )}
                   </div>
                   <p className="text-xs text-muted">
