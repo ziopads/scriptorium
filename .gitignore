@@ -68,6 +68,7 @@ pipeline/triage.csv
 pipeline/isbns.csv
 pipeline/imprints.csv
 pipeline/outstanding.csv
+__pycache__/
 pipeline/viability.csv
 pipeline/reconcile.csv
 books.csv
