@@ -58,7 +58,8 @@ WHY get_text("dict") AND NOT get_text("text")
 """
 
 # Postpones evaluation of type annotations, so newer syntax like `int | None`
-# works on the macOS system Python 3.9 this runs against.
+# works on any Python. The pipeline ran on the macOS system Python 3.9 until
+# 22 September 2026 and now runs on Homebrew's 3.13 (pipeline/requirements.txt).
 from __future__ import annotations
 
 import argparse

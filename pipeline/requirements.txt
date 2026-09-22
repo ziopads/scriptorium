@@ -1,0 +1,19 @@
+# What pipeline/.venv is built from. Python 3.13 (Homebrew), since the MCP SDK
+# needs 3.10 or later; before 22 September 2026 the venv ran the macOS system
+# Python 3.9.
+#
+#   /opt/homebrew/bin/python3.13 -m venv pipeline/.venv
+#   pipeline/.venv/bin/python3 -m pip install -r pipeline/requirements.txt
+#
+# Only what the pipeline imports itself is listed; pip resolves the rest.
+# Versions are exact because each one shapes stored output: PyMuPDF the page
+# text, psycopg what reaches Neon, voyageai the vectors. Change one only with a
+# reason, and re-extract a known book beside its stored pages file first.
+
+PyMuPDF==1.26.5
+psycopg[binary]==3.2.13
+python-docx==1.2.0
+voyageai==0.5.0
+
+# The local stdio server, pipeline/mcp_server.py.
+mcp==2.2.0
