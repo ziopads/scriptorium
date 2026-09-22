@@ -2,25 +2,31 @@ import type { ReactNode } from 'react';
 
 import { GapsTabs } from '@/components/gaps-tabs';
 import { requireAllowedUser } from '@/lib/auth/guard';
-import { analysisStates, fileStates, uncheckedOffsets } from '@/lib/gaps';
+import {
+  analysisStates,
+  fileStates,
+  uncheckedOffsets,
+  worksWithInternalNotes,
+} from '@/lib/gaps';
 import { incompleteWorks, worksWithOffsetProblems } from '@/lib/works';
 
 export const dynamic = 'force-dynamic';
 
 // What the catalogue still lacks, one tab per kind of gap. Each tab's badge
 // counts what is outstanding there: records missing a citation field, books
-// not yet searchable, books with pages but no study aid, and page numbering
-// unsettled or unchecked.
+// not yet searchable, books with pages but no study aid, page numbering
+// unsettled or unchecked, and works carrying an Internal note.
 
 export default async function GapsLayout({ children }: { children: ReactNode }) {
   await requireAllowedUser();
 
-  const [entries, files, analysis, problems, unchecked] = await Promise.all([
+  const [entries, files, analysis, problems, unchecked, noted] = await Promise.all([
     incompleteWorks(),
     fileStates(),
     analysisStates(),
     worksWithOffsetProblems(),
     uncheckedOffsets(),
+    worksWithInternalNotes(),
   ]);
 
   return (
@@ -39,6 +45,7 @@ export default async function GapsLayout({ children }: { children: ReactNode }) 
           files: files.filter((f) => f.state !== 'searchable').length,
           analysis: analysis.filter((a) => !a.has_aid).length,
           pages: problems.length + unchecked.length,
+          notes: noted.length,
         }}
       />
 

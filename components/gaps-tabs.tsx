@@ -13,12 +13,19 @@ const TABS = [
   { id: 'files', label: 'Files', href: '/gaps/files' },
   { id: 'analysis', label: 'Analysis', href: '/gaps/analysis' },
   { id: 'pages', label: 'Page numbers', href: '/gaps/pages' },
+  { id: 'notes', label: 'Internal notes', href: '/gaps/notes' },
 ] as const;
 
 export function GapsTabs({
   counts,
 }: {
-  counts: { citations: number; files: number; analysis: number; pages: number };
+  counts: {
+    citations: number;
+    files: number;
+    analysis: number;
+    pages: number;
+    notes: number;
+  };
 }) {
   const segment = useSelectedLayoutSegment();
   const active = segment ?? 'citations';

@@ -113,6 +113,31 @@ export async function analysisStates(): Promise<AnalysisRow[]> {
   return rows;
 }
 
+export interface InternalNoteRow {
+  id: string;
+  author: string | null;
+  title: string;
+  year: number | null;
+  notes_internal: string;
+  offset_problem: string | null;
+}
+
+// Every work whose Internal note (works.notes_internal, on the edit page) is
+// set: bad scans, partial copies, ebook pagination, anything known about a
+// work's file that no computed state shows. Every work, not only examinable
+// ones, since her dissertation additions have files too. An offset problem is
+// carried alongside because the two are often about the same book.
+export async function worksWithInternalNotes(): Promise<InternalNoteRow[]> {
+  const sql = db();
+  const rows = (await sql`
+    select w.id, w.author, w.title, w.year, w.notes_internal, w.offset_problem
+    from works w
+    where nullif(btrim(w.notes_internal), '') is not null
+    order by coalesce(w.author, w.title), w.year nulls last
+  `) as InternalNoteRow[];
+  return rows;
+}
+
 export interface UncheckedRow {
   id: string;
   author: string | null;
