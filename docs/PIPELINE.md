@@ -140,8 +140,11 @@ title. Fold before comparing — `pipeline/match_corpus.py` has the function.
 markdown conversion truncates the title there. `parse_list.py` reads the docx
 directly through python-docx and takes italics from run properties instead.
 
-**The venv is Python 3.9.** `int | None` in a signature needs
-`from __future__ import annotations` as the first statement.
+**The venv was Python 3.9 until 22 September 2026.** It is now Homebrew's
+3.13, built from `pipeline/requirements.txt`, whose header gives the two
+commands. Scripts keep `from __future__ import annotations` as their first
+statement; it does no harm on 3.13. The old venv is at `~/scriptorium-venv-py39`
+until it is deleted.
 
 **`npm i` walks up the tree.** Run in a directory with no `package.json` and it
 installs into the nearest ancestor that has one. Two stray `node_modules` were
