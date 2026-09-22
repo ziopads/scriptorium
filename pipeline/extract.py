@@ -267,19 +267,29 @@ def fold(value: str) -> str:
     return "".join(c for c in decomposed if not unicodedata.combining(c)).casefold()
 
 
-def clean_page(text: str, subs: dict[str, str], figures: dict[str, str] | None = None) -> str:
-    # Drop NUL bytes and unpaired surrogates before anything else.
-    #
-    # A broken font encoding can make pymupdf return a zero byte, or a code
-    # point in the D800–DFFF range, which is not a character at all: it exists
-    # only as half of a UTF-16 pair. Python holds both happily in a str, and
-    # then Postgres refuses the NUL and UTF-8 refuses the surrogate — so the
-    # failure surfaces at load time, one book into a batch, having already
-    # written the JSON.
+def drop_bad_code_points(text: str) -> str:
+    """NUL bytes and unpaired surrogates out.
+
+    A broken font encoding can make pymupdf return a zero byte, or a code
+    point in the D800–DFFF range, which is not a character at all: it exists
+    only as half of a UTF-16 pair. Python holds both happily in a str, and
+    then Postgres refuses the NUL and UTF-8 refuses the surrogate.
+
+    Applied to every page, and to every other string the PDF supplies that
+    reaches the JSON: bookmark titles above all. On 21 September a title in
+    Pijoan de Van Etten's outline carried a surrogate, the write refused it
+    after every page had been read, and the batch stopped there."""
     if "\x00" in text:
         text = text.replace("\x00", "")
     if any(0xD800 <= ord(c) <= 0xDFFF for c in text):
         text = text.encode("utf-8", "ignore").decode("utf-8")
+    return text
+
+
+def clean_page(text: str, subs: dict[str, str], figures: dict[str, str] | None = None) -> str:
+    # Drop NUL bytes and unpaired surrogates before anything else, so the
+    # failure cannot surface at write or load time (drop_bad_code_points).
+    text = drop_bad_code_points(text)
 
     # Compose accented characters into single code points. PDF extraction often
     # yields decomposed forms, and a decomposed á will not match a composed one
@@ -630,7 +640,7 @@ def chapters_from_outline(files: list[Path]) -> list[dict]:
             for entry in toc:
                 if len(entry) < 3:
                     continue
-                level, title, page = entry[0], (entry[1] or "").strip(), entry[2]
+                level, title, page = entry[0], drop_bad_code_points(entry[1] or "").strip(), entry[2]
                 title = re.sub(r"\s+", " ", title)
                 if title and isinstance(page, int) and page > 0:
                     out.append({"level": level, "title": title, "page": base + page})
@@ -916,6 +926,7 @@ def main() -> None:
     total_pages = 0
     total_chars = 0
     empty_warnings = []
+    failures: list[tuple[str, str]] = []
 
     for work_id, entry in sorted(books.items()):
         if entry.get("conflicts"):
@@ -935,7 +946,17 @@ def main() -> None:
         if args.chapters or args.glyphs:
             print(f"  reading {work_id} …", end="\r", flush=True)
 
-        doc = extract_book(work_id, entry, args.dry_run or args.chapters or args.glyphs)
+        # One book's failure is reported and the run goes on: a batch of
+        # fifteen should not stop at the fourth because one PDF is strange.
+        # Nothing is written for the failed book (the write is the last step,
+        # into a temporary file), so --pending offers it again next run.
+        try:
+            doc = extract_book(work_id, entry, args.dry_run or args.chapters or args.glyphs)
+        except Exception as exc:  # noqa: BLE001
+            message = f"{type(exc).__name__}: {exc}"
+            print(f"  ! {work_id}: failed — {message[:160]}")
+            failures.append((work_id, message))
+            continue
 
         if args.chapters:
             report_chapters(doc)
@@ -976,6 +997,11 @@ def main() -> None:
 
         for work_id, empty, pages in empty_warnings:
             print(f"  ! {work_id}: {empty} of {pages} pages nearly empty — check it")
+
+    if failures:
+        print(f"\n  ! {len(failures)} failed and wrote nothing; the rest ran:")
+        for work_id, message in failures:
+            print(f"      {work_id}: {message[:120]}")
 
     if args.glyphs:
         print("\n  Nothing written. Each character above is one whose font said")
