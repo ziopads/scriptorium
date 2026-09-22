@@ -66,6 +66,8 @@ pipeline/catalogue.csv
 pipeline/citability.csv
 pipeline/triage.csv
 pipeline/isbns.csv
+pipeline/imprints.csv
+pipeline/outstanding.csv
 pipeline/viability.csv
 pipeline/reconcile.csv
 books.csv
