@@ -20,7 +20,7 @@ const BLANK: Omit<Work, 'id' | 'title'> = {
   status: 'unread', purpose: 'unassigned', standing: 'assigned',
   standing_note: null, priority: null, source_format: 'none', source_path: null,
   r2_pages_key: null, page_offset: 0, vivarium_item_id: null,
-  notes_internal: null, pagination_accepted_at: null,
+  notes_internal: null, pagination_accepted_at: null, pagination_basis: null,
   created_at: '', updated_at: '',
 };
 

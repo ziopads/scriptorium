@@ -1,7 +1,9 @@
 import Link from 'next/link';
 
+import { PageNumber } from '@/components/page-number';
 import { acceptNote, declineNote, reconsiderNote } from '@/lib/actions';
 import type { NoteWithRelations } from '@/lib/types';
+import { unverifiedPages } from '@/lib/works';
 
 // One dossier claim: an assistant note tagged 'dossier', written by
 // pipeline/dossier.py --load (lib/notes.ts). The claim is the author's
@@ -19,7 +21,7 @@ import type { NoteWithRelations } from '@/lib/types';
 const PARTIAL_TAG = 'respaldo-parcial';
 const NAMES_TAG = 'revisar-nombres';
 
-export function ClaimCard({
+export async function ClaimCard({
   claim,
   workId,
   pageHref,
@@ -33,6 +35,7 @@ export function ClaimCard({
   mode: 'review' | 'read';
 }) {
   const anchors = claim.anchors.filter((a) => a.work_id === workId);
+  const unverified = (await unverifiedPages()).has(workId);
   const rejected = claim.rejected_at !== null;
   const pending = !claim.reviewed && !rejected;
 
@@ -59,7 +62,7 @@ export function ClaimCard({
               href={pageHref(a.printed_page)}
               className="whitespace-nowrap text-xs text-muted hover:text-accent hover:underline underline-offset-2"
             >
-              p. {a.printed_page}
+              p. <PageNumber page={a.printed_page} unverified={unverified} />
             </Link>
           ) : null}
         </blockquote>

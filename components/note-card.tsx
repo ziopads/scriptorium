@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import Link from 'next/link';
 
 import { AttributionBadge, AttributionFields } from '@/components/attribution-fields';
+import { PageNumber } from '@/components/page-number';
 import {
   acceptNote,
   declineNote,
@@ -15,6 +16,7 @@ import {
 } from '@/lib/actions';
 import { day } from '@/lib/dates';
 import { linksFor, listRevisions } from '@/lib/notes';
+import { unverifiedPages } from '@/lib/works';
 import type { NoteWithRelations } from '@/lib/types';
 import { NOTE_KIND_LABEL, NOTE_ROLE_LABEL } from '@/lib/types';
 
@@ -50,7 +52,11 @@ export async function NoteCard({
   compact?: boolean;  // inside an axis: no link back to the axis, no kind badge
   selectSlot?: ReactNode; // a checkbox, on the notes list only
 }) {
-  const [revisions, links] = await Promise.all([listRevisions(note.id), linksFor(note.id)]);
+  const [revisions, links, unverified] = await Promise.all([
+    listRevisions(note.id),
+    linksFor(note.id),
+    unverifiedPages(),
+  ]);
 
   const here = workId ? note.anchors.find((a) => a.work_id === workId) : undefined;
   const elsewhere = note.anchors.filter((a) => a !== here);
@@ -96,7 +102,15 @@ export async function NoteCard({
                 {isConnection && here ? '↔ ' : ''}
                 {anchor.work_author ?? '—'},{' '}
                 <span className="italic">{anchor.work_title}</span>
-                {anchor.printed_page !== null ? `, ${anchor.printed_page}` : null}
+                {anchor.printed_page !== null ? (
+                  <>
+                    {', '}
+                    <PageNumber
+                      page={anchor.printed_page}
+                      unverified={unverified.has(anchor.work_id)}
+                    />
+                  </>
+                ) : null}
               </Link>
               {anchor.quote ? (
                 <p className="reading-sm mt-0.5 border-l border-rule pl-2 italic text-muted">
@@ -152,7 +166,17 @@ export async function NoteCard({
         ) : null}
 
         {here ? (
-          <span>{here.printed_page !== null ? `p. ${here.printed_page}` : 'no page'}</span>
+          <span>
+            {here.printed_page !== null ? (
+              <PageNumber
+                page={here.printed_page}
+                unverified={unverified.has(here.work_id)}
+                prefix="p. "
+              />
+            ) : (
+              'no page'
+            )}
+          </span>
         ) : null}
 
         {note.kind !== 'question' && note.kind !== 'axis' ? (

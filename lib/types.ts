@@ -12,6 +12,14 @@ export const STATUS_LABEL: Record<WorkStatus, string> = {
 export type SourceFormat = 'pdf_text' | 'pdf_ocr' | 'epub' | 'none';
 export type NoteOrigin = 'human' | 'assistant';
 
+// Why a file with unsettled numbering was accepted as it stands (migration 017).
+export type PaginationBasis = 'hand_set' | 'none_printed';
+
+export const PAGINATION_BASIS_LABEL: Record<PaginationBasis, string> = {
+  hand_set: 'offset set by hand',
+  none_printed: 'no printed page numbers',
+};
+
 // What the work is for.
 export type Purpose = 'comps' | 'both' | 'dissertation' | 'unassigned';
 
@@ -115,6 +123,13 @@ export interface Work {
   // work is marked unverified: the ebooks have no printed pagination to
   // recover, and a page cited from one has to be checked against the PDF.
   pagination_accepted_at: Timestamp | null;
+
+  // Why it was accepted (migration 017). 'hand_set': an offset read from the
+  // PDF and typed in; its page numbers are the edition's as far as anyone
+  // looked, and are shown unmarked. 'none_printed': the file prints no page
+  // numbers at all, so every page shown for the work is marked. Null when the
+  // work has not been accepted.
+  pagination_basis: PaginationBasis | null;
 
   created_at: Timestamp;
   updated_at: Timestamp;

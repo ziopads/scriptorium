@@ -142,10 +142,9 @@ export default async function WorkMetaPage({
 
         {work.pagination_accepted_at ? (
           <p className="max-w-prose border-l-2 border-accent pl-3 text-sm text-accent">
-            Page numbers unverified. This file&rsquo;s printed pagination could not be
-            settled and the file was accepted as it stands, so any page shown for this
-            work &mdash; in a citation, a quotation or a search result &mdash; has to be
-            checked against the PDF before it is cited.
+            {work.pagination_basis === 'hand_set'
+              ? 'Page offset set by hand. Nothing could check this file\u2019s numbering, so the offset was read from one page of the PDF and applied to the whole book. It holds where it was read; a page far from there is worth checking before it is cited.'
+              : 'Page numbers unverified. This file prints no page numbers of its own, so the page shown for any passage is the file\u2019s page and not the edition\u2019s. Every page the app shows for this work is marked, and a citation needs a printed copy.'}
           </p>
         ) : null}
 

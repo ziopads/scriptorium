@@ -82,7 +82,7 @@ export default async function GapsPagesPage({
             {active === 'ranges'
               ? 'The folios are legible, but the book carries more than one numbering sequence, so no single offset describes it. Enter ranges in page_offsets, then run offsets.py on the work again to clear it.'
               : active === 'accepted'
-                ? 'These files were accepted as they stand: the numbering is still unsettled, and the pipeline no longer holds the text back. Every page number the app shows for them is marked unverified, and a page cited from one has to be checked against the PDF.'
+                ? 'These files were accepted as they stand. Two kinds: an offset read from the PDF and typed in, whose page numbers are shown unmarked, and a file that prints no page numbers at all, whose every page is marked with an asterisk. The numbering is unsettled either way, and the pipeline no longer holds the text back.'
                 : 'Too few legible folios to settle the numbering. Read the folio count below: none at all means the file prints no page numbers anywhere, which is a decision about how to cite it; a few that disagree usually means a bad scan and a better copy is worth finding.'}
           </p>
           {listed.length === 0 ? (
@@ -102,23 +102,56 @@ export default async function GapsPagesPage({
                       {w.title}
                     </Link>
                     {w.pagination_accepted_at ? (
-                      <span className="shrink-0 text-xs text-accent">pages unverified</span>
+                      <span className="shrink-0 text-xs text-accent">
+                        {w.pagination_basis === 'hand_set'
+                          ? 'offset set by hand'
+                          : 'pages unverified'}
+                      </span>
                     ) : null}
                     <span className="font-mono text-xs text-muted">offset {w.page_offset}</span>
                     <Link href={`/works/${w.id}/edit`} className="text-xs text-muted hover:text-accent">
                       Edit
                     </Link>
-                    <form action={setPagination}>
-                      <input type="hidden" name="id" value={w.id} />
-                      <input
-                        type="hidden"
-                        name="accepted"
-                        value={w.pagination_accepted_at ? 'no' : 'yes'}
-                      />
-                      <button type="submit" className="text-xs text-muted hover:text-accent">
-                        {w.pagination_accepted_at ? 'Withdraw' : 'Accept as is'}
-                      </button>
-                    </form>
+                    {w.pagination_accepted_at ? (
+                      <>
+                        <form action={setPagination}>
+                          <input type="hidden" name="id" value={w.id} />
+                          <input
+                            type="hidden"
+                            name="basis"
+                            value={w.pagination_basis === 'hand_set' ? 'none_printed' : 'hand_set'}
+                          />
+                          <button type="submit" className="text-xs text-muted hover:text-accent">
+                            {w.pagination_basis === 'hand_set'
+                              ? 'Mark: no printed numbers'
+                              : 'Mark: offset set by hand'}
+                          </button>
+                        </form>
+                        <form action={setPagination}>
+                          <input type="hidden" name="id" value={w.id} />
+                          <button type="submit" className="text-xs text-muted hover:text-accent">
+                            Withdraw
+                          </button>
+                        </form>
+                      </>
+                    ) : (
+                      <>
+                        <form action={setPagination}>
+                          <input type="hidden" name="id" value={w.id} />
+                          <input type="hidden" name="basis" value="hand_set" />
+                          <button type="submit" className="text-xs text-muted hover:text-accent">
+                            Accept: offset set by hand
+                          </button>
+                        </form>
+                        <form action={setPagination}>
+                          <input type="hidden" name="id" value={w.id} />
+                          <input type="hidden" name="basis" value="none_printed" />
+                          <button type="submit" className="text-xs text-muted hover:text-accent">
+                            Accept: no printed numbers
+                          </button>
+                        </form>
+                      </>
+                    )}
                   </div>
                   <p className="text-xs text-muted">
                     {w.folios === 0

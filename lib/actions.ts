@@ -236,16 +236,21 @@ export async function saveStandingNote(form: FormData): Promise<void> {
 }
 
 // Accept a file whose page numbering offsets.py could not settle, or withdraw
-// that acceptance (migration 016). The flag offsets.py wrote stays where it is;
-// what changes is that the loaders stop holding the work back, and every page
-// number the app shows for the work is marked unverified.
+// that acceptance (migration 016), recording why it was accepted (017). The
+// flag offsets.py wrote stays where it is; what changes is that the loaders
+// stop holding the work back, and how its page numbers are shown.
 export async function setPagination(form: FormData): Promise<void> {
   await requireAllowedUser();
 
   const id = text(form, 'id');
   if (!id) throw new Error('setPagination called without an id.');
 
-  await setPaginationAccepted(id, text(form, 'accepted') === 'yes');
+  const basis = text(form, 'basis');
+  if (basis !== null && basis !== 'hand_set' && basis !== 'none_printed') {
+    throw new Error(`${basis} is not a pagination basis.`);
+  }
+
+  await setPaginationAccepted(id, basis);
 
   revalidatePath('/gaps');
   revalidatePath('/works');
