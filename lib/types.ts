@@ -109,6 +109,13 @@ export interface Work {
   vivarium_item_id: number | null;
   notes_internal: string | null;
 
+  // When a person accepted this file's pagination although offsets.py could
+  // not settle it (migration 016). Null for almost everything. Set, the
+  // pipeline stops holding the text back and every page number shown for the
+  // work is marked unverified: the ebooks have no printed pagination to
+  // recover, and a page cited from one has to be checked against the PDF.
+  pagination_accepted_at: Timestamp | null;
+
   created_at: Timestamp;
   updated_at: Timestamp;
 

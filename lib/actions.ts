@@ -18,6 +18,7 @@ import {
   getWork,
   removeFromList,
   setPriority,
+  setPaginationAccepted,
   setStandingNote,
   setStatus,
   updateImprint,
@@ -231,6 +232,23 @@ export async function saveStandingNote(form: FormData): Promise<void> {
   if (!id) throw new Error('saveStandingNote called without an id.');
 
   await setStandingNote(id, text(form, 'standing_note'));
+  revalidatePath(`/works/${id}`);
+}
+
+// Accept a file whose page numbering offsets.py could not settle, or withdraw
+// that acceptance (migration 016). The flag offsets.py wrote stays where it is;
+// what changes is that the loaders stop holding the work back, and every page
+// number the app shows for the work is marked unverified.
+export async function setPagination(form: FormData): Promise<void> {
+  await requireAllowedUser();
+
+  const id = text(form, 'id');
+  if (!id) throw new Error('setPagination called without an id.');
+
+  await setPaginationAccepted(id, text(form, 'accepted') === 'yes');
+
+  revalidatePath('/gaps');
+  revalidatePath('/works');
   revalidatePath(`/works/${id}`);
 }
 

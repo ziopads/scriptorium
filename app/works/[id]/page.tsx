@@ -140,6 +140,15 @@ export default async function WorkMetaPage({
           <Field label="Identifier" value={work.id} />
         </dl>
 
+        {work.pagination_accepted_at ? (
+          <p className="max-w-prose border-l-2 border-accent pl-3 text-sm text-accent">
+            Page numbers unverified. This file&rsquo;s printed pagination could not be
+            settled and the file was accepted as it stands, so any page shown for this
+            work &mdash; in a citation, a quotation or a search result &mdash; has to be
+            checked against the PDF before it is cited.
+          </p>
+        ) : null}
+
         {work.standing_note ? (
           <div className="border-l-2 border-accent pl-3 text-sm">
             <p className="text-xs uppercase tracking-wide text-muted">On its standing</p>

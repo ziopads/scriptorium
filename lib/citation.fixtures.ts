@@ -20,7 +20,8 @@ const BLANK: Omit<Work, 'id' | 'title'> = {
   status: 'unread', purpose: 'unassigned', standing: 'assigned',
   standing_note: null, priority: null, source_format: 'none', source_path: null,
   r2_pages_key: null, page_offset: 0, vivarium_item_id: null,
-  notes_internal: null, created_at: '', updated_at: '',
+  notes_internal: null, pagination_accepted_at: null,
+  created_at: '', updated_at: '',
 };
 
 const work = (over: Partial<Work> & { id: string; title: string }): Work => ({

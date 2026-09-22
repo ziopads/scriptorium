@@ -26,6 +26,7 @@ const COLS = `
   isbn, volume, series, original_year, url, doi, accessed,
   status, purpose, standing, standing_note, priority, source_format, source_path,
   r2_pages_key, page_offset, vivarium_item_id, notes_internal,
+  pagination_accepted_at,
   created_at, updated_at
 `;
 
@@ -37,7 +38,7 @@ export async function listWorks(): Promise<Work[]> {
            isbn, volume, series, original_year, url, doi, accessed,
            status, purpose, standing, standing_note, priority, source_format, source_path,
            r2_pages_key, page_offset, vivarium_item_id, notes_internal,
-           created_at, updated_at,
+           pagination_accepted_at, created_at, updated_at,
            exists (select 1 from pages p where p.work_id = works.id) as has_pages
     from works
     order by coalesce(author, title), year nulls last
@@ -53,7 +54,7 @@ export async function getWork(id: string): Promise<Work | null> {
            isbn, volume, series, original_year, url, doi, accessed,
            status, purpose, standing, standing_note, priority, source_format, source_path,
            r2_pages_key, page_offset, vivarium_item_id, notes_internal,
-           created_at, updated_at,
+           pagination_accepted_at, created_at, updated_at,
            exists (select 1 from pages p where p.work_id = works.id) as has_pages
     from works
     where id = ${id}
@@ -82,7 +83,7 @@ export async function listContents(containerId: string): Promise<Work[]> {
            isbn, volume, series, original_year, url, doi, accessed,
            status, purpose, standing, standing_note, priority, source_format, source_path,
            r2_pages_key, page_offset, vivarium_item_id, notes_internal,
-           created_at, updated_at
+           pagination_accepted_at, created_at, updated_at
     from works
     where container_id = ${containerId}
     order by first_page nulls last, title
@@ -154,7 +155,7 @@ export async function listWorksInList(listId: string): Promise<Work[]> {
            w.isbn, w.volume, w.series, w.original_year, w.url, w.doi, w.accessed,
            w.status, w.purpose, w.standing, w.standing_note, w.priority, w.source_format,
            w.source_path, w.r2_pages_key, w.page_offset, w.vivarium_item_id,
-           w.notes_internal, w.created_at, w.updated_at,
+           w.notes_internal, w.pagination_accepted_at, w.created_at, w.updated_at,
            exists (select 1 from pages p where p.work_id = w.id) as has_pages
     from works w
     join list_items li on li.work_id = w.id
@@ -277,6 +278,26 @@ export async function setStatus(id: string, status: Work['status']): Promise<voi
 export async function setPageOffset(id: string, offset: number): Promise<void> {
   const sql = db();
   await sql`update works set page_offset = ${offset}, updated_at = now() where id = ${id}`;
+}
+
+// A person's decision that a file with unsettled numbering is usable as it
+// stands (migration 016). offset_problem is left exactly as offsets.py wrote
+// it: this records a judgement beside the evidence, it does not overwrite it.
+// Accepting lets the loaders carry the work through to search; every page
+// number the app shows for it is marked unverified.
+export async function setPaginationAccepted(id: string, accepted: boolean): Promise<void> {
+  const sql = db();
+  if (accepted) {
+    await sql`
+      update works set pagination_accepted_at = now(), updated_at = now()
+      where id = ${id}
+    `;
+    return;
+  }
+  await sql`
+    update works set pagination_accepted_at = null, updated_at = now()
+    where id = ${id}
+  `;
 }
 
 export async function updateImprint(
@@ -457,13 +478,15 @@ export interface WorkWithOffsetProblem {
   // whether the book needs a new PDF or a decision about how to cite it.
   pages: number;
   folios: number;
+  // Set when someone decided the file is usable as it stands (migration 016).
+  pagination_accepted_at: string | null;
 }
 
 export async function worksWithOffsetProblems(): Promise<WorkWithOffsetProblem[]> {
   const sql = db();
   const rows = await sql`
     select id, author, title, year, page_offset, offset_problem, offset_checked_at,
-           source_format,
+           source_format, pagination_accepted_at,
            (select count(*) from pages p where p.work_id = works.id)::int as pages,
            (select count(*) from pages p
              where p.work_id = works.id and p.folio is not null)::int as folios
@@ -497,7 +520,7 @@ export async function worksWithoutSource(): Promise<Work[]> {
            isbn, volume, series, original_year, url, doi, accessed,
            status, purpose, standing, standing_note, priority, source_format, source_path,
            r2_pages_key, page_offset, vivarium_item_id, notes_internal,
-           created_at, updated_at
+           pagination_accepted_at, created_at, updated_at
     from works
     where source_format = 'none' and container_id is null
     order by coalesce(author, title)
