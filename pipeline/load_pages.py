@@ -12,8 +12,10 @@ One work per transaction: its rows are deleted and reinserted, so a rerun
 after re-extraction replaces rather than duplicates. page_loads records which
 extractor run the rows came from.
 
-New pages clear the work's offset check (offset_checked_at, offset_problem),
-because the folios it was judged on have been replaced. Run offsets.py next.
+New pages clear the work's offset check (offset_checked_at, offset_problem) and
+any acceptance of its pagination (pagination_accepted_at, migration 016),
+because the folios all three were judged on have been replaced. Run offsets.py
+next.
 
 works.source_path is not written. Neon is where a person records which file a
 work is; a loader copying back whatever the extraction read would overwrite
@@ -76,7 +78,8 @@ def load_one(cur, work_id: str, doc: dict) -> int:
     )
 
     cur.execute(
-        "update works set offset_checked_at = null, offset_problem = null where id = %s",
+        "update works set offset_checked_at = null, offset_problem = null,"
+        " pagination_accepted_at = null where id = %s",
         (work_id,),
     )
 

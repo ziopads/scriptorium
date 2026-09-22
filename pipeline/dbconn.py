@@ -272,7 +272,7 @@ QUEUE = """
     select w.id,
            coalesce(w.source_path, ''),
            w.offset_checked_at is not null,
-           w.offset_problem is not null,
+           (w.offset_problem is not null and w.pagination_accepted_at is null),
            exists (select 1 from pages p where p.work_id = w.id),
            exists (select 1 from chunks c where c.work_id = w.id),
            exists (select 1 from chunks c where c.work_id = w.id and c.embedding is null),
@@ -366,16 +366,21 @@ def pending(stage: str, limit: int, which: str | None = None) -> list[str]:
 
 
 def offset_problems(ids: list[str]) -> dict[str, str]:
-    """work_id -> offset_problem, for the named works that have one. Sections,
-    chunks and embeddings are not loaded for these until the numbering is
-    settled and offsets.py has been run on them again."""
+    """work_id -> offset_problem, for the named works that have one and have not
+    been accepted. Sections, chunks and embeddings are not loaded for these
+    until the numbering is settled and offsets.py has been run on them again.
+
+    A work with pagination_accepted_at set is left out (migration 016): someone
+    has decided the file is usable as it stands, which is the only way a book
+    with no printed page numbers at all ever becomes searchable."""
     if not ids:
         return {}
     with connect() as conn:
         with conn.cursor() as cur:
             cur.execute(
                 "select id, offset_problem from works"
-                " where id = any(%s) and offset_problem is not null",
+                " where id = any(%s) and offset_problem is not null"
+                " and pagination_accepted_at is null",
                 (list(ids),),
             )
             return dict(cur.fetchall())
