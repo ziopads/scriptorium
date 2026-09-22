@@ -448,12 +448,25 @@ export interface WorkWithOffsetProblem {
   page_offset: number;
   offset_problem: string;
   offset_checked_at: string;
+  source_format: string;
+  // The evidence behind the flag: how many of the file's pages carried a
+  // legible folio. Zero from a whole book is a file with no printed numbers
+  // at all (a converter's output, or a scan of an unnumbered edition); a
+  // handful that disagree is a file whose numbers exist but cannot be trusted.
+  // The verdict alone does not distinguish them, and the difference decides
+  // whether the book needs a new PDF or a decision about how to cite it.
+  pages: number;
+  folios: number;
 }
 
 export async function worksWithOffsetProblems(): Promise<WorkWithOffsetProblem[]> {
   const sql = db();
   const rows = await sql`
-    select id, author, title, year, page_offset, offset_problem, offset_checked_at
+    select id, author, title, year, page_offset, offset_problem, offset_checked_at,
+           source_format,
+           (select count(*) from pages p where p.work_id = works.id)::int as pages,
+           (select count(*) from pages p
+             where p.work_id = works.id and p.folio is not null)::int as folios
     from works
     where offset_problem is not null
     order by coalesce(author, title), year nulls last
