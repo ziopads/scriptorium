@@ -135,6 +135,7 @@ export default async function WorkMetaPage({
           <Field label="ISBN" value={work.isbn} />
           <Field label="Language" value={work.language} />
           <Field label="Source" value={SOURCE_LABEL[work.source_format]} />
+          <Field label="File" value={work.source_path} />
           <Field label="Page offset" value={work.page_offset === 0 ? null : work.page_offset} />
           <Field label="Identifier" value={work.id} />
         </dl>

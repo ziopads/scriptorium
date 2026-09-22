@@ -56,14 +56,21 @@ export default async function GapsFilesPage({
       ) : (
         <ul className="max-w-4xl divide-y divide-rule border-y border-rule">
           {works.map((w) => (
-            <li key={w.id} className="flex flex-wrap items-baseline gap-x-3 py-1.5 text-sm">
-              <span className="w-48 shrink-0 truncate">{w.author ?? '\u2014'}</span>
-              <Link href={`/works/${w.id}`} className="min-w-0 flex-1 italic hover:text-accent">
-                {w.title}
-              </Link>
-              {w.year ? <span className="text-xs text-muted">{w.year}</span> : null}
-              {w.pdf_verdict && active !== 'searchable' ? (
-                <span className="text-xs text-accent">{w.pdf_verdict}</span>
+            <li key={w.id} className="space-y-0.5 py-1.5 text-sm">
+              <div className="flex flex-wrap items-baseline gap-x-3">
+                <span className="w-48 shrink-0 truncate">{w.author ?? '\u2014'}</span>
+                <Link href={`/works/${w.id}`} className="min-w-0 flex-1 italic hover:text-accent">
+                  {w.title}
+                </Link>
+                {w.year ? <span className="text-xs text-muted">{w.year}</span> : null}
+                {w.pdf_verdict && active !== 'searchable' ? (
+                  <span className="text-xs text-accent">{w.pdf_verdict}</span>
+                ) : null}
+              </div>
+              {w.source_path ? (
+                <p className="truncate font-mono text-xs text-muted" title={w.source_path}>
+                  {w.source_path}
+                </p>
               ) : null}
             </li>
           ))}

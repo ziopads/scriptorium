@@ -214,7 +214,12 @@ export default async function EditWorkPage({
             </select>
           </label>
 
-          <Row name="source_path" label="Source path" value={work.source_path} />
+          <Row
+            name="source_path"
+            label="Source path"
+            value={work.source_path}
+            hint="The PDF's filename as it is spelled in pipeline/corpus/ACCOUNTED. Several files for one work are separated by | in the order they are read."
+          />
           <Row
             name="page_offset"
             label="Page offset"

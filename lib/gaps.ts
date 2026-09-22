@@ -51,6 +51,7 @@ export interface FileRow {
   title: string;
   year: number | null;
   pdf_verdict: string | null;
+  source_path: string | null;
   state: FileState;
 }
 
@@ -58,7 +59,7 @@ export interface FileRow {
 export async function fileStates(): Promise<FileRow[]> {
   const sql = db();
   const rows = (await sql`
-    select w.id, w.author, w.title, w.year, w.pdf_verdict,
+    select w.id, w.author, w.title, w.year, w.pdf_verdict, w.source_path,
            case
              when w.source_path is null then 'no_pdf'
              when not exists (select 1 from pages p where p.work_id = w.id) then 'held'
