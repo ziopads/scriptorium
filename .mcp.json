@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "scriptorium": {
+      "type": "stdio",
+      "command": "pipeline/.venv/bin/python3",
+      "args": [
+        "pipeline/mcp_server.py"
+      ],
+      "env": {}
+    }
+  }
+}
