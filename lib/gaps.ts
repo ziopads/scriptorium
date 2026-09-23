@@ -31,7 +31,7 @@ export const FILE_STATES: { id: FileState; label: string; blurb: string }[] = [
     id: 'blocked',
     label: 'Page numbering to settle',
     blurb:
-      'Pages loaded but held back from search because the printed page numbers could not be matched. See the Page numbers tab.',
+      'Pages loaded but held back from search because the printed page numbers could not be matched and nobody has accepted the file as it stands. See the Page numbers tab.',
   },
   {
     id: 'loaded',
@@ -63,7 +63,12 @@ export async function fileStates(): Promise<FileRow[]> {
            case
              when w.source_path is null then 'no_pdf'
              when not exists (select 1 from pages p where p.work_id = w.id) then 'held'
-             when w.offset_problem is not null then 'blocked'
+             -- Blocked means the pipeline is holding the text back, which an
+             -- accepted file (migration 016) is not: its numbering is still
+             -- unsettled, it is listed on the Page numbers tab under Accepted,
+             -- and its pages are marked wherever they are shown.
+             when w.offset_problem is not null and w.pagination_accepted_at is null
+               then 'blocked'
              when exists (select 1 from chunks c where c.work_id = w.id and c.embedding is not null)
                then 'searchable'
              else 'loaded'
