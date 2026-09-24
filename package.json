@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:matcher": "node --import tsx --test tests/matcher.test.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/server": "^2.0.0",

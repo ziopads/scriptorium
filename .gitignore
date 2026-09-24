@@ -99,6 +99,9 @@ pipeline/chunks/
 # central themes. The script that uses both is tracked; neither is.
 pipeline/dossiers/
 pipeline/dossier-themes.txt
+# The matcher's real-data fixtures carry whole books' page text.
+tests/matcher/corpus.json
+tests/matcher/*.part
 *.pdf
 *.epub
 *.azw3

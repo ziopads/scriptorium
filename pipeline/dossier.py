@@ -73,13 +73,24 @@ FRONT MATTER
 
 MATCHING
 
-    Both sides are normalized as lib/quotation.ts normalizes a captured
-    quotation (soft hyphens, note references, line-end hyphens, whitespace),
-    then compared case-insensitively with quotation marks and dashes unified.
-    An exact match is tried on the page the model named, its neighbours and
-    the page joins between them, then the whole unit, then the whole book. A
-    close match (for an OCR slip or a corrected accent) is tried on the named
-    page and its neighbours only, and must cover almost all of the quotation.
+    Both sides are normalized (composed accents, soft hyphens, note
+    references, line-end hyphens, whitespace), then compared
+    case-insensitively with quotation marks and dashes unified. An exact
+    match is tried on the page the model named, its neighbours and the page
+    joins between them, then the whole unit, then the whole book. A close
+    match (for an OCR slip or a corrected accent) is tried on the named page
+    and its neighbours only, and must cover almost all of the quotation.
+
+    The normalization is close to lib/quotation.ts's normalizeQuotation,
+    which the note form uses, and differs from it in two ways: that has no
+    NFC step, and it counts only Unicode letters as letters where this also
+    counts numeric characters such as the fraction one half.
+
+    lib/matcher.ts is this matcher ported to TypeScript for the remote MCP
+    server, and must behave identically. tests/matcher/ holds the fixtures
+    both pass (pipeline/test_matcher.py, npm run test:matcher). Change
+    normalize, key or Book here and you regenerate them with
+    matcher_fixtures.py and change lib/matcher.ts to match.
 
 THE MODEL CALLS go through Claude Code's non-interactive mode, `claude -p`,
 so they use the account Claude Code is logged into (`claude login`) rather
@@ -284,7 +295,8 @@ KEY_MAP = str.maketrans({
 
 
 def normalize(raw: str) -> str:
-    """The same steps as normalizeQuotation in lib/quotation.ts."""
+    """normalizeQuotation's steps (lib/quotation.ts) with NFC first; lib/matcher.ts
+    ports this function exactly (see MATCHING above)."""
     text = unicodedata.normalize("NFC", raw)
     text = SOFT_HYPHEN.sub("", text)
     text = NOTE_REFERENCE.sub("", text)
