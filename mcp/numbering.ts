@@ -1,7 +1,8 @@
 // How far a work's page numbers can be trusted, as the MCP tools report it.
 //
 // THREE COPIES OF ONE RULE, which must agree:
-//   pipeline/mcp_server.py   numbering(), page_numbers()   the local server
+//   pipeline/mcp_server.py   numbering(), page_numbers(),  the local server
+//                            is_unverified()
 //   mcp/numbering.ts          this file                     the remote server
 //   lib/works.ts              unverifiedPages()             the app's asterisk
 // The rule is docs/PAGE-NUMBERS.md §3: a work is marked when offset_problem is

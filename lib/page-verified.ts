@@ -7,7 +7,8 @@
 // unverifiedPages() in lib/works.ts is the same rule in SQL, for the screen:
 //   offset_problem is not null and pagination_basis is distinct from 'hand_set'
 // components/page-number.tsx draws the asterisk; pageLabel is its text form.
-// pipeline/mcp_server.py carries a Python copy for the local server.
+// pipeline/mcp_server.py carries a Python copy for the local server:
+// is_unverified(), page_verified(), page_label() and pages_label().
 
 export type PageVerified = 'yes' | 'hand set' | 'no';
 

@@ -51,6 +51,12 @@ PAGE NUMBERS, AS THE APP SHOWS THEM
                     asterisk
         unchecked   never checked; not citable
 
+    Every page number also leaves in the two forms the app gives it
+    (lib/page-verified.ts, ported below): page_label, with an asterisk after
+    the number when the work is marked, and page_verified, 'yes', 'hand set'
+    or 'no', as the notes export writes it. The remote server (mcp/) returns
+    the same fields, so the two answer a call alike.
+
     The note goes in with origin 'assistant' and reviewed false, so it lands
     in her proposals queue (lib/notes.ts, listUnreviewedNotes). Attribution is
     'author', 'other' or left empty. 'own' is refused: whether a claim is hers
@@ -81,11 +87,17 @@ MAX_SEARCH_RESULTS = 30
 MAX_WORKS_LISTED = 25
 MAX_NOTES_LISTED = 50
 
-INSTRUCTIONS = """Scriptorium holds a doctoral candidate's exam corpus: the books' page text, searchable chunks, study aids, and her notes.
+# The same text as INSTRUCTIONS in mcp/server.ts, so a model reads the same
+# guidance from either server.
+INSTRUCTIONS = """Scriptorium holds a doctoral candidate's exam corpus: the books' page text, study aids, and her notes. This connection can read and search, and can propose notes for her review through draft_note; it cannot edit or delete anything.
 
-Name every work by its full id; find_works gives it. Page numbers are printed pages. A work whose numbering is unchecked, or has a problem nobody has accepted, can be read and searched, but its page numbers are not citations, and draft_note refuses it. Results carry page_numbers: 'verified'; 'hand set' (reviewed by a person); 'unverified', either 'the file's own page, not the edition's' (an accepted file that prints no numbers) or 'numbering unsettled' (say so in any note that cites it); or 'unchecked'.
+Name every work by its full id; find_works gives it. Page numbers are printed pages. Every page number comes with page_label, the number as the app shows it, with an asterisk when the number is unverified; quote page_label (pages_label in search and find_quotation results), asterisk included, whenever you cite a page. page_verified is 'yes', 'hand set' (reviewed by a person) or 'no'. page_numbers explains the work's numbering in words. A work whose pages are not citable (never checked, or unsettled and not accepted) can still be read, but its page numbers are not citations.
 
-Anything you write for her goes through draft_note, which verifies every quotation against the page text and stores the book's own words and page. Copy quotations exactly from read_pages or search results. For your own analysis, leave attribution empty; she decides whose claim it is. Use 'author' only when the note reports the anchored work's own position, and 'other' with attributed_to for a third party's."""
+find_quotation checks a quotation against the page text and returns the book's own words at the match and the page where they were found; quote what it returns, not what you sent.
+
+Anything you write for her goes through draft_note, which verifies every quotation against the page text and stores the book's own words and page; one quotation not found refuses the whole note. Copy quotations exactly from read_pages, search or find_quotation results. For your own analysis, leave attribution out; she decides whose claim it is. Use 'author' only when the note reports the anchored work's own position, and 'other' with attributed_to for a third party's. The note waits in her proposals queue until she accepts or rejects it.
+
+Study-aid sections and notes say whether she has reviewed them. An unreviewed section, or a note with origin 'assistant' and reviewed false, is a draft or a pending proposal, not her view; say so when you use it. Notes carry an attribution (author, own, other) saying whose claim they state."""
 
 mcp = MCPServer("scriptorium", instructions=INSTRUCTIONS)
 
@@ -130,6 +142,33 @@ def page_numbers(checked, problem, accepted, basis) -> str:
     return "verified" if checked else "unchecked"
 
 
+# lib/page-verified.ts, in Python: the app's mark for an unverified page
+# number (docs/PAGE-NUMBERS.md §3) and the two forms a page number takes when
+# it leaves the app. The same rule is in lib/works.ts (SQL, for the screen) and
+# mcp/numbering.ts; all of them must agree.
+
+def is_unverified(problem, basis) -> bool:
+    return problem is not None and basis != "hand_set"
+
+
+def page_verified(unverified: bool, basis) -> str:
+    if unverified:
+        return "no"
+    if basis == "hand_set":
+        return "hand set"
+    return "yes"
+
+
+def page_label(page: int, unverified: bool) -> str:
+    return f"{page}*" if unverified else str(page)
+
+
+def pages_label(pages: str, unverified: bool) -> str:
+    """'40' or '40–41' (an en dash; a negative page carries an ASCII minus),
+    each number labelled."""
+    return "\u2013".join(page_label(int(p), unverified) for p in pages.split("\u2013"))
+
+
 def work_record(cur, work_id: str) -> dict:
     """The work, or a tool error naming ids that contain what was given."""
     cur.execute(
@@ -140,11 +179,14 @@ def work_record(cur, work_id: str) -> dict:
     )
     row = cur.fetchone()
     if row:
+        unverified = is_unverified(row[5], row[8])
         return {
             "id": row[0], "author": row[1], "title": row[2], "year": row[3],
             "checked": row[4] is not None, "problem": row[5], "internal_note": row[6],
             "accepted": row[7] is not None, "basis": row[8],
             "page_numbers": page_numbers(row[4] is not None, row[5], row[7] is not None, row[8]),
+            "unverified": unverified,
+            "page_verified": page_verified(unverified, row[8]),
         }
     cur.execute("select id from works where id ilike %s order by id limit 10",
                 (f"%{work_id}%",))
@@ -177,16 +219,26 @@ def load_book(cur, work_id: str) -> Book:
 
 
 def anchors_for(cur, note_ids: list[int]) -> dict[int, list[dict]]:
+    """The quotations anchored to these notes, in order, each page carried as
+    the app shows it (mcp/anchors.ts does the same)."""
     if not note_ids:
         return {}
     cur.execute(
-        "select note_id, work_id, printed_page, quote from note_anchors"
-        " where note_id = any(%s) order by note_id, ordinal",
+        "select a.note_id, a.work_id, a.printed_page, a.quote, w.offset_problem, w.pagination_basis"
+        " from note_anchors a join works w on w.id = a.work_id"
+        " where a.note_id = any(%s) order by a.note_id, a.ordinal",
         (note_ids,),
     )
     out: dict[int, list[dict]] = {}
-    for note_id, work_id, page, quote in cur.fetchall():
-        out.setdefault(note_id, []).append({"work_id": work_id, "page": page, "quote": quote})
+    for note_id, work_id, page, quote, problem, basis in cur.fetchall():
+        unverified = is_unverified(problem, basis)
+        out.setdefault(note_id, []).append({
+            "work_id": work_id,
+            "page": page,
+            "page_label": None if page is None else page_label(page, unverified),
+            "page_verified": "" if page is None else page_verified(unverified, basis),
+            "quote": quote,
+        })
     return out
 
 
@@ -220,6 +272,7 @@ def find_works(query: str) -> dict:
             "id": r[0], "author": r[1], "title": r[2], "year": r[3],
             "numbering": numbering(r[4], r[5], r[7], r[8]),
             "page_numbers": page_numbers(r[4] is not None, r[5], r[7] is not None, r[8]),
+            "page_verified": page_verified(is_unverified(r[5], r[8]), r[8]),
             "internal_note": r[6],
             "has_pages": r[9], "searchable": r[10],
         }
@@ -280,20 +333,21 @@ def search(
         )
         rows = cur.fetchall()
 
-    return {
-        "query": query,
-        "results": [
-            {
-                "work_id": r[0], "author": r[1], "title": r[2],
-                "pages": str(r[3]) if r[3] == r[4] else f"{r[3]}\u2013{r[4]}",
-                "lang": r[5], "score": round(float(r[6]), 3),
-                "numbering": numbering(r[8], r[9], r[10], r[11]),
-                "page_numbers": page_numbers(r[8] is not None, r[9], r[10] is not None, r[11]),
-                "text": r[7],
-            }
-            for r in rows
-        ],
-    }
+    results = []
+    for r in rows:
+        unverified = is_unverified(r[9], r[11])
+        pages = str(r[3]) if r[3] == r[4] else f"{r[3]}\u2013{r[4]}"
+        results.append({
+            "work_id": r[0], "author": r[1], "title": r[2],
+            "pages": pages,
+            "pages_label": pages_label(pages, unverified),
+            "page_verified": page_verified(unverified, r[11]),
+            "lang": r[5], "score": round(float(r[6]), 3),
+            "numbering": numbering(r[8], r[9], r[10], r[11]),
+            "page_numbers": page_numbers(r[8] is not None, r[9], r[10] is not None, r[11]),
+            "text": r[7],
+        })
+    return {"query": query, "results": results}
 
 
 @mcp.tool()
@@ -334,7 +388,10 @@ def read_pages(work_id: str, first_page: int, last_page: int | None = None) -> d
             status = "printed"
         else:
             status = f"warning: the page reads {folio}"
-        pages.append({"page": printed, "file_page": index, "number": status, "text": text})
+        pages.append({
+            "page": printed, "page_label": page_label(printed, work["unverified"]),
+            "file_page": index, "number": status, "text": text,
+        })
 
     reason = citable(work)
     return {
@@ -343,6 +400,7 @@ def read_pages(work_id: str, first_page: int, last_page: int | None = None) -> d
         "citable": reason is None,
         "not_citable_because": reason,
         "page_numbers": work["page_numbers"],
+        "page_verified": work["page_verified"],
         "internal_note": work["internal_note"],
         "pages": pages,
     }
@@ -365,7 +423,11 @@ def find_quotation(work_id: str, text: str, near_page: int | None = None) -> dic
         return {"found": False, "work_id": work_id}
     return {
         "found": True, "work_id": work_id,
-        "text": hit["text"], "page": hit["page"], "pages": hit["pages"], "match": hit["match"],
+        "text": hit["text"], "page": hit["page"], "pages": hit["pages"],
+        "page_label": page_label(hit["page"], work["unverified"]),
+        "pages_label": pages_label(hit["pages"], work["unverified"]),
+        "page_verified": work["page_verified"],
+        "match": hit["match"],
         "front_matter": hit["page"] < FIRST_CITABLE_PAGE,
         "citable": reason is None, "not_citable_because": reason,
         "page_numbers": work["page_numbers"],
@@ -548,7 +610,10 @@ def draft_note(
                 if hit["page"] < FIRST_CITABLE_PAGE:
                     failures.append(f"quotation {n} ({q.work_id}): on front matter, printed page {hit['page']}")
                     continue
-                verified.append({"work_id": q.work_id, **hit})
+                verified.append({
+                    "work_id": q.work_id, **hit,
+                    "unverified": work["unverified"], "page_verified": work["page_verified"],
+                })
 
         if failures:
             raise ToolError("nothing written:\n" + "\n".join(failures))
@@ -580,7 +645,12 @@ def draft_note(
         "status": "proposal awaiting her review",
         "attribution": attribution,
         "quotations": [
-            {"work_id": v["work_id"], "pages": v["pages"], "match": v["match"], "stored": v["text"]}
+            {
+                "work_id": v["work_id"], "pages": v["pages"],
+                "pages_label": pages_label(v["pages"], v["unverified"]),
+                "page_verified": v["page_verified"],
+                "match": v["match"], "stored": v["text"],
+            }
             for v in verified
         ],
     }
