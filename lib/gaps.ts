@@ -55,12 +55,22 @@ export interface FileRow {
   state: FileState;
 }
 
-// Every examinable book, essays excepted: an essay's file is its volume's.
-// The MCP servers' list_gaps is this rule too: mcp/tools/list-gaps.ts calls
-// this function, and pipeline/mcp_server.py carries a copy of the SQL (GAPS_SQL)
-// and of the labels below. Change one, change the copy.
-export async function fileStates(): Promise<FileRow[]> {
+// With no argument: every examinable book, essays excepted, on the reasoning
+// that an essay's file is its volume's. The MCP servers' list_gaps is this rule
+// too: mcp/tools/list-gaps.ts calls this function, and pipeline/mcp_server.py
+// carries a copy of the SQL (GAPS_SQL) and of the labels below. Change the
+// state rule, change the copy.
+//
+// With ids: those works and only those, essays included. The readiness matrix
+// (lib/readiness.ts) asks for every work on an examinable list, which takes in
+// any essay listed in its own right; the seed data has such essays carrying
+// their own files, Freud's El malestar en la cultura among them.
+// The no-argument rows are unchanged, so list_gaps and the Gaps tab are too;
+// a listed essay with no file of its own would not appear there, which is a
+// known gap in that rule, recorded rather than fixed.
+export async function fileStates(ids?: string[]): Promise<FileRow[]> {
   const sql = db();
+  const only = ids && ids.length > 0 ? ids : null;
   const rows = (await sql`
     select w.id, w.author, w.title, w.year, w.pdf_verdict, w.source_path,
            case
@@ -77,8 +87,11 @@ export async function fileStates(): Promise<FileRow[]> {
              else 'loaded'
            end as state
     from works w
-    where w.container_id is null
+    where (
+      ${only}::text[] is null
+      and w.container_id is null
       and exists (select 1 from examinable_works e where e.id = w.id)
+    ) or w.id = any(${only}::text[])
     order by coalesce(w.author, w.title), w.year nulls last
   `) as FileRow[];
   return rows;

@@ -4,6 +4,7 @@ import { ExpandAll } from '@/components/expand-all';
 import { requireAllowedUser } from '@/lib/auth/guard';
 import { day } from '@/lib/dates';
 import { documentInfo } from '@/lib/documents';
+import { examNumber } from '@/lib/exam-number';
 import {
   examinableIds,
   listExamLists,
@@ -23,23 +24,8 @@ export const dynamic = 'force-dynamic';
 // code. Each book shows its exam number, author, title, year and how many of
 // her notes touch it, with a link to its page and one to the workbench.
 //
-// The exam number is derived here, as the workbench derives it: list numeral,
-// section letter, ordinal (I.E.2), and I.Supl.3 for a supplementary item so
-// that every item has a number of its own.
-
-const NUMERAL: Record<string, string> = { theory: 'I', dissertation: 'II', teaching: 'III' };
-
-function examNumber(
-  listId: string,
-  section: { letter: string | null; kind: string } | undefined,
-  ordinal: number | null,
-): string | null {
-  const numeral = NUMERAL[listId];
-  if (!numeral) return null;
-  const n = ordinal ?? '?';
-  if (section?.kind === 'supplementary') return `${numeral}.Supl.${n}`;
-  return `${numeral}.${section?.letter ?? '?'}.${n}`;
-}
+// The exam number comes from lib/exam-number.ts, shared with the readiness
+// matrix.
 
 function Chevron() {
   return (

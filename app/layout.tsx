@@ -34,6 +34,7 @@ export const dynamic = 'force-dynamic';
 const NAV = [
   { href: '/', label: 'Workbench' },
   { href: '/lists', label: 'Lists' },
+  { href: '/readiness', label: 'Readiness' },
   { href: '/works', label: 'Catalogue' },
   { href: '/notes', label: 'Notes' },
   { href: '/axes', label: 'Axes' },
