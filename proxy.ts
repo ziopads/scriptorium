@@ -29,6 +29,10 @@ export const config = {
     //
     // A page route never has a dot in its last segment, so this cannot exclude
     // a real page.
-    '/((?!auth|colophon|api/auth|_next/static|_next/image|.*\\.[a-zA-Z0-9]+$).*)',
+    //
+    // api/mcp is the remote MCP server. Claude calls it from Anthropic's
+    // servers and cannot follow a redirect to a sign-in form; the route decides
+    // access itself (app/api/mcp/[key]/route.ts).
+    '/((?!auth|colophon|api/auth|api/mcp|_next/static|_next/image|.*\\.[a-zA-Z0-9]+$).*)',
   ],
 };
