@@ -4,9 +4,9 @@ Source of the wording for `/como/claude` (`app/como/claude/page.tsx`). Keep
 the two in step by hand, as `docs/COMO-TOMAR-NOTAS.md` is kept with `/como`.
 Spanish first, English after; the two say the same thing.
 
-The page points to Gaps → Files for the works Claude cannot search. If the
-remote MCP server gains a `list_gaps` tool, the sentence on missing works
-changes to name it.
+The page points to Gaps → Files for the works Claude cannot search, and
+says Claude can list them: the MCP servers' `list_gaps` tool gives the same
+list, by the same rule (`fileStates()` in `lib/gaps.ts`).
 
 ---
 
@@ -56,8 +56,8 @@ Cuando una conversación se alarga mucho, empieza otra.
 
 - **Sólo ve los libros cargados.** Las obras sin archivo, o con el archivo
   todavía sin procesar, aparecen en Gaps → Files, y Claude no puede buscar en
-  ellas. Que no encuentre algo en el corpus no quiere decir que no exista en
-  la literatura.
+  ellas; también te las puede listar. Que no encuentre algo en el corpus no
+  quiere decir que no exista en la literatura.
 - **Lo que Claude sabe de otras lecturas no se puede citar a tus libros.** Eso
   incluye teoría que conoce y libros que no están aquí. Pídele que lo marque.
 - **El texto viene de un escaneo (OCR) y tiene errores de lectura**, por
@@ -126,8 +126,8 @@ When a conversation gets long, start a new one.
 
 - **It sees only the books that are loaded.** Works with no file, or whose
   file is not yet processed, are listed in Gaps → Files, and Claude cannot
-  search them. Not finding something in the corpus doesn't mean it is absent
-  from the literature.
+  search them; it can list them for you. Not finding something in the corpus
+  doesn't mean it is absent from the literature.
 - **What Claude knows from other reading cannot be cited to your books.** That
   includes theory it knows and books that aren't here. Ask it to mark it.
 - **The text comes from a scan (OCR) and has misreadings**, for example

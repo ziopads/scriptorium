@@ -8,11 +8,17 @@
 //
 // Pages leave as they leave the app: pages_label carries the asterisk when the
 // work's numbering is unverified, page_verified as the notes export writes it.
+//
+// A search over the whole corpus (no work_ids) also reports coverage: how many
+// works search can reach, and how many examinable works it cannot, with
+// list_gaps (mcp/tools/list-gaps.ts) to name them. Only the counts travel with
+// every search; the list would repeat on every call of a survey.
 
 import { db } from '@/lib/db';
 import { embedQuery } from '@/lib/embed';
 import { isUnverified, pageLabel, pageVerified } from '@/lib/page-verified';
 import { numbering, pageNumbers } from '@/mcp/numbering';
+import { gapCount } from '@/mcp/tools/list-gaps';
 import { ToolError, workRecord } from '@/mcp/work';
 
 export const MAX_SEARCH_RESULTS = 30;
@@ -56,7 +62,8 @@ export async function search(args: {
   }
   const vec = JSON.stringify(vector);
 
-  const rows = (await db()`
+  const [raw, coverage] = await Promise.all([
+    db()`
     select c.work_id, w.author, w.title, c.start_page, c.end_page, c.lang,
            1 - (c.embedding <=> ${vec}::vector) as score, c.text,
            w.offset_checked_at, w.offset_problem, w.pagination_accepted_at, w.pagination_basis
@@ -67,10 +74,14 @@ export async function search(args: {
       and (${lang}::text is null or c.lang = ${lang}::text)
     order by c.embedding <=> ${vec}::vector
     limit ${k}
-  `) as Row[];
+  `,
+    works ? null : coverageCounts(),
+  ]);
+  const rows = raw as Row[];
 
   return {
     query: args.query,
+    ...(coverage ? { coverage } : {}),
     results: rows.map((r) => {
       const checked = r.offset_checked_at !== null;
       const accepted = r.pagination_accepted_at !== null;
@@ -92,4 +103,18 @@ export async function search(args: {
       };
     }),
   };
+}
+
+// How many works search can reach (any work with embedded passages, her
+// dissertation additions included), and how many examinable works it cannot.
+async function coverageCounts() {
+  const [raw, gaps] = await Promise.all([
+    db()`
+      select count(*)::int as n from works w
+      where exists (select 1 from chunks c where c.work_id = w.id and c.embedding is not null)
+    `,
+    gapCount(),
+  ]);
+  const searchable = raw as { n: number }[];
+  return { searchable_works: searchable[0].n, examinable_not_searchable: gaps, see: 'list_gaps' };
 }

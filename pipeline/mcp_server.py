@@ -11,6 +11,7 @@ stdout: stdout carries the protocol, and a stray line breaks the session.
 THE TOOLS
 
     find_works      catalogue lookup, so the model can name works by full id
+    list_gaps       the examinable works search cannot reach, and why
     search          semantic search over the embedded chunks (search.py's query)
     read_pages      page text by printed page, labelled by how sure its number is
     find_quotation  dossier.py's matcher, as a read tool
@@ -90,6 +91,8 @@ MAX_NOTES_LISTED = 50
 # The same text as INSTRUCTIONS in mcp/server.ts, so a model reads the same
 # guidance from either server.
 INSTRUCTIONS = """Scriptorium holds a doctoral candidate's exam corpus: the books' page text, study aids, and her notes. This connection can read and search, and can propose notes for her review through draft_note; it cannot edit or delete anything.
+
+For a question that surveys the corpus (a theme, a motif, a theoretical lens across several works), search several times, in Spanish and in English and with different wordings, and read the pages around the passages you rely on. Call list_gaps once, and name the works bearing on the question that are missing from the corpus or not yet searchable. Keep what the corpus shows, cited by work and page_label, apart from what you know from elsewhere, and mark the latter as such: it cannot be cited to her books. A search result spans a page range; find_quotation pins a quotation to its page.
 
 Name every work by its full id; find_works gives it. Page numbers are printed pages. Every page number comes with page_label, the number as the app shows it, with an asterisk when the number is unverified; quote page_label (pages_label in search and find_quotation results), asterisk included, whenever you cite a page. page_verified is 'yes', 'hand set' (reviewed by a person) or 'no'. page_numbers explains the work's numbering in words. A work whose pages are not citable (never checked, or unsettled and not accepted) can still be read, but its page numbers are not citations.
 
@@ -250,7 +253,9 @@ def find_works(query: str) -> dict:
     """Works whose id, author or title contains the query, accents and case
     ignored. Returns full ids, whether pages and search chunks are loaded, the
     state of the page numbering, and the work's internal note, which records
-    known problems with its file (a partial copy, ebook pagination)."""
+    known problems with its file (a partial copy, ebook pagination). A work
+    with searchable false cannot appear in search results; if has_pages is
+    true, read_pages can still read it."""
     needle = fold(query).strip()
     if not needle:
         raise ToolError("give part of an author, title or id")
@@ -282,6 +287,62 @@ def find_works(query: str) -> dict:
     return {"count": len(works), "works": works[:MAX_WORKS_LISTED]}
 
 
+# The Gaps → Files tab's rule, copied from fileStates() in lib/gaps.ts, which
+# is the original: every examinable work, essays excepted (an essay's file is
+# its volume's), in one of five states. Every state but searchable is a gap.
+# The labels are FILE_STATES's, so the model and the screen say the same thing.
+GAP_LABELS = {
+    "no_pdf": "No PDF",
+    "held": "PDF held, not extracted",
+    "blocked": "Page numbering to settle",
+    "loaded": "Loaded, not searchable",
+}
+GAP_READABLE = ("blocked", "loaded")
+GAPS_SQL = """
+    select w.id, w.author, w.title, w.year,
+           case
+             when w.source_path is null then 'no_pdf'
+             when not exists (select 1 from pages p where p.work_id = w.id) then 'held'
+             when w.offset_problem is not null and w.pagination_accepted_at is null
+               then 'blocked'
+             when exists (select 1 from chunks c where c.work_id = w.id and c.embedding is not null)
+               then 'searchable'
+             else 'loaded'
+           end as state
+    from works w
+    where w.container_id is null
+      and exists (select 1 from examinable_works e where e.id = w.id)
+    order by coalesce(w.author, w.title), w.year nulls last
+"""
+
+
+def gap_rows(cur) -> list[tuple]:
+    cur.execute(GAPS_SQL)
+    return [r for r in cur.fetchall() if r[4] != "searchable"]
+
+
+@mcp.tool()
+def list_gaps() -> dict:
+    """The works on her exam lists that search cannot reach, each with the
+    reason (no file, file not yet loaded, page numbering unsettled, or loaded
+    but not yet searchable) and whether read_pages can still read it. Call it
+    once when a question surveys the corpus, and name the missing works that
+    bear on the question."""
+    with connect() as conn, conn.cursor() as cur:
+        rows = gap_rows(cur)
+    return {
+        "count": len(rows),
+        "works": [
+            {
+                "id": r[0], "author": r[1], "title": r[2], "year": r[3],
+                "reason": GAP_LABELS.get(r[4], r[4]),
+                "readable": r[4] in GAP_READABLE,
+            }
+            for r in rows
+        ],
+    }
+
+
 @mcp.tool()
 def search(
     query: str,
@@ -295,7 +356,13 @@ def search(
     or to one language ('english' or 'spanish'). Front matter is excluded
     unless asked for. Each result gives the work, printed pages, similarity
     (1 is identical), the chunk's text, and page_numbers: how far the pages
-    can be trusted ('verified', 'hand set', 'unverified', 'unchecked')."""
+    can be trusted ('verified', 'hand set', 'unverified', 'unchecked'). One
+    call returns at most 30 passages, so a survey takes several queries in
+    both languages and different wordings. Results come only from searchable
+    works; list_gaps names the examinable works that are not, and a search
+    over the whole corpus reports how many (coverage). The text is OCR: quote
+    it as it stands, uncorrected, since find_quotation and draft_note look
+    quotations up in this same text."""
     if lang not in (None, "english", "spanish"):
         raise ToolError("lang is 'english', 'spanish' or omitted")
     k = max(1, min(k, MAX_SEARCH_RESULTS))
@@ -333,6 +400,18 @@ def search(
         )
         rows = cur.fetchall()
 
+        coverage = None
+        if not work_ids:
+            cur.execute(
+                "select count(*) from works w where exists"
+                " (select 1 from chunks c where c.work_id = w.id and c.embedding is not null)"
+            )
+            coverage = {
+                "searchable_works": cur.fetchone()[0],
+                "examinable_not_searchable": len(gap_rows(cur)),
+                "see": "list_gaps",
+            }
+
     results = []
     for r in rows:
         unverified = is_unverified(r[9], r[11])
@@ -347,7 +426,11 @@ def search(
             "page_numbers": page_numbers(r[8] is not None, r[9], r[10] is not None, r[11]),
             "text": r[7],
         })
-    return {"query": query, "results": results}
+    out: dict = {"query": query}
+    if coverage:
+        out["coverage"] = coverage
+    out["results"] = results
+    return out
 
 
 @mcp.tool()
@@ -359,7 +442,8 @@ def read_pages(work_id: str, first_page: int, last_page: int | None = None) -> d
     where the number read off the page disagrees. page_numbers says how far
     the work's numbering can be trusted: 'verified', 'hand set' (reviewed by a
     person), 'unverified' (the file's own page, not the edition's), or
-    'unchecked'."""
+    'unchecked'. The text is OCR: quote it as it stands, uncorrected, since
+    find_quotation and draft_note look quotations up in this same text."""
     last_page = first_page if last_page is None else last_page
     if last_page < first_page:
         raise ToolError("last_page comes before first_page")

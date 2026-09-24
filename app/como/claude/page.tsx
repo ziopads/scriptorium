@@ -92,8 +92,8 @@ export default async function ComoClaudePage() {
             <span className="font-semibold">Sólo ve los libros cargados.</span> Las obras
             sin archivo, o con el archivo todavía sin procesar, aparecen en{' '}
             <Link href="/gaps/files" className={link}>Gaps → Files</Link>, y Claude no
-            puede buscar en ellas. Que no encuentre algo en el corpus no quiere decir que
-            no exista en la literatura.
+            puede buscar en ellas; también te las puede listar. Que no encuentre algo en el
+            corpus no quiere decir que no exista en la literatura.
           </li>
           <li>
             <span className="font-semibold">
@@ -192,8 +192,8 @@ export default async function ComoClaudePage() {
             <span className="font-semibold">It sees only the books that are loaded.</span>{' '}
             Works with no file, or whose file is not yet processed, are listed in{' '}
             <Link href="/gaps/files" className={link}>Gaps → Files</Link>, and Claude
-            cannot search them. Not finding something in the corpus doesn&rsquo;t mean it
-            is absent from the literature.
+            cannot search them; it can list them for you. Not finding something in the
+            corpus doesn&rsquo;t mean it is absent from the literature.
           </li>
           <li>
             <span className="font-semibold">

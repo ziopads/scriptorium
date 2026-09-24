@@ -4,7 +4,8 @@
 // Phased (docs/HANDOFF.md, 23 Sept): find_works, then the read tools (deploy
 // 2), search (deploy 3), then the matcher (lib/matcher.ts), find_quotation and
 // draft_note (deploy 4, three pushes). Each tool is a port of the same tool in
-// pipeline/mcp_server.py, which remains the full set until then.
+// pipeline/mcp_server.py, which remains the full set until then. list_gaps and
+// the survey guidance in the instructions came after (0.6.0), in both servers.
 // Page numbers leave here as they leave the app: page_label with the asterisk,
 // page_verified as the notes export writes it (lib/page-verified.ts).
 
@@ -16,12 +17,15 @@ import { findQuotation } from '@/mcp/tools/find-quotation';
 import { findWorks } from '@/mcp/tools/find-works';
 import { getStudyAid } from '@/mcp/tools/get-study-aid';
 import { listClaims } from '@/mcp/tools/list-claims';
+import { listGaps } from '@/mcp/tools/list-gaps';
 import { listNotes } from '@/mcp/tools/list-notes';
 import { readPages } from '@/mcp/tools/read-pages';
 import { search } from '@/mcp/tools/search';
 import { ToolError } from '@/mcp/work';
 
 const INSTRUCTIONS = `Scriptorium holds a doctoral candidate's exam corpus: the books' page text, study aids, and her notes. This connection can read and search, and can propose notes for her review through draft_note; it cannot edit or delete anything.
+
+For a question that surveys the corpus (a theme, a motif, a theoretical lens across several works), search several times, in Spanish and in English and with different wordings, and read the pages around the passages you rely on. Call list_gaps once, and name the works bearing on the question that are missing from the corpus or not yet searchable. Keep what the corpus shows, cited by work and page_label, apart from what you know from elsewhere, and mark the latter as such: it cannot be cited to her books. A search result spans a page range; find_quotation pins a quotation to its page.
 
 Name every work by its full id; find_works gives it. Page numbers are printed pages. Every page number comes with page_label, the number as the app shows it, with an asterisk when the number is unverified; quote page_label (pages_label in search and find_quotation results), asterisk included, whenever you cite a page. page_verified is 'yes', 'hand set' (reviewed by a person) or 'no'. page_numbers explains the work's numbering in words. A work whose pages are not citable (never checked, or unsettled and not accepted) can still be read, but its page numbers are not citations.
 
@@ -56,10 +60,26 @@ export const handler = createMcpHandler(
         description:
           'Works whose id, author or title contains the query, accents and case ignored. Returns full ids, ' +
           'whether pages and search chunks are loaded, the state of the page numbering, and the internal ' +
-          'note, which records known problems with the file (a partial copy, ebook pagination).',
+          'note, which records known problems with the file (a partial copy, ebook pagination). ' +
+          'A work with searchable false cannot appear in search results; if has_pages is true, read_pages ' +
+          'can still read it.',
         inputSchema: z.object({ query: z.string().describe('part of an author, title or id') }),
       },
       async ({ query }) => run(() => findWorks(query)),
+    );
+
+    server.registerTool(
+      'list_gaps',
+      {
+        title: 'List gaps',
+        description:
+          'The works on her exam lists that search cannot reach, each with the reason (no file, file not yet ' +
+          'loaded, page numbering unsettled, or loaded but not yet searchable) and whether read_pages can still ' +
+          'read it. Call it once when a question surveys the corpus, and name the missing works that bear on ' +
+          'the question.',
+        inputSchema: z.object({}),
+      },
+      async () => run(() => listGaps()),
     );
 
     server.registerTool(
@@ -70,7 +90,11 @@ export const handler = createMcpHandler(
           'Semantic search over the corpus, in English or Spanish; a query in one language finds text in the ' +
           "other. Optionally limited to works (full ids) or to one language ('english' or 'spanish'). Front " +
           'matter is excluded unless asked for. Each result gives the work, printed pages (pages_label is the ' +
-          "form to cite), similarity (1 is identical) and the chunk's text.",
+          "form to cite), similarity (1 is identical) and the chunk's text. One call returns at most 30 " +
+          'passages, so a survey takes several queries in both languages and different wordings. Results ' +
+          'come only from searchable works; list_gaps names the examinable works that are not, and a search ' +
+          'over the whole corpus reports how many (coverage). The text is OCR: quote it as it stands, ' +
+          'uncorrected, since find_quotation and draft_note look quotations up in this same text.',
         inputSchema: z.object({
           query: z.string(),
           work_ids: z.array(z.string()).optional().describe('full work ids'),
@@ -90,7 +114,8 @@ export const handler = createMcpHandler(
           "Page text by printed page number, at most ten pages per call. Each page says how sure its number is: " +
           "'printed' where the number read off the page agrees, 'computed' where the page carries no readable " +
           "number and it comes from the book's offset alone, 'front matter' below page 1, and a warning where " +
-          'the number read off the page disagrees. page_label is the number to cite.',
+          'the number read off the page disagrees. page_label is the number to cite. The text is OCR: quote ' +
+          'it as it stands, uncorrected, since find_quotation and draft_note look quotations up in this same text.',
         inputSchema: z.object({
           work_id: z.string().describe('full work id'),
           first_page: z.number().int(),
@@ -195,6 +220,6 @@ export const handler = createMcpHandler(
   },
   {
     instructions: INSTRUCTIONS,
-    serverInfo: { name: 'scriptorium', version: '0.5.1' },
+    serverInfo: { name: 'scriptorium', version: '0.6.0' },
   },
 );

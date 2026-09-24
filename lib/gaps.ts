@@ -56,6 +56,9 @@ export interface FileRow {
 }
 
 // Every examinable book, essays excepted: an essay's file is its volume's.
+// The MCP servers' list_gaps is this rule too: mcp/tools/list-gaps.ts calls
+// this function, and pipeline/mcp_server.py carries a copy of the SQL (GAPS_SQL)
+// and of the labels below. Change one, change the copy.
 export async function fileStates(): Promise<FileRow[]> {
   const sql = db();
   const rows = (await sql`
