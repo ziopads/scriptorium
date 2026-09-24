@@ -180,6 +180,10 @@ export default async function ComoPage() {
         rechazadas. Una propuesta aprobada queda marcada para siempre como encontrada
         por Claude y confirmada por ti.
       </p>
+      <p>
+        Cómo conectar Claude a tus libros y cómo preguntarle, en{' '}
+        <Link href="/como/claude" className="text-accent hover:underline">Cómo preguntarle a Claude</Link>.
+      </p>
 
       <H>Lo que no tienes que hacer</H>
       <p>

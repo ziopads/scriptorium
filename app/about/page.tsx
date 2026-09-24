@@ -218,7 +218,10 @@ export default async function AboutPage() {
 
       <p className="text-xs text-muted">
         Instructions for use are on{' '}
-        <Link href="/como" className="hover:text-accent">Cómo</Link>. The initial and
+        <Link href="/como" className="hover:text-accent">Cómo</Link>, and for asking
+        Claude about the corpus on{' '}
+        <Link href="/como/claude" className="hover:text-accent">Cómo preguntarle a Claude</Link>{' '}
+        (in Spanish and English). The initial and
         the typefaces are on the{' '}
         <Link href="/colophon" className="hover:text-accent">colophon</Link>. Decisions
         and the entity-relationship diagram are in the repository under{' '}

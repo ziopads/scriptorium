@@ -108,6 +108,9 @@ mapa hasta que lo apruebes. Aprobar es un botón; rechazar la esconde, y puedes
 reconsiderarla después desde la lista de rechazadas. Una propuesta aprobada
 queda marcada para siempre como encontrada por Claude y confirmada por ti.
 
+Cómo conectar Claude a tus libros y cómo preguntarle, en *Cómo preguntarle a
+Claude*.
+
 ## Lo que no tienes que hacer
 
 No tienes que clasificar el tipo de relación entre nota y obra, ni decidir qué
