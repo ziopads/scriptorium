@@ -1,8 +1,13 @@
 // find_works, ported from pipeline/mcp_server.py. Same query, same matching
 // (accents and case ignored, on id, author and title), same fields, same cap,
 // plus page_verified as the app and the notes export give it.
+//
+// With project (0.7.0): only that project's works, each with in_project
+// ('added', or 'notes' when a project note reaches it), and no cap, since a
+// project is a bounded set; the query is then optional and narrows it.
 
 import { db } from '@/lib/db';
+import { projectMembership, projectRecord } from '@/mcp/project';
 import { ToolError, toRecord } from '@/mcp/work';
 
 export const MAX_WORKS_LISTED = 25;
@@ -29,9 +34,16 @@ export function fold(value: string | null): string {
     .toLowerCase();
 }
 
-export async function findWorks(query: string) {
-  const needle = fold(query).trim();
-  if (!needle) throw new ToolError('give part of an author, title or id');
+export async function findWorks(query: string | null | undefined, project?: number | null) {
+  const needle = fold(query ?? '').trim();
+  if (!needle && (project === undefined || project === null)) {
+    throw new ToolError('give part of an author, title or id, or a project');
+  }
+  let membership: Map<string, 'added' | 'notes'> | null = null;
+  if (project !== undefined && project !== null) {
+    await projectRecord(project);
+    membership = await projectMembership(project);
+  }
 
   const sql = db();
   const rows = (await sql`
@@ -44,8 +56,10 @@ export async function findWorks(query: string) {
   `) as Row[];
 
   const works = rows
+    .filter((r) => membership === null || membership.has(r.id))
     .filter(
       (r) =>
+        !needle ||
         fold(r.id).includes(needle) ||
         fold(r.author).includes(needle) ||
         fold(r.title).includes(needle),
@@ -63,8 +77,12 @@ export async function findWorks(query: string) {
         internal_note: w.internal_note,
         has_pages: r.has_pages,
         searchable: r.searchable,
+        ...(membership ? { in_project: membership.get(r.id) } : {}),
       };
     });
 
-  return { count: works.length, works: works.slice(0, MAX_WORKS_LISTED) };
+  return {
+    count: works.length,
+    works: membership ? works : works.slice(0, MAX_WORKS_LISTED),
+  };
 }

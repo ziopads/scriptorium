@@ -5,7 +5,9 @@
 // 2), search (deploy 3), then the matcher (lib/matcher.ts), find_quotation and
 // draft_note (deploy 4, three pushes). Each tool is a port of the same tool in
 // pipeline/mcp_server.py, which remains the full set until then. list_gaps and
-// the survey guidance in the instructions came after (0.6.0), in both servers.
+// the survey guidance in the instructions came after (0.6.0), in both servers;
+// then projects (0.7.0): list_projects, and a project argument on find_works,
+// search and list_notes (mcp/project.ts).
 // Page numbers leave here as they leave the app: page_label with the asterisk,
 // page_verified as the notes export writes it (lib/page-verified.ts).
 
@@ -19,6 +21,7 @@ import { getStudyAid } from '@/mcp/tools/get-study-aid';
 import { listClaims } from '@/mcp/tools/list-claims';
 import { listGaps } from '@/mcp/tools/list-gaps';
 import { listNotes } from '@/mcp/tools/list-notes';
+import { listProjectsTool } from '@/mcp/tools/list-projects';
 import { readPages } from '@/mcp/tools/read-pages';
 import { search } from '@/mcp/tools/search';
 import { ToolError } from '@/mcp/work';
@@ -26,6 +29,8 @@ import { ToolError } from '@/mcp/work';
 const INSTRUCTIONS = `Scriptorium holds a doctoral candidate's exam corpus: the books' page text, study aids, and her notes. This connection can read and search, and can propose notes for her review through draft_note; it cannot edit or delete anything.
 
 For a question that surveys the corpus (a theme, a motif, a theoretical lens across several works), search several times, in Spanish and in English and with different wordings, and read the pages around the passages you rely on. Call list_gaps once, and name the works bearing on the question that are missing from the corpus or not yet searchable. Keep what the corpus shows, cited by work and page_label, apart from what you know from elsewhere, and mark the latter as such: it cannot be cited to her books. A search result spans a page range; find_quotation pins a quotation to its page.
+
+Her projects gather works and notes for one piece of writing, such as one comps essay; list_projects gives their ids. Pass project to find_works, search and list_notes to work within one project; a search within a project names the project's works it cannot reach.
 
 Name every work by its full id; find_works gives it. Page numbers are printed pages. Every page number comes with page_label, the number as the app shows it, with an asterisk when the number is unverified; quote page_label (pages_label in search and find_quotation results), asterisk included, whenever you cite a page. page_verified is 'yes', 'hand set' (reviewed by a person) or 'no'. page_numbers explains the work's numbering in words. A work whose pages are not citable (never checked, or unsettled and not accepted) can still be read, but its page numbers are not citations.
 
@@ -63,9 +68,30 @@ export const handler = createMcpHandler(
           'note, which records known problems with the file (a partial copy, ebook pagination). ' +
           'A work with searchable false cannot appear in search results; if has_pages is true, read_pages ' +
           'can still read it.',
-        inputSchema: z.object({ query: z.string().describe('part of an author, title or id') }),
+        inputSchema: z.object({
+          query: z.string().optional().describe('part of an author, title or id; optional with project'),
+          project: z
+            .number()
+            .int()
+            .optional()
+            .describe("a project id from list_projects: only its works, each with in_project ('added' or 'notes')"),
+        }),
       },
-      async ({ query }) => run(() => findWorks(query)),
+      async ({ query, project }) => run(() => findWorks(query, project)),
+    );
+
+    server.registerTool(
+      'list_projects',
+      {
+        title: 'List projects',
+        description:
+          'Her projects: works and notes gathered for one piece of writing, such as one comps essay. Each ' +
+          'gives its id, name, kind, exam list, question and date when set, and how many works and notes it ' +
+          'holds. A project\'s works are those added to it and those its notes quote or are about; its notes ' +
+          'include the parts of any axis in it. Pass the id as project to find_works, search and list_notes.',
+        inputSchema: z.object({}),
+      },
+      async () => run(() => listProjectsTool()),
     );
 
     server.registerTool(
@@ -93,11 +119,13 @@ export const handler = createMcpHandler(
           "form to cite), similarity (1 is identical) and the chunk's text. One call returns at most 30 " +
           'passages, so a survey takes several queries in both languages and different wordings. Results ' +
           'come only from searchable works; list_gaps names the examinable works that are not, and a search ' +
-          'over the whole corpus reports how many (coverage). The text is OCR: quote it as it stands, ' +
+          'over the whole corpus reports how many (coverage). With project, only that project\'s works are ' +
+          'searched, and the result names those search cannot reach. The text is OCR: quote it as it stands, ' +
           'uncorrected, since find_quotation and draft_note look quotations up in this same text.',
         inputSchema: z.object({
           query: z.string(),
           work_ids: z.array(z.string()).optional().describe('full work ids'),
+          project: z.number().int().optional().describe('a project id from list_projects'),
           lang: z.enum(['english', 'spanish']).optional(),
           k: z.number().int().optional().describe('results to return, default 8, at most 30'),
           include_front_matter: z.boolean().optional(),
@@ -205,7 +233,8 @@ export const handler = createMcpHandler(
       {
         title: 'List notes',
         description:
-          'Her notes, filtered by a work (full id), a tag, or text in the title or body; at least one filter. ' +
+          'Her notes, filtered by a work (full id), a tag, text in the title or body, or a project (its notes ' +
+          'and the parts of its axes); at least one filter. ' +
           'Rejected proposals and unreviewed dossier claims are left out, as in the app. Each note says who ' +
           'wrote it (origin) and whether she has reviewed it; an unreviewed assistant note is a pending ' +
           'proposal, not her writing.',
@@ -213,6 +242,7 @@ export const handler = createMcpHandler(
           work_id: z.string().optional().describe('full work id'),
           tag: z.string().optional(),
           contains: z.string().optional().describe('text in the title or body'),
+          project: z.number().int().optional().describe('a project id from list_projects'),
         }),
       },
       async (args) => run(() => listNotes(args)),
@@ -220,6 +250,6 @@ export const handler = createMcpHandler(
   },
   {
     instructions: INSTRUCTIONS,
-    serverInfo: { name: 'scriptorium', version: '0.6.0' },
+    serverInfo: { name: 'scriptorium', version: '0.7.0' },
   },
 );

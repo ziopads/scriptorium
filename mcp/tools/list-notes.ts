@@ -6,9 +6,13 @@
 // The filters are optional, and the Neon HTTP driver takes tagged templates,
 // so each is written as "(param is null or condition)" in one static query
 // rather than assembled from strings.
+//
+// project (0.7.0) filters to the project's notes: its member notes and the
+// parts of its member axes (mcp/project.ts), and can be the only filter.
 
 import { db } from '@/lib/db';
 import { anchorsFor } from '@/mcp/anchors';
+import { projectRecord } from '@/mcp/project';
 import { ToolError, workRecord } from '@/mcp/work';
 
 export const MAX_NOTES_LISTED = 50;
@@ -25,12 +29,21 @@ type Row = {
   tags: string[] | null;
 };
 
-export async function listNotes(args: { work_id?: string | null; tag?: string | null; contains?: string | null }) {
+export async function listNotes(args: {
+  work_id?: string | null;
+  tag?: string | null;
+  contains?: string | null;
+  project?: number | null;
+}) {
   const work = args.work_id || null;
   const tag = args.tag || null;
   const q = args.contains ? `%${args.contains}%` : null;
-  if (!work && !tag && !q) throw new ToolError('filter by work_id, tag or contains');
+  const project = args.project ?? null;
+  if (!work && !tag && !q && project === null) {
+    throw new ToolError('filter by work_id, tag, contains or project');
+  }
   if (work) await workRecord(work);
+  if (project !== null) await projectRecord(project);
 
   const rows = (await db()`
     select n.id, n.kind, n.title, n.body, n.attribution, n.attributed_to, n.origin, n.reviewed, n.tags
@@ -42,6 +55,12 @@ export async function listNotes(args: { work_id?: string | null; tag?: string | 
            or exists (select 1 from note_works nw where nw.note_id = n.id and nw.work_id = ${work}::text))
       and (${tag}::text is null or ${tag}::text = any(n.tags))
       and (${q}::text is null or n.body ilike ${q}::text or n.title ilike ${q}::text)
+      and (${project}::int is null or n.id in (
+           select pn.note_id from project_notes pn where pn.project_id = ${project}::int
+           union
+           select c.id from notes c
+           join project_notes pn on pn.note_id = c.parent_id
+           where pn.project_id = ${project}::int))
     order by n.id desc
     limit ${MAX_NOTES_LISTED}
   `) as Row[];

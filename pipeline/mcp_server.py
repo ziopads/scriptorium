@@ -11,6 +11,7 @@ stdout: stdout carries the protocol, and a stray line breaks the session.
 THE TOOLS
 
     find_works      catalogue lookup, so the model can name works by full id
+    list_projects   her projects: works and notes gathered for one piece of writing
     list_gaps       the examinable works search cannot reach, and why
     search          semantic search over the embedded chunks (search.py's query)
     read_pages      page text by printed page, labelled by how sure its number is
@@ -93,6 +94,8 @@ MAX_NOTES_LISTED = 50
 INSTRUCTIONS = """Scriptorium holds a doctoral candidate's exam corpus: the books' page text, study aids, and her notes. This connection can read and search, and can propose notes for her review through draft_note; it cannot edit or delete anything.
 
 For a question that surveys the corpus (a theme, a motif, a theoretical lens across several works), search several times, in Spanish and in English and with different wordings, and read the pages around the passages you rely on. Call list_gaps once, and name the works bearing on the question that are missing from the corpus or not yet searchable. Keep what the corpus shows, cited by work and page_label, apart from what you know from elsewhere, and mark the latter as such: it cannot be cited to her books. A search result spans a page range; find_quotation pins a quotation to its page.
+
+Her projects gather works and notes for one piece of writing, such as one comps essay; list_projects gives their ids. Pass project to find_works, search and list_notes to work within one project; a search within a project names the project's works it cannot reach.
 
 Name every work by its full id; find_works gives it. Page numbers are printed pages. Every page number comes with page_label, the number as the app shows it, with an asterisk when the number is unverified; quote page_label (pages_label in search and find_quotation results), asterisk included, whenever you cite a page. page_verified is 'yes', 'hand set' (reviewed by a person) or 'no'. page_numbers explains the work's numbering in words. A work whose pages are not citable (never checked, or unsettled and not accepted) can still be read, but its page numbers are not citations.
 
@@ -246,20 +249,100 @@ def anchors_for(cur, note_ids: list[int]) -> dict[int, list[dict]]:
 
 
 # --------------------------------------------------------------------------
+# Projects (migration 019)
+#
+# Copies of the rules in lib/projects.ts (projectWorks) and mcp/project.ts
+# (projectNoteIds), which are the originals. A project's works are those added
+# to it and those its notes reach, counting only notes in her graph
+# (reviewed_notes); its notes are the member notes and the parts of member
+# axes. Change one, change the copy.
+
+PROJECT_WORKS_SQL = """
+    with members as (
+      select note_id from project_notes where project_id = %(project)s
+    ),
+    scope as (
+      select m.note_id as id from members m
+      union
+      select c.id from notes c join members m on m.note_id = c.parent_id
+    ),
+    from_notes as (
+      select distinct t.work_id
+      from (
+        select note_id, work_id from note_anchors
+        union
+        select note_id, work_id from note_works
+      ) t
+      join scope s on s.id = t.note_id
+      join reviewed_notes r on r.id = t.note_id
+    ),
+    added as (
+      select work_id from project_works where project_id = %(project)s
+    )
+    select coalesce(a.work_id, f.work_id) as work_id,
+           a.work_id is not null as added
+    from added a
+    full join from_notes f on f.work_id = a.work_id
+"""
+
+PROJECT_NOTES_SQL = """
+    select pn.note_id from project_notes pn where pn.project_id = %(project)s
+    union
+    select c.id from notes c
+    join project_notes pn on pn.note_id = c.parent_id
+    where pn.project_id = %(project)s
+"""
+
+
+def project_record(cur, project: int) -> dict:
+    """The project, or a tool error."""
+    cur.execute(
+        "select p.id, p.name, p.kind, el.name, p.question, p.due_on::text"
+        " from projects p left join exam_lists el on el.id = p.list_id where p.id = %s",
+        (project,),
+    )
+    row = cur.fetchone()
+    if not row:
+        raise ToolError(f"no project {project}. list_projects gives the ids.")
+    return {"id": row[0], "name": row[1], "kind": row[2], "list": row[3],
+            "question": row[4], "due_on": row[5]}
+
+
+def project_membership(cur, project: int) -> dict[str, str]:
+    """work id -> 'added' or 'notes'."""
+    cur.execute(PROJECT_WORKS_SQL, {"project": project})
+    return {r[0]: ("added" if r[1] else "notes") for r in cur.fetchall()}
+
+
+def project_note_ids(cur, project: int) -> list[int]:
+    cur.execute(
+        f"select n.id from notes n where n.rejected_at is null and n.id in ({PROJECT_NOTES_SQL})",
+        {"project": project},
+    )
+    return [r[0] for r in cur.fetchall()]
+
+
+# --------------------------------------------------------------------------
 # Read tools
 
 @mcp.tool()
-def find_works(query: str) -> dict:
+def find_works(query: str | None = None, project: int | None = None) -> dict:
     """Works whose id, author or title contains the query, accents and case
     ignored. Returns full ids, whether pages and search chunks are loaded, the
     state of the page numbering, and the work's internal note, which records
     known problems with its file (a partial copy, ebook pagination). A work
     with searchable false cannot appear in search results; if has_pages is
-    true, read_pages can still read it."""
-    needle = fold(query).strip()
-    if not needle:
-        raise ToolError("give part of an author, title or id")
+    true, read_pages can still read it. With project (an id from
+    list_projects), only that project's works, each with in_project ('added'
+    or 'notes'), uncapped; the query is then optional."""
+    needle = fold(query or "").strip()
+    if not needle and project is None:
+        raise ToolError("give part of an author, title or id, or a project")
     with connect() as conn, conn.cursor() as cur:
+        membership = None
+        if project is not None:
+            project_record(cur, project)
+            membership = project_membership(cur, project)
         cur.execute(
             """
             select w.id, w.author, w.title, w.year, w.offset_checked_at, w.offset_problem,
@@ -280,11 +363,37 @@ def find_works(query: str) -> dict:
             "page_verified": page_verified(is_unverified(r[5], r[8]), r[8]),
             "internal_note": r[6],
             "has_pages": r[9], "searchable": r[10],
+            **({"in_project": membership[r[0]]} if membership is not None else {}),
         }
         for r in rows
-        if needle in fold(r[0]) or needle in fold(r[1] or "") or needle in fold(r[2] or "")
+        if (membership is None or r[0] in membership)
+        and (not needle or needle in fold(r[0]) or needle in fold(r[1] or "")
+             or needle in fold(r[2] or ""))
     ]
-    return {"count": len(works), "works": works[:MAX_WORKS_LISTED]}
+    return {
+        "count": len(works),
+        "works": works if membership is not None else works[:MAX_WORKS_LISTED],
+    }
+
+
+@mcp.tool()
+def list_projects() -> dict:
+    """Her projects: works and notes gathered for one piece of writing, such
+    as one comps essay. Each gives its id, name, kind, exam list, question and
+    date when set, and how many works and notes it holds. A project's works
+    are those added to it and those its notes quote or are about; its notes
+    include the parts of any axis in it. Pass the id as project to
+    find_works, search and list_notes."""
+    with connect() as conn, conn.cursor() as cur:
+        cur.execute("select id from projects order by due_on nulls last, created_at")
+        ids = [r[0] for r in cur.fetchall()]
+        out = []
+        for pid in ids:
+            p = project_record(cur, pid)
+            p["works"] = len(project_membership(cur, pid))
+            p["notes"] = len(project_note_ids(cur, pid))
+            out.append(p)
+    return {"count": len(out), "projects": out}
 
 
 # The Gaps → Files tab's rule, copied from fileStates() in lib/gaps.ts, which
@@ -350,6 +459,7 @@ def search(
     lang: str | None = None,
     k: int = 8,
     include_front_matter: bool = False,
+    project: int | None = None,
 ) -> dict:
     """Semantic search over the corpus, in English or Spanish; a query in one
     language finds text in the other. Optionally limited to works (full ids)
@@ -360,7 +470,9 @@ def search(
     call returns at most 30 passages, so a survey takes several queries in
     both languages and different wordings. Results come only from searchable
     works; list_gaps names the examinable works that are not, and a search
-    over the whole corpus reports how many (coverage). The text is OCR: quote
+    over the whole corpus reports how many (coverage). With project (an id
+    from list_projects), only that project's works are searched, and the
+    result names those search cannot reach. The text is OCR: quote
     it as it stands, uncorrected, since find_quotation and draft_note look
     quotations up in this same text."""
     if lang not in (None, "english", "spanish"):
@@ -370,6 +482,31 @@ def search(
     with connect() as conn, conn.cursor() as cur:
         for work_id in work_ids or []:
             work_record(cur, work_id)
+
+        scope = None
+        if project is not None:
+            record = project_record(cur, project)
+            members = project_membership(cur, project)
+            work_ids = [w for w in work_ids if w in members] if work_ids else list(members)
+            if not work_ids:
+                raise ToolError(
+                    f"none of work_ids is in project {project}" if members
+                    else f"project {project} has no works yet"
+                )
+            cur.execute(
+                "select w.id, w.author, w.title from works w"
+                " where w.id = any(%s) and not exists (select 1 from chunks c"
+                " where c.work_id = w.id and c.embedding is not null)"
+                " order by coalesce(w.author, w.title)",
+                (work_ids,),
+            )
+            scope = {
+                "id": record["id"], "name": record["name"], "works": len(work_ids),
+                "not_searchable": [
+                    {"id": r[0], "author": r[1], "title": r[2]} for r in cur.fetchall()
+                ],
+            }
+
         try:
             vector = embed_query(query, DEFAULT_MODEL, DEFAULT_DIM)
         except SystemExit as exc:
@@ -427,6 +564,8 @@ def search(
             "text": r[7],
         })
     out: dict = {"query": query}
+    if scope:
+        out["project"] = scope
     if coverage:
         out["coverage"] = coverage
     out["results"] = results
@@ -579,13 +718,14 @@ def list_notes(
     work_id: str | None = None,
     tag: str | None = None,
     contains: str | None = None,
+    project: int | None = None,
 ) -> dict:
-    """Her notes, filtered by a work (full id), a tag, or text in the title or
-    body. Rejected proposals and unreviewed dossier claims are left out, as in
+    """Her notes, filtered by a work (full id), a tag, text in the title or
+    body, or a project (its notes and the parts of its axes). Rejected proposals and unreviewed dossier claims are left out, as in
     the app. Each note says who wrote it (origin) and whether she has reviewed
     it; an unreviewed assistant note is a pending proposal, not her writing."""
-    if not (work_id or tag or contains):
-        raise ToolError("filter by work_id, tag or contains")
+    if not (work_id or tag or contains or project is not None):
+        raise ToolError("filter by work_id, tag, contains or project")
     where = [
         "n.rejected_at is null",
         "not ('dossier' = any(n.tags) and n.reviewed = false)",
@@ -605,6 +745,10 @@ def list_notes(
         if contains:
             where.append("(n.body ilike %(q)s or n.title ilike %(q)s)")
             params["q"] = f"%{contains}%"
+        if project is not None:
+            project_record(cur, project)
+            where.append(f"n.id in ({PROJECT_NOTES_SQL})")
+            params["project"] = project
         cur.execute(
             f"""
             select n.id, n.kind, n.title, n.body, n.attribution, n.attributed_to,

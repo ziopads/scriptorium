@@ -13,11 +13,17 @@
 // works search can reach, and how many examinable works it cannot, with
 // list_gaps (mcp/tools/list-gaps.ts) to name them. Only the counts travel with
 // every search; the list would repeat on every call of a survey.
+//
+// With project (0.7.0): only that project's works (mcp/project.ts), narrowed
+// further by work_ids if both are given. The result then names the project's
+// works that search cannot reach (no embedded passages), so a survey of one
+// essay's ground can say what it could not see.
 
 import { db } from '@/lib/db';
 import { embedQuery } from '@/lib/embed';
 import { isUnverified, pageLabel, pageVerified } from '@/lib/page-verified';
 import { numbering, pageNumbers } from '@/mcp/numbering';
+import { projectMembership, projectRecord } from '@/mcp/project';
 import { gapCount } from '@/mcp/tools/list-gaps';
 import { ToolError, workRecord } from '@/mcp/work';
 
@@ -44,15 +50,38 @@ export async function search(args: {
   lang?: string | null;
   k?: number | null;
   include_front_matter?: boolean | null;
+  project?: number | null;
 }) {
   const lang = args.lang ?? null;
   if (lang !== null && lang !== 'english' && lang !== 'spanish') {
     throw new ToolError("lang is 'english', 'spanish' or omitted");
   }
   const k = Math.max(1, Math.min(args.k ?? 8, MAX_SEARCH_RESULTS));
-  const works = args.work_ids && args.work_ids.length ? args.work_ids : null;
+  const named = args.work_ids && args.work_ids.length ? args.work_ids : null;
   const front = Boolean(args.include_front_matter);
-  for (const id of works ?? []) await workRecord(id);
+  for (const id of named ?? []) await workRecord(id);
+
+  let works = named;
+  let scope: { id: number; name: string; works: number; not_searchable: unknown[] } | null = null;
+  if (args.project !== undefined && args.project !== null) {
+    const project = await projectRecord(args.project);
+    const members = [...(await projectMembership(project.id)).keys()];
+    works = named ? named.filter((id) => members.includes(id)) : members;
+    if (works.length === 0) {
+      throw new ToolError(
+        named
+          ? `none of work_ids is in project ${project.id}`
+          : `project ${project.id} has no works yet`,
+      );
+    }
+    const unreachable = (await db()`
+      select w.id, w.author, w.title from works w
+      where w.id = any(${works}::text[])
+        and not exists (select 1 from chunks c where c.work_id = w.id and c.embedding is not null)
+      order by coalesce(w.author, w.title)
+    `) as { id: string; author: string | null; title: string }[];
+    scope = { id: project.id, name: project.name, works: works.length, not_searchable: unreachable };
+  }
 
   let vector: number[];
   try {
@@ -81,6 +110,7 @@ export async function search(args: {
 
   return {
     query: args.query,
+    ...(scope ? { project: scope } : {}),
     ...(coverage ? { coverage } : {}),
     results: rows.map((r) => {
       const checked = r.offset_checked_at !== null;
