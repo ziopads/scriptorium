@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState } from 'react';
+import { use, useActionState } from 'react';
 
 import { InitialS, InitialSCredit } from '@/components/initial-s';
 import { signInWithEmail } from './actions';
@@ -12,8 +12,15 @@ import { signInWithEmail } from './actions';
 // The woodcut sits beside the form on a wide screen and above it on a narrow
 // one, which is the right order to read them in either way round.
 
-export default function SignInPage() {
+export default function SignInPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   const [state, formAction, pending] = useActionState(signInWithEmail, null);
+  // Set by app/oauth/authorize; the action accepts only that page as a target.
+  const nextParam = use(searchParams).next;
+  const next = Array.isArray(nextParam) ? nextParam[0] : nextParam;
 
   return (
     // The layout's main already carries the header's container and padding, so
@@ -31,6 +38,8 @@ export default function SignInPage() {
           <h1 className="text-2xl">Sign in</h1>
           <p className="mt-1 text-sm text-muted">Scriptorium</p>
         </div>
+
+        {next ? <input type="hidden" name="next" value={next} /> : null}
 
         <label className="block space-y-1">
           <span className="text-sm">Email</span>

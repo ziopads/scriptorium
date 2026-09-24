@@ -30,9 +30,11 @@ export const config = {
     // A page route never has a dot in its last segment, so this cannot exclude
     // a real page.
     //
-    // api/mcp is the remote MCP server. Claude calls it from Anthropic's
-    // servers and cannot follow a redirect to a sign-in form; the route decides
-    // access itself (app/api/mcp/[key]/route.ts).
-    '/((?!auth|colophon|api/auth|api/mcp|_next/static|_next/image|.*\\.[a-zA-Z0-9]+$).*)',
+    // api/mcp is the remote MCP server, .well-known its OAuth metadata, and
+    // oauth its authorization and token endpoints. Claude calls the first
+    // three from Anthropic's servers and cannot follow a redirect to a sign-in
+    // form; each decides access itself (lib/oauth.ts). /oauth/authorize does
+    // send her to sign in, but its own way, keeping Claude's request in ?next=.
+    '/((?!auth|colophon|api/auth|api/mcp|\\.well-known|oauth|_next/static|_next/image|.*\\.[a-zA-Z0-9]+$).*)',
   ],
 };

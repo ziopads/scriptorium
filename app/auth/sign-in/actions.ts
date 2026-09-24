@@ -22,7 +22,18 @@ export async function signInWithEmail(
     return { error: 'That email and password did not match an account.' };
   }
 
-  redirect('/');
+  redirect(safeNext(form.get('next')));
+}
+
+// Where to go after signing in. Only the OAuth consent screen may be named
+// (app/oauth/authorize), which is what lets Claude's connection request survive
+// the detour through this form; anything else goes home, so the parameter
+// cannot be used to send someone to another site.
+function safeNext(value: FormDataEntryValue | null): string {
+  if (typeof value === 'string' && value.startsWith('/oauth/authorize?') && !value.includes('//')) {
+    return value;
+  }
+  return '/';
 }
 
 export async function signOut(): Promise<void> {
