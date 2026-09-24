@@ -11,6 +11,7 @@
 import { createMcpHandler } from 'mcp-handler';
 import { z } from 'zod';
 
+import { draftNote } from '@/mcp/tools/draft-note';
 import { findQuotation } from '@/mcp/tools/find-quotation';
 import { findWorks } from '@/mcp/tools/find-works';
 import { getStudyAid } from '@/mcp/tools/get-study-aid';
@@ -20,11 +21,13 @@ import { readPages } from '@/mcp/tools/read-pages';
 import { search } from '@/mcp/tools/search';
 import { ToolError } from '@/mcp/work';
 
-const INSTRUCTIONS = `Scriptorium holds a doctoral candidate's exam corpus: the books' page text, study aids, and her notes. This connection can read and search; it cannot yet write notes.
+const INSTRUCTIONS = `Scriptorium holds a doctoral candidate's exam corpus: the books' page text, study aids, and her notes. This connection can read and search, and can propose notes for her review through draft_note; it cannot edit or delete anything.
 
 Name every work by its full id; find_works gives it. Page numbers are printed pages. Every page number comes with page_label, the number as the app shows it, with an asterisk when the number is unverified; quote page_label (pages_label in search and find_quotation results), asterisk included, whenever you cite a page. page_verified is 'yes', 'hand set' (reviewed by a person) or 'no'. page_numbers explains the work's numbering in words. A work whose pages are not citable (never checked, or unsettled and not accepted) can still be read, but its page numbers are not citations.
 
 find_quotation checks a quotation against the page text and returns the book's own words at the match and the page where they were found; quote what it returns, not what you sent.
+
+Anything you write for her goes through draft_note, which verifies every quotation against the page text and stores the book's own words and page; one quotation not found refuses the whole note. Copy quotations exactly from read_pages, search or find_quotation results. For your own analysis, leave attribution out; she decides whose claim it is. Use 'author' only when the note reports the anchored work's own position, and 'other' with attributed_to for a third party's. The note waits in her proposals queue until she accepts or rejects it.
 
 Study-aid sections and notes say whether she has reviewed them. An unreviewed section, or a note with origin 'assistant' and reviewed false, is a draft or a pending proposal, not her view; say so when you use it. Notes carry an attribution (author, own, other) saying whose claim they state.`;
 
@@ -118,6 +121,37 @@ export const handler = createMcpHandler(
     );
 
     server.registerTool(
+      'draft_note',
+      {
+        title: 'Draft note',
+        description:
+          'Propose a note for her review, anchored to one or more verified quotations. Every quotation is ' +
+          'looked up in its book; if any is not found, is on front matter, or comes from a work whose page ' +
+          'numbering is not settled, nothing is written. What is stored is the book\'s own text and the page ' +
+          "where it was found. attribution: 'author' when the note reports the anchored work's own position, " +
+          "'other' with attributed_to for a third party, omitted for your own analysis ('own' is hers to assign). " +
+          "The 'dossier' tag is reserved. The note waits in her proposals queue until she accepts or rejects it.",
+        inputSchema: z.object({
+          body: z.string().describe("the note's text"),
+          quotations: z
+            .array(
+              z.object({
+                work_id: z.string().describe('full id of the work quoted'),
+                text: z.string().describe('copied exactly from the page, at least 25 characters'),
+                near_page: z.number().int().optional().describe('printed page where it appears, if known'),
+              }),
+            )
+            .describe('at least one'),
+          attribution: z.string().optional().describe("'author' or 'other'; omit for your own analysis"),
+          attributed_to: z.string().optional().describe("whose claim, with attribution 'other'"),
+          title: z.string().optional(),
+          tags: z.array(z.string()).optional(),
+        }),
+      },
+      async (args) => run(() => draftNote(args)),
+    );
+
+    server.registerTool(
       'get_study_aid',
       {
         title: 'Get study aid',
@@ -161,6 +195,6 @@ export const handler = createMcpHandler(
   },
   {
     instructions: INSTRUCTIONS,
-    serverInfo: { name: 'scriptorium', version: '0.4.0' },
+    serverInfo: { name: 'scriptorium', version: '0.5.0' },
   },
 );
