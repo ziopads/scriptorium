@@ -1,7 +1,7 @@
 # Scriptorium — architecture
 
-**Version:** 0.4
-**Date:** 2026-09-08
+**Version:** 0.5
+**Date:** 2026-09-24
 **Status:** draft
 **Scope:** How the thing is built. What it has to do is in `REQUIREMENTS.md`;
 what was rejected during the original design conversation is in `HANDOFF.md`.
@@ -10,6 +10,12 @@ what was rejected during the original design conversation is in `HANDOFF.md`.
 
 ## Changelog
 
+- **0.5** (2026-09-24) — §7 rewritten against the code: two MCP servers with
+  the same ten tools and instructions, OAuth as built, the matcher and its
+  fixtures, projects (0.7.0). §2, §4, §5 and §9 still describe the design of
+  8 September (page text in R2, `schema.sql` authoritative, `lib/books.ts`)
+  and are next; page text has been in Neon's `pages` table since migration
+  006.
 - **0.4** (2026-09-08) — Triage run over 42 files. §4 rewritten from measurement
   rather than estimate: the corpus is about a quarter of the assumed size, and
   the storage ceiling that shaped the schema does not bind.
@@ -201,36 +207,83 @@ most — the quotation she has slightly wrong.
 out of semantic retrieval always; a bibliography is exactly what to search when
 the question is who cites whom.
 
-## 7. The MCP server
+## 7. The MCP servers
 
-Mounted as a route handler in the same Next.js application, using Vercel's
-`mcp-handler`. Version 2.x serves the current 2026-07-28 protocol natively and
-2025-era Streamable HTTP through a stateless fallback from the same handler; the
-old HTTP+SSE transport is gone and Redis is not needed. It requires the v2
-Model Context Protocol SDK packages, zod ^4, and Node 20 or later, and Fluid
-compute should be enabled on Vercel.
+Two servers answer the same ten tools with the same instructions text:
 
-Tool definitions live in `mcp/tools/`, so the handoff's instruction that the
-server occupy its own directory is honoured while the route stays a thin mount
-over the same `lib/` the web pages use. Retrieval logic exists once.
+| | Where | For |
+|---|---|---|
+| Local | `pipeline/mcp_server.py`, stdio, registered in `.mcp.json` | Claude Code in the repository |
+| Remote | `app/api/mcp/route.ts`, a thin mount over `mcp/server.ts` | Her Claude: web, desktop, phone |
 
-**Transport.** Streamable HTTP. She adds the URL under Customize → Connectors;
-Claude Desktop will not connect to a remote server configured through
-`claude_desktop_config.json`. Once added on the web, it is available on iOS and
-Android as well, which is the whole reason for choosing hosted over local.
+The Python server came first and is the specification. Each tool in
+`mcp/tools/` is a port of the Python tool of the same name, over the same
+`lib/` the web pages use. **The two change together**, and their
+`INSTRUCTIONS` text is identical, character for character.
 
-**Auth.** Claude supports both authless and OAuth-based remote servers. Three
-levels, in rising cost: authless at an unguessable path with Anthropic's
-published address ranges allowlisted at the edge; a static bearer token entered
-in the connector's advanced settings; full OAuth through `withMcpAuth`. Level 1
-is proportionate for development. The thing that argues for more eventually is
-`draft_note`, since the read tools expose a corpus that mostly sits on library
-shelves while the write tool touches her own writing.
+**Tools** (version 0.7.0): `find_works`, `list_projects`, `list_gaps`,
+`search`, `read_pages`, `find_quotation`, `get_study_aid`, `list_claims`,
+`list_notes`, `draft_note`. `find_works`, `search` and `list_notes` take an
+optional `project`.
 
-**Write surface.** `draft_note` is the only tool that writes, it writes one note
-per call, and it requires a `book_id` and a quoted passage. There is no tool to
-edit or delete. Correction and deletion of her own writing stay in the
-application, where an accidental call cannot reach them.
+**Transport.** `mcp-handler` 2.x with the v2 Model Context Protocol SDK and
+zod 4, Streamable HTTP, at `https://scriptorium-mauve.vercel.app/api/mcp`.
+She adds that URL under Customize → Connectors; once added on the web it
+reaches the desktop and phone apps too. Claude caches a connector's tool
+list: after a deploy that adds or changes tools, disconnect and connect
+again. Claude Code keeps the local server it started with until `/mcp`
+reconnects it.
+
+**Auth.** OAuth 2.1, with the application as its own authorization server,
+because Neon Auth cannot act as an OAuth provider. The consent screen sits
+behind her ordinary sign-in and `ALLOWED_EMAILS`. Files: `lib/oauth.ts`,
+`app/.well-known/oauth-authorization-server`,
+`app/.well-known/oauth-protected-resource`, `app/oauth/authorize`,
+`app/oauth/token`. Clients are identified by metadata document only, and a
+`client_id` must be an https URL on `claude.ai`, so only Claude can connect.
+Migration 018's `oauth_tokens` stores SHA-256 hashes of every value, never
+the value: an authorization code lasts ten minutes, an access token an hour,
+a refresh token thirty days and is replaced each time it is used. Revoking
+access is deleting that person's rows.
+
+**Page numbers** leave both servers as they leave the app: `page_label`, with
+an asterisk when the work's numbering is unverified, and `page_verified`
+(`yes`, `hand set`, `no`). The rule is `lib/page-verified.ts`; the Python
+carries a port of it.
+
+**The matcher.** `find_quotation` and `draft_note` look quotations up with the
+matcher that built the study aids: `normalize`, `key` and `Book.find` in
+`pipeline/dossier.py`, ported to `lib/matcher.ts` over
+`lib/sequence-matcher.ts`. Exact on the named page and its neighbours, then
+the whole book; a close match (92 per cent) near the named page only. The
+header of `lib/matcher.ts` lists where Python and JavaScript differ and how
+each difference is handled. Fixtures: `tests/matcher/cases.json` (invented
+text), `tests/matcher/expected.json` (written by
+`pipeline/matcher_fixtures.py`, never by hand), and `tests/matcher/corpus.json`
+(real pages, gitignored). Runners: `pipeline/test_matcher.py` and
+`npm run test:matcher`. Any change to the matcher in `dossier.py` means
+regenerating `expected.json`, reading its diff, changing `lib/matcher.ts`, and
+passing both runners before pushing.
+
+**Write surface.** `draft_note` is the only tool that writes. Every quotation
+is looked up in its book, and the book's own text and page are stored in
+place of what the model sent; one quotation not found, on front matter, or
+from a work whose numbering is not settled refuses the whole note. The note
+is stored with origin `assistant` and reviewed false, so it waits in her
+proposals queue. Attribution is `author`, `other` or empty; `own` is refused,
+since whether a claim is hers is hers to say, and so is the `dossier` tag.
+Note and anchors are written in one statement. No tool edits or deletes:
+correcting and deleting her writing stay in the application.
+
+**Copies kept in step.** Rules that live once in TypeScript and are copied
+into the Python, each marked at both ends:
+
+- `GAPS_SQL` and `GAP_LABELS`, from `fileStates()` and `FILE_STATES` in
+  `lib/gaps.ts` (`list_gaps`, and the coverage counts on `search`).
+- `PROJECT_WORKS_SQL` and `PROJECT_NOTES_SQL`, from `projectWorks()` in
+  `lib/projects.ts` and `mcp/project.ts`.
+- The page-number rule, from `lib/page-verified.ts`.
+- `INSTRUCTIONS`, from `mcp/server.ts`.
 
 ## 8. Runtime model calls
 
