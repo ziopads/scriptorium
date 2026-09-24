@@ -1,6 +1,6 @@
 # Scriptorium — architecture
 
-**Version:** 0.5
+**Version:** 0.6
 **Date:** 2026-09-24
 **Status:** draft
 **Scope:** How the thing is built. What it has to do is in `REQUIREMENTS.md`;
@@ -10,6 +10,11 @@ what was rejected during the original design conversation is in `HANDOFF.md`.
 
 ## Changelog
 
+- **0.6** (2026-09-24) — §1, §2, §4, §5 and §9 rewritten against the code and
+  the database: page text in Neon's `pages` table (migration 006), not R2;
+  storage as measured on 22 September, with the index dropped; the migrations
+  as the schema and `schema.sql` stale; the repository as it is. §3 is
+  superseded by `docs/PIPELINE.md`; §8 and §10–12 are unchanged.
 - **0.5** (2026-09-24) — §7 rewritten against the code: two MCP servers with
   the same ten tools and instructions, OAuth as built, the matcher and its
   fixtures, projects (0.7.0). §2, §4, §5 and §9 still describe the design of
@@ -36,33 +41,37 @@ what was rejected during the original design conversation is in `HANDOFF.md`.
 
 ## 1. Shape
 
-One repository, one deployed application, one database, one object store, and a
-local pipeline that never leaves the developer's machine.
+One repository, one deployed application, one database, and a local pipeline
+that never leaves the developer's machine.
 
 ```
-her PDFs (local)
+her PDFs (pipeline/corpus/ACCOUNTED)
       │
-      ▼  extract          Python, local, deterministic
-  pages JSON on disk ──────────────────────────────────┐
-      │                                                 │ upload
-      ▼  chunk            Python, local, deterministic  │
-  chunk JSON on disk                                    ▼
-      │                                            Cloudflare R2
-      ▼  embed            one batched call out      (page text)
-  chunks + vectors                                       ▲
-      │                                                  │
-      ▼  load                                            │
-   Neon Postgres  ◀────────────────────────────────┐     │
-      ▲                                            │     │
-      │                                     Next.js on Vercel
-      │                              ┌──────────────┴─────────────┐
-      │                              │  web pages   │  /api/mcp   │
-      └──────────────────────────────┴──────────────┴──────┬──────┘
-                                                            │
-                                              Anthropic's infrastructure
-                                                            │
-                                               her Claude (web, desktop, phone)
+      ▼  extract.py                 Python, local
+  page JSON on disk ─────── load_pages.py ─────────▶ pages
+  (pipeline/pages/)  ────── offsets.py ────────────▶ page numbering
+      │
+      ▼  chunk.py
+  chunk JSON on disk ────── load_sections.py ──────▶ sections
+  (pipeline/chunks/) ────── load_chunks.py ────────▶ chunks
+                                                       │
+                     embed.py, one batched call out ──▶ chunks.embedding
+                                                       │
+                                                 Neon Postgres
+                                                       ▲
+                                              Next.js on Vercel
+                                     ┌─────────────────┴────────────────┐
+                                     │    web pages    │    /api/mcp    │
+                                     └─────────────────┴────────┬───────┘
+                                                                │
+                                                   Anthropic's infrastructure
+                                                                │
+                                                her Claude (web, desktop, phone)
 ```
+
+The page JSON on disk is the durable artifact; every table the pipeline
+writes is a copy derived from it and rebuilt per work. `docs/PIPELINE.md`
+describes the stages as they run.
 
 The arrow that surprises people is the last one. Remote MCP connections
 originate from Anthropic's cloud rather than from the device she is holding, so
@@ -75,18 +84,23 @@ anyone proposes reopening it.
 
 | Piece | Where | Why there |
 |---|---|---|
-| Extraction, chunking | Her files, James's machine | Deterministic, no network, no key, re-runnable |
-| Embedding | Local script, one call out | The only ingest step that leaves the machine |
-| Books, lists, notes, cards, chunks, vectors | Neon Postgres | One join reaches bibliography and passage together |
-| Page text | Cloudflare R2 | Keeps ~70 MB out of a 0.5 GB cap; pages are already the on-disk artifact |
+| Extraction, chunking, page numbering | James's machine, `pipeline/` | Deterministic, no network, re-runnable per work |
+| Page and chunk JSON | `pipeline/pages/`, `pipeline/chunks/` | The durable artifact; the tables are derived from it |
+| Embedding the corpus | `pipeline/embed.py`, one batched call out to Voyage | The only ingest step that leaves the machine |
+| Works, lists, pages, chunks, vectors, notes, study aids, projects | Neon Postgres | One join reaches bibliography, page and passage together |
+| Study aids | `pipeline/dossier.py`, through `claude -p` on James's subscription | No metered API key; she reviews every section |
 | Web application | Vercel | Scaffold transfers from Vivarium |
-| MCP server | A route in that same application | Cannot drift from the schema it reads |
-| Position card generation | Her Claude subscription, by hand | No metered API; the manual step is the review anyway |
+| MCP servers | A route in that application; a local copy in `pipeline/` | §7 |
+| Embedding a search query | The application, at search time | The one runtime model call, §8 |
 
 Nothing in the ingest pipeline runs on Vercel. Vercel serves pages and answers
 tool calls.
 
 ## 3. The pipeline
+
+*Superseded by `docs/PIPELINE.md`, which describes the stages as they run.
+What follows is the design of 8 September, kept for its reasoning; the R2
+upload it mentions is not part of the pipeline.*
 
 Four stages, each reading files and writing files, so any one can be re-run
 without the others and none of them needs a database to test.
@@ -113,81 +127,82 @@ is pennies and seconds.
 
 ## 4. Storage budget
 
-Measured, not estimated. `pipeline/triage.py` over the 42 files in hand: 8,568
-pages, 18.8 million characters, about 4.7 million tokens. The original design
-assumed 70 MB of text; it is 18 MB. At a 400-word target that is roughly 9,000
-chunks rather than 27,000.
+Measured in Neon on 22 September, after the last batch. The project's limit
+is 512 MB, counting data, indexes and history.
 
-| | Measured, 1024 dimensions |
+| | |
 |---|---|
-| Page text | 18 MB |
-| Chunk text | ~21 MB |
-| Vectors | ~37 MB |
-| Vector index | ~37 MB |
-| Full-text index | ~10 MB |
-| **Total** | **~125 MB** |
+| In use | about 450 MB |
+| `chunks` | about 315 MB, nearly all of it stored out of line (TOAST): the vectors and the chunk text; the heap itself is about 9 MB |
+| Chunks embedded | roughly 19,000, voyage-4 at 1024 dimensions |
 
-Even doubled for the full 85-book list rather than the 42 files in hand, that
-sits inside Neon's 0.5 GB free-plan ceiling with room to spare. **The storage
-constraint that shaped this design does not bind.** Three consequences:
+The estimate of 8 September (about 125 MB for the whole corpus) was made from
+42 files and held for text; it did not hold for vectors and their index once
+the corpus passed 90 files. Three consequences:
 
-1. **Embedding dimension is no longer expensive.** 1024 is affordable, so the
-   choice follows retrieval quality rather than arithmetic.
-2. **`halfvec` stays in reserve**, and is now unlikely to be needed. It remains
-   available: pgvector 0.8.6 on this project, HNSW-indexable to 4,000
-   dimensions against 2,000 for the ordinary `vector` type.
-3. **Pages still live in R2, but now by design rather than by necessity.** Pages
-   are the durable artifact and the database is derived from them; keeping that
-   division visible in the infrastructure is worth more than the 18 MB it saves.
-   One JSON object per book; `expand_context` fetches it and slices the page
-   range.
+1. **The HNSW index is off.** It was built (152 MB) and dropped to make room.
+   Search is a sequential scan over about 19,000 vectors: slower, same results.
+   Rebuild when the corpus is final and there is room, both statements in one
+   session:
 
-Overrunning the free plan was never a cliff in any case. Neon's Launch plan has
-no monthly minimum, storage at $0.35 per GB-month.
+       set maintenance_work_mem = '1GB';
+       create index chunks_embedding_idx on chunks using hnsw (embedding vector_cosine_ops);
+
+2. **Reloading leaves dead rows.** Deleting and reinserting a work's pages and
+   chunks keeps the old versions in the file until a `vacuum full` rewrites it.
+   Run `vacuum full chunks;` and `vacuum full pages;` after any batch that
+   reloads several books. When the project reached the limit during batch 5 (a
+   `load_chunks` failed with `DiskFull`), dropping the index and the vacuum
+   took it from 637 MB to 423 MB.
+3. **If it stays tight**, the choices are halving the embedding dimensions (a
+   change to `embed.py` and a full re-embed, with some loss of retrieval
+   quality) or a larger Neon plan.
 
 ## 5. Schema
 
-`db/schema.sql` is authoritative and carries its reasoning inline. What follows
-is the list of departures from the handoff's version and why each one exists.
+The schema is the numbered migrations in `db/`, 002 to 019, applied and
+recorded by `pipeline/migrate.py`, which also refuses to run a file whose
+contents changed after it was applied. Run `migrate.py --status` before
+pushing application code that depends on a migration. Each migration explains
+itself in its header; `docs/ERD.md` draws the notes graph.
 
-**No `pages` table.** Page text lives in R2 under `books.r2_pages_key`. The
-chunker reads page JSON from disk, so nothing in the pipeline wants a pages
-table either.
+`db/schema.sql` is the starting point from before the numbering began and
+stops at migration 002. It is not authoritative, and a fresh install cannot be
+built from it alone. The target is a schema-only dump generated from Neon, so
+that a new instance is one file plus `migrate.py --baseline 19`, tested once on
+an empty Neon branch. Until then, one change is recorded in neither place:
+`schema.sql` declares `chunks.embedding` as `vector(512)`, and `embed.py`
+writes 1024 dimensions and prints the `alter table` to run when the column
+disagrees, so the column was changed outside the migrations.
 
-**`notes.origin` and `notes.reviewed`.** A note written by `draft_note` is
-`assistant` and unreviewed; editing it in the application sets `reviewed` and
-leaves `origin` alone, so provenance survives the edit. Human notes default to
-reviewed, since writing one is reviewing it.
+The decisions that shape the code:
 
-**`notes.printed_page` rather than `page`.** Naming the column for the printed
-folio makes it hard to write the file page into it by accident. The offset is
-applied once, at ingest, from `books.page_offset`.
-
-**`chunks.embedding_model` and `embedding_dim`.** Same argument as
-`chunker_version`. Six weeks in, some books will have been re-embedded and
-others not, and without the stamp there is no way to tell which rows came from
-which model short of guessing.
-
-**`chunks.text_search`.** The chunk text lowercased with accents folded, written
-by the loader in Python. Both sides of a search use it, so an unaccented query
-matches accented text. Doing the folding in the pipeline avoids `unaccent`,
-which is not immutable and would otherwise need a wrapper function created only
-to satisfy a generated column. The cost is that *papa* and *papá* collide in
-retrieval; that is accepted, since optical character recognition on Spanish
-scans mangles accents anyway and trigram similarity backs up the near miss.
-
-**`vector(512)`.** Provisional, and the one column that is expensive to change.
-It is fixed by decision §8.5, which is not yet made. Nothing in the September
-work touches this table, so the declaration can wait until the model is chosen.
-
-**The vector index is not created in the schema file.** Building HNSW on an
-empty table accomplishes nothing, and at roughly 27,000 rows a sequential scan
-is fast enough that the index can wait until after the first load.
-
-On the `tsvector`: it is a generated column with a `case` over `lang` selecting
-between two literal configurations, both of which are immutable. Postgres
-accepted it on 8 September 2026, so the fallback of having the loader write a
-plain `tsvector` column is not needed.
+- **Page text in Postgres** (migration 006, reversing the R2 decision of 8
+  September). `pages` holds each file page's text and the folio read off it.
+  The printed page is never stored: the `printed_pages` view computes it from
+  `works.page_offset` and, for a file with several numbering runs,
+  `page_offsets` (008), so a corrected offset moves every page and anchor at
+  once. `works.r2_pages_key` is left over from the R2 design and unused.
+- **Works, not books** (004): monographs, essays inside volumes
+  (`container_id`), films. Whether a work is examinable is derived by the
+  `examinable_works` view, never stored.
+- **Notes as a graph** (004, 005): a quotation with its page (`note_anchors`)
+  is a different edge from a claim about a whole work (`note_works`); an axis
+  is a note whose parts are child notes; `origin` records who typed a note and
+  `attribution` whose claim it states. A rejected proposal is hidden
+  (`rejected_at`), never deleted.
+- **Stamps on chunks**: `chunker_version`, `embedding_model`, `embedding_dim`,
+  so a partly re-embedded corpus can be told apart.
+- **Accent folding in the loader**: `chunks.text_search` is the chunk text
+  lowercased with accents folded in Python, and queries are folded the same
+  way, so Postgres needs no `unaccent`. *papa* and *papá* collide; accepted.
+- **Page numbering** (014, 016, 017): `offset_problem` records what
+  `offsets.py` could not settle, and acceptance (`pagination_accepted_at`,
+  `pagination_basis`) records a person's decision beside it without erasing
+  it. `docs/PAGE-NUMBERS.md`.
+- **Projects** (019): works and notes gathered for one piece of writing,
+  through two membership tables; a project's works cited is derived (§7,
+  `lib/projects.ts`).
 
 ## 6. Retrieval
 
@@ -301,28 +316,48 @@ subscription and entered as reviewed text. Nothing else calls out.
 ## 9. Repository layout
 
 ```
-app/
-  page.tsx                 catalogue landing
-  books/[id]/page.tsx      one book: bibliography, card, notes
-  notes/                   notes browsing, tags, export
-  admin/                   ingest status, incomplete records
-  api/mcp/route.ts         thin mount over mcp/
-lib/
-  db.ts                    Neon client
-  books.ts, notes.ts       reads and writes, shared by pages and tools
-  search.ts                keyword, vector, hybrid
-  pages.ts                 R2 fetch for expand_context
-  citation.ts              Chicago formatting from one book record
-mcp/
-  tools/                   one file per tool, importing lib/
-  server.ts                tool registration
-pipeline/                  Python, local only, never deployed
-  extract.py, chunk.py, embed.py, load.py
-db/
-  schema.sql
-docs/
-  REQUIREMENTS.md, ARCHITECTURE.md, HANDOFF.md
+app/                         one directory per route
+  page.tsx                   the workbench (panes in components/workbench/)
+  works/                     the catalogue; works/[id]/ has the work's tabs
+  lists/, readiness/         the reading lists; the readiness matrix
+  notes/, axes/              notes and their review queues; the mapa de cruces
+  projects/                  projects, each with its works and notes
+  works-cited/               a bibliography from ?id= or ?project=
+  gaps/                      what the catalogue still lacks, one tab per kind
+  como/, about/, colophon/   her instructions; the argument; credits
+  auth/, oauth/, .well-known/  sign-in; the OAuth authorization server (§7)
+  api/mcp/route.ts           the remote MCP server's mount
+  api/export/                CSV of works and of notes
+components/                  shared components; workbench/ for the three panes
+lib/                         reads, writes and rules shared by pages and tools
+  db.ts                      the Neon HTTP client
+  works.ts, notes.ts, projects.ts, readiness.ts, gaps.ts,
+  pages.ts, sections.ts, dossier.ts
+  actions.ts, project-actions.ts   Server Actions
+  citation.ts                Chicago 17th and 18th and MLA from one record
+  page-verified.ts           the page-number rule for everything that leaves
+  matcher.ts, sequence-matcher.ts  the quotation matcher, from dossier.py
+  embed.ts                   query embedding
+  oauth.ts, auth/            OAuth for the MCP server; the sign-in guard
+mcp/                         the remote MCP server: server.ts, tools/ (one
+                             file per tool), shared helpers
+pipeline/                    Python, local only, never deployed
+  extract.py, chunk.py, load_pages.py, offsets.py,
+  load_sections.py, load_chunks.py, embed.py   the ingest stages
+  dossier.py                 study aids, through claude -p
+  mcp_server.py              the local MCP server
+  migrate.py, backup.py, dbconn.py, search.py
+db/                          migrations 002-019; schema.sql (stale); seeds
+tests/matcher/               the matcher's fixtures (§7)
+docs/                        ARCHITECTURE, PIPELINE, PAGE-NUMBERS, ERD,
+                             NOTES-AND-CONNECTIONS, REQUIREMENTS, and her
+                             instructions COMO-TOMAR-NOTAS, COMO-PREGUNTAR;
+                             HANDOFF is gitignored
 ```
+
+Other scripts in `pipeline/` are one-off or retired (`reconcile.py`,
+`sync_books.py`, `status.py` among them); the handoff's clean-up list names
+them.
 
 ## 10. Environments and secrets
 
