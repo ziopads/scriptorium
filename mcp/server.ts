@@ -2,7 +2,7 @@
 // behind OAuth (lib/oauth.ts).
 //
 // Phased (docs/HANDOFF.md, 23 Sept): find_works, then the read tools (deploy
-// 2), then search, then the matcher and draft_note. Each tool is a port of the
+// 2), search (deploy 3), then the matcher and draft_note. Each tool is a port of the
 // same tool in pipeline/mcp_server.py, which remains the full set until then.
 // Page numbers leave here as they leave the app: page_label with the asterisk,
 // page_verified as the notes export writes it (lib/page-verified.ts).
@@ -15,11 +15,12 @@ import { getStudyAid } from '@/mcp/tools/get-study-aid';
 import { listClaims } from '@/mcp/tools/list-claims';
 import { listNotes } from '@/mcp/tools/list-notes';
 import { readPages } from '@/mcp/tools/read-pages';
+import { search } from '@/mcp/tools/search';
 import { ToolError } from '@/mcp/work';
 
-const INSTRUCTIONS = `Scriptorium holds a doctoral candidate's exam corpus: the books' page text, study aids, and her notes. This connection can read; it cannot yet search semantically or write notes.
+const INSTRUCTIONS = `Scriptorium holds a doctoral candidate's exam corpus: the books' page text, study aids, and her notes. This connection can read and search; it cannot yet write notes.
 
-Name every work by its full id; find_works gives it. Page numbers are printed pages. Every page number comes with page_label, the number as the app shows it, with an asterisk when the number is unverified; quote page_label, asterisk included, whenever you cite a page. page_verified is 'yes', 'hand set' (reviewed by a person) or 'no'. page_numbers explains the work's numbering in words. A work whose pages are not citable (never checked, or unsettled and not accepted) can still be read, but its page numbers are not citations.
+Name every work by its full id; find_works gives it. Page numbers are printed pages. Every page number comes with page_label, the number as the app shows it, with an asterisk when the number is unverified; quote page_label (pages_label in search results), asterisk included, whenever you cite a page. page_verified is 'yes', 'hand set' (reviewed by a person) or 'no'. page_numbers explains the work's numbering in words. A work whose pages are not citable (never checked, or unsettled and not accepted) can still be read, but its page numbers are not citations.
 
 Study-aid sections and notes say whether she has reviewed them. An unreviewed section, or a note with origin 'assistant' and reviewed false, is a draft or a pending proposal, not her view; say so when you use it. Notes carry an attribution (author, own, other) saying whose claim they state.`;
 
@@ -52,6 +53,26 @@ export const handler = createMcpHandler(
         inputSchema: z.object({ query: z.string().describe('part of an author, title or id') }),
       },
       async ({ query }) => run(() => findWorks(query)),
+    );
+
+    server.registerTool(
+      'search',
+      {
+        title: 'Search',
+        description:
+          'Semantic search over the corpus, in English or Spanish; a query in one language finds text in the ' +
+          "other. Optionally limited to works (full ids) or to one language ('english' or 'spanish'). Front " +
+          'matter is excluded unless asked for. Each result gives the work, printed pages (pages_label is the ' +
+          "form to cite), similarity (1 is identical) and the chunk's text.",
+        inputSchema: z.object({
+          query: z.string(),
+          work_ids: z.array(z.string()).optional().describe('full work ids'),
+          lang: z.enum(['english', 'spanish']).optional(),
+          k: z.number().int().optional().describe('results to return, default 8, at most 30'),
+          include_front_matter: z.boolean().optional(),
+        }),
+      },
+      async (args) => run(() => search(args)),
     );
 
     server.registerTool(
@@ -116,6 +137,6 @@ export const handler = createMcpHandler(
   },
   {
     instructions: INSTRUCTIONS,
-    serverInfo: { name: 'scriptorium', version: '0.2.0' },
+    serverInfo: { name: 'scriptorium', version: '0.3.0' },
   },
 );
