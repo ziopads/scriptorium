@@ -229,6 +229,10 @@ export function formatBibliography(
 // Note form, for a footnote: Chicago 17th ('chicago') or 18th, differing in
 // the imprint as the bibliography does. MLA uses parenthetical citation,
 // which is a different thing and belongs with the passage, not here.
+//
+// With a page, the text ends ", {page}." The notes export
+// (app/api/export/notes/route.ts) finds that ending to put the unverified-page
+// mark after the number; change the ending and change markPage there too.
 export function formatNote(
   work: Work,
   container: Work | null = null,

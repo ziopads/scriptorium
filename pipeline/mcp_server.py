@@ -30,8 +30,26 @@ WHAT draft_note GUARANTEES
 
     One quotation not found refuses the whole note. So does a quotation on
     front matter, a quotation shorter than 25 characters, and any quotation
-    from a work whose page numbering is unchecked or unsettled, because its
-    pages are not citations.
+    from a work whose page numbering is unchecked, or unsettled and not
+    accepted, because its pages are not citations.
+
+PAGE NUMBERS, AS THE APP SHOWS THEM
+
+    A work whose numbering offsets.py could not settle can be accepted as it
+    stands (migrations 016, 017; docs/PAGE-NUMBERS.md). Acceptance takes
+    precedence over offset_problem: an accepted work is citable here, as it is
+    searchable in the app. read_pages, find_quotation and search say how far
+    its page numbers can be trusted, by the app's own rule (unverifiedPages in
+    lib/works.ts), so a model quoting it can say so:
+
+        verified    checked by offsets.py, nothing in doubt
+        hand set    reviewed by a person outside the pipeline: an offset or
+                    page ranges entered by hand
+        unverified  an accepted file that prints no usable numbers: the page
+                    is the file's own, not the edition's. Or, for a work not
+                    accepted, numbering unsettled. The app marks both with an
+                    asterisk
+        unchecked   never checked; not citable
 
     The note goes in with origin 'assistant' and reviewed false, so it lands
     in her proposals queue (lib/notes.ts, listUnreviewedNotes). Attribution is
@@ -65,7 +83,7 @@ MAX_NOTES_LISTED = 50
 
 INSTRUCTIONS = """Scriptorium holds a doctoral candidate's exam corpus: the books' page text, searchable chunks, study aids, and her notes.
 
-Name every work by its full id; find_works gives it. Page numbers are printed pages. A work whose numbering is unchecked or has a problem can be read and searched, but its page numbers are not citations, and draft_note refuses it.
+Name every work by its full id; find_works gives it. Page numbers are printed pages. A work whose numbering is unchecked, or has a problem nobody has accepted, can be read and searched, but its page numbers are not citations, and draft_note refuses it. Results carry page_numbers: 'verified'; 'hand set' (reviewed by a person); 'unverified', either 'the file's own page, not the edition's' (an accepted file that prints no numbers) or 'numbering unsettled' (say so in any note that cites it); or 'unchecked'.
 
 Anything you write for her goes through draft_note, which verifies every quotation against the page text and stores the book's own words and page. Copy quotations exactly from read_pages or search results. For your own analysis, leave attribution empty; she decides whose claim it is. Use 'author' only when the note reports the anchored work's own position, and 'other' with attributed_to for a third party's."""
 
@@ -89,16 +107,34 @@ def fold(value: str) -> str:
     return "".join(c for c in decomposed if not unicodedata.combining(c)).casefold()
 
 
-def numbering(checked, problem) -> str:
+def numbering(checked, problem, accepted=None, basis=None) -> str:
+    if problem and accepted:
+        return "accepted (hand set)" if basis == "hand_set" else "accepted (no printed numbers)"
     if problem:
         return f"problem: {problem}"
     return "checked" if checked else "unchecked"
 
 
+def page_numbers(checked, problem, accepted, basis) -> str:
+    """How far a work's page numbers can be trusted, by the app's rule
+    (unverifiedPages in lib/works.ts): marked when offset_problem is set and
+    the basis is anything but hand_set, a null basis counting as marked. The
+    wording separates an accepted file that prints no numbers from a work whose
+    numbering is simply unsettled, since those are different warnings."""
+    if problem and basis != "hand_set":
+        if accepted:
+            return "unverified: the file's own page, not the edition's"
+        return "unverified: numbering unsettled"
+    if basis == "hand_set":
+        return "hand set"
+    return "verified" if checked else "unchecked"
+
+
 def work_record(cur, work_id: str) -> dict:
     """The work, or a tool error naming ids that contain what was given."""
     cur.execute(
-        "select id, author, title, year, offset_checked_at, offset_problem, notes_internal"
+        "select id, author, title, year, offset_checked_at, offset_problem, notes_internal,"
+        " pagination_accepted_at, pagination_basis"
         " from works where id = %s",
         (work_id,),
     )
@@ -107,6 +143,8 @@ def work_record(cur, work_id: str) -> dict:
         return {
             "id": row[0], "author": row[1], "title": row[2], "year": row[3],
             "checked": row[4] is not None, "problem": row[5], "internal_note": row[6],
+            "accepted": row[7] is not None, "basis": row[8],
+            "page_numbers": page_numbers(row[4] is not None, row[5], row[7] is not None, row[8]),
         }
     cur.execute("select id from works where id ilike %s order by id limit 10",
                 (f"%{work_id}%",))
@@ -116,8 +154,10 @@ def work_record(cur, work_id: str) -> dict:
 
 
 def citable(work: dict) -> str | None:
-    """Why this work's pages are not citations, or None if they are."""
-    if work["problem"]:
+    """Why this work's pages are not citations, or None if they are. An
+    accepted work is citable whatever offset_problem says: acceptance is the
+    decision, the problem is the evidence it was made on."""
+    if work["problem"] and not work["accepted"]:
         return f"page numbering unsettled: {work['problem']}"
     if not work["checked"]:
         return "page numbering never checked"
@@ -167,6 +207,7 @@ def find_works(query: str) -> dict:
             """
             select w.id, w.author, w.title, w.year, w.offset_checked_at, w.offset_problem,
                    w.notes_internal,
+                   w.pagination_accepted_at, w.pagination_basis,
                    exists (select 1 from pages p where p.work_id = w.id),
                    exists (select 1 from chunks c where c.work_id = w.id
                            and c.embedding is not null)
@@ -177,8 +218,10 @@ def find_works(query: str) -> dict:
     works = [
         {
             "id": r[0], "author": r[1], "title": r[2], "year": r[3],
-            "numbering": numbering(r[4], r[5]), "internal_note": r[6],
-            "has_pages": r[7], "searchable": r[8],
+            "numbering": numbering(r[4], r[5], r[7], r[8]),
+            "page_numbers": page_numbers(r[4] is not None, r[5], r[7] is not None, r[8]),
+            "internal_note": r[6],
+            "has_pages": r[9], "searchable": r[10],
         }
         for r in rows
         if needle in fold(r[0]) or needle in fold(r[1] or "") or needle in fold(r[2] or "")
@@ -198,7 +241,8 @@ def search(
     language finds text in the other. Optionally limited to works (full ids)
     or to one language ('english' or 'spanish'). Front matter is excluded
     unless asked for. Each result gives the work, printed pages, similarity
-    (1 is identical) and the chunk's text."""
+    (1 is identical), the chunk's text, and page_numbers: how far the pages
+    can be trusted ('verified', 'hand set', 'unverified', 'unchecked')."""
     if lang not in (None, "english", "spanish"):
         raise ToolError("lang is 'english', 'spanish' or omitted")
     k = max(1, min(k, MAX_SEARCH_RESULTS))
@@ -225,7 +269,8 @@ def search(
             f"""
             select c.work_id, w.author, w.title, c.start_page, c.end_page, c.lang,
                    1 - (c.embedding <=> %(vec)s::vector) as score, c.text,
-                   w.offset_checked_at, w.offset_problem
+                   w.offset_checked_at, w.offset_problem,
+                   w.pagination_accepted_at, w.pagination_basis
             from chunks c join works w on w.id = c.work_id
             where {' and '.join(where)}
             order by c.embedding <=> %(vec)s::vector
@@ -242,7 +287,9 @@ def search(
                 "work_id": r[0], "author": r[1], "title": r[2],
                 "pages": str(r[3]) if r[3] == r[4] else f"{r[3]}\u2013{r[4]}",
                 "lang": r[5], "score": round(float(r[6]), 3),
-                "numbering": numbering(r[8], r[9]), "text": r[7],
+                "numbering": numbering(r[8], r[9], r[10], r[11]),
+                "page_numbers": page_numbers(r[8] is not None, r[9], r[10] is not None, r[11]),
+                "text": r[7],
             }
             for r in rows
         ],
@@ -255,7 +302,10 @@ def read_pages(work_id: str, first_page: int, last_page: int | None = None) -> d
     says how sure its number is: 'printed' where the number read off the page
     agrees, 'computed' where the page carries no readable number and it comes
     from the book's offset alone, 'front matter' below page 1, and a warning
-    where the number read off the page disagrees."""
+    where the number read off the page disagrees. page_numbers says how far
+    the work's numbering can be trusted: 'verified', 'hand set' (reviewed by a
+    person), 'unverified' (the file's own page, not the edition's), or
+    'unchecked'."""
     last_page = first_page if last_page is None else last_page
     if last_page < first_page:
         raise ToolError("last_page comes before first_page")
@@ -292,6 +342,7 @@ def read_pages(work_id: str, first_page: int, last_page: int | None = None) -> d
         "title": work["title"],
         "citable": reason is None,
         "not_citable_because": reason,
+        "page_numbers": work["page_numbers"],
         "internal_note": work["internal_note"],
         "pages": pages,
     }
@@ -301,8 +352,8 @@ def read_pages(work_id: str, first_page: int, last_page: int | None = None) -> d
 def find_quotation(work_id: str, text: str, near_page: int | None = None) -> dict:
     """Look a passage up in a work's page text with the same matcher draft_note
     uses. Returns the book's own text at the match, the printed page, and
-    whether the match was exact or close. Use it to check a quotation before
-    drafting."""
+    whether the match was exact or close, and page_numbers, as read_pages
+    gives it. Use it to check a quotation before drafting."""
     with connect() as conn, conn.cursor() as cur:
         work = work_record(cur, work_id)
         book = load_book(cur, work_id)
@@ -317,6 +368,7 @@ def find_quotation(work_id: str, text: str, near_page: int | None = None) -> dic
         "text": hit["text"], "page": hit["page"], "pages": hit["pages"], "match": hit["match"],
         "front_matter": hit["page"] < FIRST_CITABLE_PAGE,
         "citable": reason is None, "not_citable_because": reason,
+        "page_numbers": work["page_numbers"],
     }
 
 

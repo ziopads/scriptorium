@@ -2,8 +2,8 @@ import { getAllowedUser } from '@/lib/auth/guard';
 import { formatNote, plain } from '@/lib/citation';
 import { csvResponse, toCsv } from '@/lib/csv';
 import { listAllNotes, getAxisTree } from '@/lib/notes';
-import { listWorks } from '@/lib/works';
-import type { NoteWithRelations } from '@/lib/types';
+import { listWorks, unverifiedPages } from '@/lib/works';
+import type { NoteWithRelations, Work } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,11 +19,23 @@ export const dynamic = 'force-dynamic';
 //
 // Axes are flattened: each part becomes rows of its own with the axis title in
 // the axis column, so the file reads as her mapa did.
+//
+// A page number leaves the app here, on its way into her drafts, so it carries
+// the same mark it carries on screen (docs/PAGE-NUMBERS.md §3): an asterisk
+// after the page inside the citation, and a page_verified column to filter on.
+// The rule is unverifiedPages(), the one the app uses. page_verified is 'no'
+// for a marked work, 'hand set' for a numbering reviewed by hand, 'yes'
+// otherwise — which means only that the app does not mark it; a work loaded
+// but never checked reads 'yes' too. Empty on rows with no page.
 export async function GET() {
   const user = await getAllowedUser();
   if (!user) return new Response('Not authorized', { status: 401 });
 
-  const [top, works] = await Promise.all([listAllNotes(), listWorks()]);
+  const [top, works, unverified] = await Promise.all([
+    listAllNotes(),
+    listWorks(),
+    unverifiedPages(),
+  ]);
   const byId = new Map(works.map((w) => [w.id, w]));
 
   // Expand axes into their parts.
@@ -104,12 +116,19 @@ export async function GET() {
         work_author: t.work_author,
         work_title: t.work_title,
         printed_page: t.printed_page,
+        page_verified: pageVerified(work, t.printed_page, unverified),
         quote: t.quote,
         translation: t.translation,
         body: note.body,
         whose_claim: whose,
         tags: note.tags,
-        citation: work ? plain(formatNote(work, container, t.printed_page).text) : '',
+        citation: work
+          ? markPage(
+              plain(formatNote(work, container, t.printed_page).text),
+              t.printed_page,
+              unverified.has(work.id),
+            )
+          : '',
         provenance,
         created_at: note.created_at,
         updated_at: note.updated_at,
@@ -120,9 +139,32 @@ export async function GET() {
   const columns = [
     'note_id', 'kind', 'axis', 'title', 'relation', 'role', 'relations_in_note',
     'also_touching', 'work_id', 'work_author', 'work_title', 'printed_page',
+    'page_verified',
     'quote', 'translation', 'body', 'whose_claim', 'tags', 'citation',
     'provenance', 'created_at', 'updated_at',
   ];
 
   return csvResponse('scriptorium-notes', toCsv(columns, rows));
+}
+
+function pageVerified(
+  work: Work | undefined,
+  page: number | null,
+  unverified: Set<string>,
+): string {
+  if (!work || page === null) return '';
+  if (unverified.has(work.id)) return 'no';
+  if (work.pagination_basis === 'hand_set') return 'hand set';
+  return 'yes';
+}
+
+// formatNote ends a citation with ", {page}." (lib/citation.ts). The mark goes
+// after the number, as on screen. It is added after plain(), which strips every
+// asterisk. If the ending is not there the citation is left alone rather than
+// guessed at.
+function markPage(citation: string, page: number | null, mark: boolean): string {
+  if (!mark || page === null) return citation;
+  const ending = `, ${page}.`;
+  if (!citation.endsWith(ending)) return citation;
+  return `${citation.slice(0, -ending.length)}, ${page}*.`;
 }
