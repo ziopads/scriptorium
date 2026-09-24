@@ -20,7 +20,8 @@
 //   Only Claude. A client_id must be an https URL on claude.ai, and it must
 //   dereference to a Client ID Metadata Document whose own client_id is that
 //   URL (self-referential) and which lists the redirect_uri being used. The
-//   hosted surfaces redirect to https://claude.ai/api/mcp/auth_callback; Claude
+//   hosted surfaces identify as https://claude.ai/oauth/mcp-oauth-client-metadata
+//   (seen 24 Sept) and redirect to https://claude.ai/api/mcp/auth_callback; Claude
 //   Code lists http://localhost/callback and http://127.0.0.1/callback and binds
 //   an ephemeral port, so loopback redirects are compared with the port ignored
 //   (RFC 8252 §7.3). Any other client is refused before anything is shown.

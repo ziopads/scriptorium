@@ -6,8 +6,9 @@
 // is how Claude learns where to send her to sign in. The token is checked
 // against oauth_tokens and the email against ALLOWED_EMAILS on every request.
 //
-// app/api/mcp/[key]/route.ts, the deploy-1 endpoint guarded by its URL, is
-// deleted once this one is confirmed from a client.
+// Replaced the deploy-1 endpoint, app/api/mcp/[key], which was guarded by its
+// URL and Anthropic's address range; removed 24 Sept once this one was
+// confirmed from claude.ai.
 
 import { withMcpAuth } from 'mcp-handler';
 

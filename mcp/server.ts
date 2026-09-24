@@ -1,9 +1,9 @@
-// The remote MCP server: tool registration, mounted by app/api/mcp/[key]/route.ts.
+// The remote MCP server: tool registration, mounted by app/api/mcp/route.ts
+// behind OAuth (lib/oauth.ts).
 //
-// Phased (docs/HANDOFF.md, 23 Sept): deploy 1 is find_works alone, catalogue
-// data only, behind an unguessable path and Anthropic's address range. No book
-// text is served until the server sits behind OAuth tied to her login. The
-// local Python server (pipeline/mcp_server.py) remains the full set of tools.
+// Phased (docs/HANDOFF.md, 23 Sept): find_works first, then the read tools,
+// then search, then the matcher and draft_note. The local Python server
+// (pipeline/mcp_server.py) remains the full set of tools until then.
 
 import { createMcpHandler } from 'mcp-handler';
 import { z } from 'zod';
