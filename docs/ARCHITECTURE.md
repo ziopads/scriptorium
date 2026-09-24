@@ -311,7 +311,8 @@ search, so the line moves to a stated place:
 > The only model call the application makes at runtime is embedding a search
 > query. No text is ever generated inside the application.
 
-The call is `lib/embed.ts`, used by `search` on the remote MCP server: Voyage,
+The call is `lib/embed.ts`, used by the search page and by `search` on the
+remote MCP server, through `lib/search.ts`: Voyage,
 voyage-4 at 1024 dimensions with input type `query`, matching the corpus,
 which `pipeline/embed.py` embeds once, offline, with input type `document`.
 Change one side and every score is wrong.
@@ -334,6 +335,8 @@ app/                         one directory per route
   works/                     the catalogue; works/[id]/ has the work's tabs
   lists/, readiness/         the reading lists; the readiness matrix
   notes/, axes/              notes and their review queues; the mapa de cruces
+                             and the axis map
+  search/                    search by word and by meaning, as a motif strip
   projects/                  projects, each with its works and notes
   works-cited/               a bibliography from ?id= or ?project=
   gaps/                      what the catalogue still lacks, one tab per kind
@@ -345,7 +348,8 @@ components/                  shared components; workbench/ for the three panes
 lib/                         reads, writes and rules shared by pages and tools
   db.ts                      the Neon HTTP client
   works.ts, notes.ts, projects.ts, readiness.ts, gaps.ts,
-  pages.ts, sections.ts, dossier.ts
+  pages.ts, sections.ts, dossier.ts, axis-map.ts, motif.ts
+  search.ts                  both searches, shared with the MCP server
   actions.ts, project-actions.ts   Server Actions
   citation.ts                Chicago 17th and 18th and MLA from one record
   page-verified.ts           the page-number rule for everything that leaves

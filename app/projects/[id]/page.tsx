@@ -131,6 +131,9 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           >
             Add or take out works in the catalogue
           </Link>
+          <Link href={`/search?project=${project.id}`} className="text-xs text-accent hover:underline">
+            Search this project
+          </Link>
 
           {project.list_id ? (
             <form action={addListToProject}>

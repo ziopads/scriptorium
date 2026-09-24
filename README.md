@@ -147,8 +147,8 @@ through `draft_note`, both for her review (`docs/ARCHITECTURE.md` §8).
 Working, deployed: the catalogue and reading lists, the workbench (a book's
 pages, contents, study aid and notes beside a note form that takes a selected
 passage with its page), notes, axes and their review queues, the Gaps tabs, the
-readiness matrix, projects with their works cited in Chicago 17th and 18th and
-MLA, and the remote MCP server (0.7.0) behind OAuth, which is where semantic
-search over the corpus lives; the application itself has no search page yet.
+readiness matrix, the axis map, search by word and by meaning drawn as a motif
+strip, projects with their works cited in Chicago 17th and 18th and MLA, and
+the remote MCP server (0.7.0) behind OAuth.
 
 What is outstanding is in `docs/HANDOFF.md`.

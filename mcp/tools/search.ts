@@ -22,6 +22,7 @@
 import { db } from '@/lib/db';
 import { embedQuery } from '@/lib/embed';
 import { isUnverified, pageLabel, pageVerified } from '@/lib/page-verified';
+import { nearestChunksTo } from '@/lib/search';
 import { numbering, pageNumbers } from '@/mcp/numbering';
 import { projectMembership, projectRecord } from '@/mcp/project';
 import { gapCount } from '@/mcp/tools/list-gaps';
@@ -29,20 +30,8 @@ import { ToolError, workRecord } from '@/mcp/work';
 
 export const MAX_SEARCH_RESULTS = 30;
 
-type Row = {
-  work_id: string;
-  author: string | null;
-  title: string;
-  start_page: number;
-  end_page: number;
-  lang: string | null;
-  score: number | string;
-  text: string;
-  offset_checked_at: unknown;
-  offset_problem: string | null;
-  pagination_accepted_at: unknown;
-  pagination_basis: string | null;
-};
+// The query itself is nearestChunksTo() in lib/search.ts, shared with the
+// search page.
 
 export async function search(args: {
   query: string;
@@ -89,24 +78,11 @@ export async function search(args: {
   } catch (err) {
     throw new ToolError(`the query could not be embedded (${(err as Error).message})`);
   }
-  const vec = JSON.stringify(vector);
 
-  const [raw, coverage] = await Promise.all([
-    db()`
-    select c.work_id, w.author, w.title, c.start_page, c.end_page, c.lang,
-           1 - (c.embedding <=> ${vec}::vector) as score, c.text,
-           w.offset_checked_at, w.offset_problem, w.pagination_accepted_at, w.pagination_basis
-    from chunks c join works w on w.id = c.work_id
-    where c.embedding is not null
-      and (${front}::boolean or c.section_type is distinct from 'front')
-      and (${works}::text[] is null or c.work_id = any(${works}::text[]))
-      and (${lang}::text is null or c.lang = ${lang}::text)
-    order by c.embedding <=> ${vec}::vector
-    limit ${k}
-  `,
+  const [rows, coverage] = await Promise.all([
+    nearestChunksTo(vector, { works, lang, k, front }),
     works ? null : coverageCounts(),
   ]);
-  const rows = raw as Row[];
 
   return {
     query: args.query,

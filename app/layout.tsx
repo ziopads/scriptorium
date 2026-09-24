@@ -36,6 +36,7 @@ const NAV = [
   { href: '/lists', label: 'Lists' },
   { href: '/readiness', label: 'Readiness' },
   { href: '/works', label: 'Catalogue' },
+  { href: '/search', label: 'Search' },
   { href: '/notes', label: 'Notes' },
   { href: '/axes', label: 'Axes' },
   { href: '/projects', label: 'Projects' },
