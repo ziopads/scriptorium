@@ -2,14 +2,16 @@
 // behind OAuth (lib/oauth.ts).
 //
 // Phased (docs/HANDOFF.md, 23 Sept): find_works, then the read tools (deploy
-// 2), search (deploy 3), then the matcher and draft_note. Each tool is a port of the
-// same tool in pipeline/mcp_server.py, which remains the full set until then.
+// 2), search (deploy 3), then the matcher (lib/matcher.ts), find_quotation and
+// draft_note (deploy 4, three pushes). Each tool is a port of the same tool in
+// pipeline/mcp_server.py, which remains the full set until then.
 // Page numbers leave here as they leave the app: page_label with the asterisk,
 // page_verified as the notes export writes it (lib/page-verified.ts).
 
 import { createMcpHandler } from 'mcp-handler';
 import { z } from 'zod';
 
+import { findQuotation } from '@/mcp/tools/find-quotation';
 import { findWorks } from '@/mcp/tools/find-works';
 import { getStudyAid } from '@/mcp/tools/get-study-aid';
 import { listClaims } from '@/mcp/tools/list-claims';
@@ -20,7 +22,9 @@ import { ToolError } from '@/mcp/work';
 
 const INSTRUCTIONS = `Scriptorium holds a doctoral candidate's exam corpus: the books' page text, study aids, and her notes. This connection can read and search; it cannot yet write notes.
 
-Name every work by its full id; find_works gives it. Page numbers are printed pages. Every page number comes with page_label, the number as the app shows it, with an asterisk when the number is unverified; quote page_label (pages_label in search results), asterisk included, whenever you cite a page. page_verified is 'yes', 'hand set' (reviewed by a person) or 'no'. page_numbers explains the work's numbering in words. A work whose pages are not citable (never checked, or unsettled and not accepted) can still be read, but its page numbers are not citations.
+Name every work by its full id; find_works gives it. Page numbers are printed pages. Every page number comes with page_label, the number as the app shows it, with an asterisk when the number is unverified; quote page_label (pages_label in search and find_quotation results), asterisk included, whenever you cite a page. page_verified is 'yes', 'hand set' (reviewed by a person) or 'no'. page_numbers explains the work's numbering in words. A work whose pages are not citable (never checked, or unsettled and not accepted) can still be read, but its page numbers are not citations.
+
+find_quotation checks a quotation against the page text and returns the book's own words at the match and the page where they were found; quote what it returns, not what you sent.
 
 Study-aid sections and notes say whether she has reviewed them. An unreviewed section, or a note with origin 'assistant' and reviewed false, is a draft or a pending proposal, not her view; say so when you use it. Notes carry an attribution (author, own, other) saying whose claim they state.`;
 
@@ -94,6 +98,26 @@ export const handler = createMcpHandler(
     );
 
     server.registerTool(
+      'find_quotation',
+      {
+        title: 'Find quotation',
+        description:
+          "Look a passage up in a work's page text with the matcher that verifies every stored quotation. " +
+          'Exact on the named page and its neighbours, then the whole book; a close match (92 per cent of the ' +
+          'characters) on the named page and its neighbours only. Returns the book\'s own text at the match, ' +
+          'the printed page (page_label and pages_label are the forms to cite), whether the match was exact or ' +
+          'close, whether the page is front matter, and whether the work is citable. Use it to check a quotation ' +
+          'before quoting it.',
+        inputSchema: z.object({
+          work_id: z.string().describe('full work id'),
+          text: z.string().describe('the passage, copied exactly; at least 25 characters'),
+          near_page: z.number().int().optional().describe('printed page where it appears, if known'),
+        }),
+      },
+      async ({ work_id, text, near_page }) => run(() => findQuotation(work_id, text, near_page)),
+    );
+
+    server.registerTool(
       'get_study_aid',
       {
         title: 'Get study aid',
@@ -137,6 +161,6 @@ export const handler = createMcpHandler(
   },
   {
     instructions: INSTRUCTIONS,
-    serverInfo: { name: 'scriptorium', version: '0.3.0' },
+    serverInfo: { name: 'scriptorium', version: '0.4.0' },
   },
 );

@@ -8,11 +8,11 @@
 // carries page_label, the number as the app shows it.
 
 import { db } from '@/lib/db';
+import { FIRST_CITABLE_PAGE } from '@/lib/matcher';
 import { pageLabel } from '@/lib/page-verified';
 import { ToolError, citable, workRecord } from '@/mcp/work';
 
 export const MAX_PAGES_PER_READ = 10;
-const FIRST_CITABLE_PAGE = 1; // below this is front matter (dossier.py)
 
 type Row = { page_index: number; printed_page: number; folio: number | null; text: string };
 
