@@ -86,6 +86,17 @@ export default async function ComoClaudePage() {
           Cuando una conversación se alarga mucho, empieza otra.
         </p>
 
+        <H>Tus proyectos</H>
+        <p>
+          Un proyecto reúne las obras y las notas de un solo escrito, por ejemplo uno de
+          los cinco ensayos del examen. Se crean en{' '}
+          <Link href="/projects" className={link}>Projects</Link>; las obras se añaden
+          desde el catálogo y las notas desde Notes. Claude puede trabajar dentro de un
+          proyecto: nombra el proyecto en la pregunta («en mi proyecto Ensayo 1,
+          busca…») y puede limitar la búsqueda a sus obras y la lectura a sus notas.
+          También te dirá qué obras del proyecto no puede buscar.
+        </p>
+
         <H>Lo que Claude no puede saber</H>
         <ul className="list-disc space-y-2 pl-5">
           <li>
@@ -184,6 +195,17 @@ export default async function ComoClaudePage() {
           A very broad question makes many searches and uses up your usage limit.
           Splitting it helps: the folklore first, then the fiction, then the theory.
           When a conversation gets long, start a new one.
+        </p>
+
+        <H>Your projects</H>
+        <p>
+          A project gathers the works and notes for one piece of writing, such as one of
+          the five exam essays. Projects are made on{' '}
+          <Link href="/projects" className={link}>Projects</Link>; works are added from
+          the catalogue and notes from Notes. Claude can work inside a project: name it in
+          your question (&ldquo;in my project Essay 1, search&hellip;&rdquo;) and it can
+          limit its searches to that project&rsquo;s works and its reading to its notes.
+          It will also tell you which of the project&rsquo;s works it cannot search.
         </p>
 
         <H>What Claude cannot know</H>

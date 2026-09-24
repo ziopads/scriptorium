@@ -8,6 +8,10 @@ The page points to Gaps → Files for the works Claude cannot search, and
 says Claude can list them: the MCP servers' `list_gaps` tool gives the same
 list, by the same rule (`fileStates()` in `lib/gaps.ts`).
 
+The section on projects (added 24 Sept) rests on the servers' 0.7.0 tools:
+`list_projects`, and the `project` argument of `find_works`, `search` and
+`list_notes`. Its Spanish is a draft for Zazil to read.
+
 ---
 
 ## Español
@@ -51,6 +55,15 @@ el método. Puedes pegar esto al final:
 Una pregunta muy amplia hace muchas búsquedas y gasta tu límite de uso.
 Conviene dividirla: primero el folclor, luego la ficción, luego la teoría.
 Cuando una conversación se alarga mucho, empieza otra.
+
+### Tus proyectos
+
+Un proyecto reúne las obras y las notas de un solo escrito, por ejemplo uno de
+los cinco ensayos del examen. Se crean en Projects; las obras se añaden desde
+el catálogo y las notas desde Notes. Claude puede trabajar dentro de un
+proyecto: nombra el proyecto en la pregunta («en mi proyecto Ensayo 1,
+busca…») y puede limitar la búsqueda a sus obras y la lectura a sus notas.
+También te dirá qué obras del proyecto no puede buscar.
 
 ### Lo que Claude no puede saber
 
@@ -121,6 +134,15 @@ the method. You can paste this at the end:
 A very broad question makes many searches and uses up your usage limit.
 Splitting it helps: the folklore first, then the fiction, then the theory.
 When a conversation gets long, start a new one.
+
+### Your projects
+
+A project gathers the works and notes for one piece of writing, such as one of
+the five exam essays. Projects are made on the Projects page; works are added
+from the catalogue and notes from Notes. Claude can work inside a project: name
+it in your question ("in my project Essay 1, search…") and it can limit its
+searches to that project's works and its reading to its notes. It will also
+tell you which of the project's works it cannot search.
 
 ### What Claude cannot know
 

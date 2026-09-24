@@ -9,6 +9,9 @@ The design target is the dissertation that follows the exams, a horizon of
 roughly two years. The exam itself is an early slice: whatever is ready by then
 is a gain, and nothing is compromised to reach it.
 
+Deployed at `https://scriptorium-mauve.vercel.app`; the remote MCP server is at
+`/api/mcp` on the same host.
+
 ## Where the thinking is written down
 
 Read these before changing anything structural. Each carries a changelog and the
@@ -16,25 +19,31 @@ reasoning behind decisions that already look settled.
 
 | File | What it holds |
 |---|---|
-| `docs/REQUIREMENTS.md` | What it has to do. User stories with stable identifiers, decisions and their reasons, acceptance criteria. |
-| `docs/ARCHITECTURE.md` | How it is built. Storage budget, schema departures, the MCP surface, and a section separating what was verified from what is recalled. |
+| `docs/REQUIREMENTS.md` | What it has to do: user stories, decisions and their reasons, acceptance criteria. |
+| `docs/ARCHITECTURE.md` | How it is built: what runs where, storage, schema, the MCP servers, the runtime model call, the repository, the environment. |
+| `docs/PIPELINE.md` | How files on disk become rows: the batch, the gate, which file a work reads, space, traps. |
+| `docs/PAGE-NUMBERS.md` | Printed page numbers: offsets, ranges, accepted pagination, the unverified-page marker. |
+| `docs/NOTES-AND-CONNECTIONS.md`, `docs/ERD.md` | The notes model and its diagram. |
+| `docs/COMO-TOMAR-NOTAS.md`, `docs/COMO-PREGUNTAR.md` | Her instructions, the source of the wording on `/como` and `/como/claude`. |
 
-A third document, `docs/HANDOFF.md`, records the original design conversation
-including what was rejected and why. It is deliberately untracked — it carries
-identifying detail and nothing in the codebase depends on it.
+`docs/HANDOFF.md` is the running handoff between working sessions: what was
+done, what is outstanding, what went wrong. It is gitignored because it names
+works from her exam list.
 
 ## Stack
 
 - **Next.js** with the App Router, TypeScript, Tailwind
-- **Neon** serverless Postgres with `pgvector` — chosen over Supabase because
-  Supabase's free tier pauses a project after seven days of inactivity and holds
-  it until someone opens the dashboard, which for a reader who works in bursts
-  over two years means her notes go dark while she is at a conference
-- **Cloudflare R2** for extracted page text, keeping roughly 70 MB out of a
-  0.5 GB database cap
-- **Vercel** for the application and, later, for the MCP route
+- **Neon** serverless Postgres with `pgvector`, holding the catalogue, the page
+  text, the chunks and their vectors, notes and study aids. Chosen over
+  Supabase because Supabase's free tier pauses a project after seven days of
+  inactivity and holds it until someone opens the dashboard, which for a reader
+  who works in bursts over two years means her notes go dark while she is at a
+  conference
+- **Voyage** (voyage-4, 1024 dimensions) for embeddings: the corpus once,
+  offline; a search query at runtime
+- **Vercel** for the application and the remote MCP server
 
-The extraction pipeline is local Python and never deploys.
+The corpus pipeline is local Python in `pipeline/` and never deploys.
 
 ## Running it
 
@@ -43,18 +52,20 @@ npm install
 npm run dev
 ```
 
-Four variables in `.env.local`:
+The variables and who reads each are in `docs/ARCHITECTURE.md` §10. They live in
+`.env.local` for development and the pipeline, and in Vercel's settings for the
+deployment; a changed Vercel variable reaches only a new build. Never append to
+`.env.local` without first making sure it ends in a newline.
 
-| Variable | Where it comes from |
-|---|---|
-| `DATABASE_URL` | written by `neon link`; the pooled `-pooler` host |
-| `NEON_AUTH_BASE_URL` | Neon Console → Auth → Configuration |
-| `NEON_AUTH_COOKIE_SECRET` | `openssl rand -base64 32` |
-| `ALLOWED_EMAILS` | comma-separated; this is the whole access model |
+**`npx tsc --noEmit` before every push.** `next dev` strips types without
+checking them; Vercel's build checks them, so a type error fails the deploy. If
+it complains about a module under `.next/dev/types`, a route was deleted and the
+generated validator is stale: `rm -rf .next`.
 
-`npx tsc --noEmit` before committing. If it complains about a module under
-`.next/dev/types`, a route was deleted and the generated validator is stale:
-`rm -rf .next`.
+Deploying is `git push origin main`; watch Vercel's Deployments for Ready.
+
+The pipeline runs as `pipeline/.venv/bin/python3 pipeline/<script>.py`, naming
+works by full id or `--pending N`. `docs/PIPELINE.md` has the batch.
 
 The first request after five idle minutes is slow: Neon suspends the compute and
 wakes it on the next query.
@@ -72,45 +83,37 @@ POST endpoint that exists whether or not anyone rendered its form. The guard
 fails closed: an unset variable admits nobody, so an unexpected `/auth/denied`
 means check the environment before the account.
 
+The remote MCP server uses the same sign-in: the application is its own OAuth
+authorization server, and its consent screen sits behind `ALLOWED_EMAILS`
+(`docs/ARCHITECTURE.md` §7).
+
 Accounts are created through a sign-up call, not through the console's **Create
 user** button — that button makes an identity row without a credential, and such
 an account cannot sign in. The temporary page that did this has been deleted;
 adding a third person means restoring it briefly or using the Admin plugin.
 
-There is no password reset. See `docs/REQUIREMENTS.md` §8.9.
+There is no password reset. See `docs/REQUIREMENTS.md` §8, item 9.
 
 ## Database
 
+The schema is the numbered migrations in `db/`, applied and recorded by
+`pipeline/migrate.py`:
+
 ```
-db/schema.sql       authoritative; run once per database
-db/seed-books.sql   85 rows transcribed from the reading list; re-runnable
+pipeline/.venv/bin/python3 pipeline/migrate.py --status    what is applied, what is pending
+pipeline/.venv/bin/python3 pipeline/migrate.py --dry-run   name what would run
+pipeline/.venv/bin/python3 pipeline/migrate.py             apply what is pending
 ```
 
-The seed's header records its transcription rules — where gaps were left null,
-which two source errors were corrected, and which entries named two works and
-became two rows.
+Run `--status` before pushing code that depends on a migration. `db/schema.sql`
+stops at migration 002 and is not authoritative (`docs/ARCHITECTURE.md` §5).
 
 ## Layout
 
-```
-app/
-  page.tsx              the four lists with counts
-  books/                catalogue, one record, the edit form
-  gaps/                 incomplete records, one form per row
-  auth/sign-in/         the only credential surface
-  auth/denied/          signed in, not on the allowlist
-  api/auth/[...path]/   proxies Managed Better Auth
-lib/
-  db.ts                 the Neon connection
-  types.ts              row shapes, matching the schema column-for-column
-  books.ts, notes.ts    queries, shared by pages and later by MCP tools
-  citation.ts           Chicago 17th, generated from one book record
-  actions.ts            Server Actions
-  auth/                 the Neon Auth client and the allowlist guard
-proxy.ts                requires a session; Next 16's middleware
-db/                     schema and seed
-docs/                   requirements, architecture, handoff
-```
+`docs/ARCHITECTURE.md` §9. In short: `app/` the routes, `components/`, `lib/`
+the reads, writes and rules shared by pages and tools, `mcp/` the remote MCP
+server, `pipeline/` the local Python, `db/` the migrations, `tests/matcher/` the
+quotation matcher's fixtures, `docs/`.
 
 ## Conventions
 
@@ -119,36 +122,33 @@ inputs are normalised to null so that a record cannot look filled while being
 empty.
 
 **Citation correctness outranks recall.** A passage returned with the wrong
-printed page is worse than a passage not returned. `page_offset` exists because a
-file's page 30 is often printed page 12.
+printed page is worse than a passage not returned. Every page number leaves the
+application one way, through `lib/page-verified.ts`: `page_label` with an
+asterisk when the work's numbering is unverified, and `page_verified`.
 
-**Identifiers are permanent.** `books.id` is the primary key, notes and chunks
+**Identifiers are permanent.** `works.id` is the primary key, notes and chunks
 reference it, and it appears in URLs. The edit form displays it and will not
 change it.
 
-**Mutations are Server Actions.** Plain `<form action={...}>`, no client
-JavaScript in the mutation path, no API routes to secure separately. `lib/` stays
-server-only because `db()` reads the connection string.
+**Mutations are Server Actions.** No API routes to secure separately. `lib/`
+stays server-only because `db()` reads the connection string.
 
-**One model call at runtime.** Vivarium's rule is that the application never
-calls a language model at runtime; semantic search cannot hold that line, so the
-narrowed version is: the only runtime model call is embedding a search query, and
-no text is ever generated inside the application. Position cards are written by
-hand through a Claude subscription and entered as reviewed text.
+**One model call at runtime:** embedding a search query. No text is generated
+inside the application; study aids are generated offline and proposals arrive
+through `draft_note`, both for her review (`docs/ARCHITECTURE.md` §8).
 
-**Explicit environment files.** `node --env-file=...`, never an implicit default.
-Files are named at `git add`; never `git add -A`.
+**The two MCP servers change together**, with identical instructions text
+(`docs/ARCHITECTURE.md` §7).
+
+**Files are named at `git add`;** never `git add -A`.
 
 ## State
 
-Working: sign-in behind a two-address allowlist, the catalogue, list membership,
-the Chicago citation forms, reading status, the edit form, and the gaps page for
-filling incomplete records.
+Working, deployed: the catalogue and reading lists, the workbench (a book's
+pages, contents, study aid and notes beside a note form that takes a selected
+passage with its page), notes, axes and their review queues, the Gaps tabs, the
+readiness matrix, projects with their works cited in Chicago 17th and 18th and
+MLA, and the remote MCP server (0.7.0) behind OAuth, which is where semantic
+search over the corpus lives; the application itself has no search page yet.
 
-Not built yet: the notes write path, password reset, extraction, chunking,
-embeddings, search, position cards, and the MCP server. The build sequence and
-what blocks each stage are in `docs/ARCHITECTURE.md`.
-
-Not yet deployed. Vercel will need all four environment variables, and
-`ALLOWED_EMAILS` is the one that must be confirmed before the first deployment
-rather than after.
+What is outstanding is in `docs/HANDOFF.md`.

@@ -1,7 +1,7 @@
 # The corpus pipeline
 
-**Version:** 0.2
-**Date:** 2026-09-23
+**Version:** 0.3
+**Date:** 2026-09-24
 **Scope:** How files on disk become rows in the database. Page numbering —
 offsets, ranges, accepted pagination and the unverified-page marker — is in
 `PAGE-NUMBERS.md`. The application is in `ARCHITECTURE.md`; what it has to do
@@ -12,6 +12,7 @@ carries none.
 
 ## Changelog
 
+- **0.3** (2026-09-24) — §8: the `.env.local` append trap.
 - **0.2** (2026-09-23) — Rewritten against the code. The seven-stage batch,
   the gate, which file a work reads, space. The seeding scripts kept as
   history. Page numbering moved to `PAGE-NUMBERS.md`.
@@ -338,3 +339,14 @@ work is named in `load_chunks` (§1).
 
 **The batch log's name is literal**: `/tmp/scriptorium-batch-N.log`, the `N`
 unexpanded, so each batch overwrites the last. Rename it per batch.
+
+**Appending to a file that does not end in a newline glues the new line onto
+the last one.** On 23 September `echo "MCP_PATH_KEY=…" >> .env.local` ran
+against a `.env.local` with no final newline; the new text joined the
+`VOYAGE_API_KEY` line and Voyage rejected the key until the line was repaired
+on the 24th. Before any `>>`, make sure the file ends in a newline:
+
+    [ -n "$(tail -c1 FILE)" ] && echo >> FILE
+
+Then check the key by its length or its last four characters, never by
+printing it.
