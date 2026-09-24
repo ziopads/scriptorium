@@ -2,6 +2,7 @@ import { getAllowedUser } from '@/lib/auth/guard';
 import { formatNote, plain } from '@/lib/citation';
 import { csvResponse, toCsv } from '@/lib/csv';
 import { listAllNotes, getAxisTree } from '@/lib/notes';
+import { pageVerified } from '@/lib/page-verified';
 import { listWorks, unverifiedPages } from '@/lib/works';
 import type { NoteWithRelations, Work } from '@/lib/types';
 
@@ -116,7 +117,7 @@ export async function GET() {
         work_author: t.work_author,
         work_title: t.work_title,
         printed_page: t.printed_page,
-        page_verified: pageVerified(work, t.printed_page, unverified),
+        page_verified: rowPageVerified(work, t.printed_page, unverified),
         quote: t.quote,
         translation: t.translation,
         body: note.body,
@@ -147,15 +148,13 @@ export async function GET() {
   return csvResponse('scriptorium-notes', toCsv(columns, rows));
 }
 
-function pageVerified(
+function rowPageVerified(
   work: Work | undefined,
   page: number | null,
   unverified: Set<string>,
 ): string {
   if (!work || page === null) return '';
-  if (unverified.has(work.id)) return 'no';
-  if (work.pagination_basis === 'hand_set') return 'hand set';
-  return 'yes';
+  return pageVerified(unverified.has(work.id), work.pagination_basis);
 }
 
 // formatNote ends a citation with ", {page}." (lib/citation.ts). The mark goes

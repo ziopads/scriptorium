@@ -1,10 +1,9 @@
 // find_works, ported from pipeline/mcp_server.py. Same query, same matching
-// (accents and case ignored, on id, author and title), same fields, same cap —
-// except internal_note, which is left out while the remote server is protected
-// by its URL alone (deploy 1). It returns once the server sits behind OAuth.
+// (accents and case ignored, on id, author and title), same fields, same cap,
+// plus page_verified as the app and the notes export give it.
 
 import { db } from '@/lib/db';
-import { numbering, pageNumbers } from '@/mcp/numbering';
+import { ToolError, toRecord } from '@/mcp/work';
 
 export const MAX_WORKS_LISTED = 25;
 
@@ -13,9 +12,10 @@ type Row = {
   author: string | null;
   title: string | null;
   year: number | null;
-  offset_checked_at: string | null;
+  offset_checked_at: unknown;
   offset_problem: string | null;
-  pagination_accepted_at: string | null;
+  notes_internal: string | null;
+  pagination_accepted_at: unknown;
   pagination_basis: string | null;
   has_pages: boolean;
   searchable: boolean;
@@ -31,12 +31,12 @@ export function fold(value: string | null): string {
 
 export async function findWorks(query: string) {
   const needle = fold(query).trim();
-  if (!needle) throw new Error('give part of an author, title or id');
+  if (!needle) throw new ToolError('give part of an author, title or id');
 
   const sql = db();
   const rows = (await sql`
     select w.id, w.author, w.title, w.year, w.offset_checked_at, w.offset_problem,
-           w.pagination_accepted_at, w.pagination_basis,
+           w.notes_internal, w.pagination_accepted_at, w.pagination_basis,
            exists (select 1 from pages p where p.work_id = w.id) as has_pages,
            exists (select 1 from chunks c where c.work_id = w.id
                    and c.embedding is not null) as searchable
@@ -51,15 +51,16 @@ export async function findWorks(query: string) {
         fold(r.title).includes(needle),
     )
     .map((r) => {
-      const checked = r.offset_checked_at !== null;
-      const accepted = r.pagination_accepted_at !== null;
+      const w = toRecord({ ...r, title: r.title ?? '' });
       return {
-        id: r.id,
-        author: r.author,
+        id: w.id,
+        author: w.author,
         title: r.title,
-        year: r.year,
-        numbering: numbering(checked, r.offset_problem, accepted, r.pagination_basis),
-        page_numbers: pageNumbers(checked, r.offset_problem, accepted, r.pagination_basis),
+        year: w.year,
+        numbering: w.numbering,
+        page_numbers: w.page_numbers,
+        page_verified: w.page_verified,
+        internal_note: w.internal_note,
         has_pages: r.has_pages,
         searchable: r.searchable,
       };

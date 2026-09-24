@@ -7,7 +7,8 @@
 // The rule is docs/PAGE-NUMBERS.md §3: a work is marked when offset_problem is
 // set and pagination_basis is anything but hand_set, a null basis counting as
 // marked. Acceptance takes precedence over offset_problem for citability, and
-// changes the wording, not the mark.
+// changes the wording, not the mark. The mark itself, and page_verified, are
+// in lib/page-verified.ts, shared with the notes export.
 
 export function numbering(
   checked: boolean,
