@@ -127,10 +127,18 @@ export async function addListWorks(projectId: number, listId: string): Promise<n
   return rows.length;
 }
 
-export async function removeProjectWork(projectId: number, workId: string): Promise<void> {
+// Only works added to the project can be taken out. A work reached through a
+// note stays until the note leaves.
+export async function removeProjectWorks(projectId: number, workIds: string[]): Promise<number> {
+  if (workIds.length === 0) return 0;
   const sql = db();
-  await sql`delete from project_works where project_id = ${projectId} and work_id = ${workId}`;
+  const rows = (await sql`
+    delete from project_works
+    where project_id = ${projectId} and work_id = any(${workIds}::text[])
+    returning work_id
+  `) as { work_id: string }[];
   await touch(projectId);
+  return rows.length;
 }
 
 export async function addProjectNotes(projectId: number, noteIds: number[]): Promise<number> {

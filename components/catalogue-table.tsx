@@ -1,10 +1,12 @@
 'use client';
 
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 
 import { Stars } from '@/components/stars';
 import { characterizeSelection } from '@/lib/actions';
+import { addWorksToProject, removeWorksFromProject } from '@/lib/project-actions';
 import {
   PURPOSE_CODE,
   PURPOSE_LABEL,
@@ -20,8 +22,14 @@ import {
 // and ticking 125 rows one at a time is a real cost. The mutation is still a
 // Server Action — only the selecting happens here.
 //
-// One selection drives both jobs: characterize the ticked works, or build a
-// works cited from them.
+// One selection drives three jobs: characterize the ticked works, build a
+// works cited from them, or put them into (or take them out of) a project.
+//
+// The project is chosen by the page's ?project= parameter, so the server can
+// mark the rows already in it; choosing another in the bar reloads the page
+// with the new parameter, and the selection survives in session storage. The
+// project buttons act on their own: they never touch purpose, standing or
+// rating, and Apply never touches a project.
 
 export interface Row {
   id: string;
@@ -75,7 +83,20 @@ function fold(value: string): string {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 }
 
-export function CatalogueTable({ rows }: { rows: Row[] }) {
+export function CatalogueTable({
+  rows,
+  projects = [],
+  project = null,
+  membership = {},
+}: {
+  rows: Row[];
+  projects?: { id: number; name: string }[];
+  // The project chosen by ?project=, and how each work belongs to it: added,
+  // or reached through one of its notes (lib/projects.ts).
+  project?: number | null;
+  membership?: Record<string, 'added' | 'notes'>;
+}) {
+  const router = useRouter();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkPurpose, setBulkPurpose] = useState<string>(NO_CHANGE);
   const [bulkStanding, setBulkStanding] = useState<string>(NO_CHANGE);
@@ -234,6 +255,38 @@ export function CatalogueTable({ rows }: { rows: Row[] }) {
     });
   }
 
+  const projectName = projects.find((p) => p.id === project)?.name ?? null;
+
+  // Reload with another ?project=, keeping the other filters.
+  function chooseProject(value: string) {
+    const params = new URLSearchParams(window.location.search);
+    if (value) params.set('project', value);
+    else params.delete('project');
+    const qs = params.toString();
+    router.push(qs ? `/works?${qs}` : '/works');
+  }
+
+  function changeProject(direction: 'add' | 'remove') {
+    const ids = [...selected];
+    if (project === null || ids.length === 0) return;
+
+    startTransition(async () => {
+      const { changed } =
+        direction === 'add'
+          ? await addWorksToProject(project, ids)
+          : await removeWorksFromProject(project, ids);
+      setNote(
+        direction === 'add'
+          ? `${changed} added to ${projectName}`
+          : `${changed} taken out of ${projectName}`,
+      );
+      setSelected(new Set());
+      setShowSelected(false);
+      anchorRef.current = null;
+      router.refresh();
+    });
+  }
+
   const worksCitedHref =
     '/works-cited?' + [...selected].map((id) => `id=${encodeURIComponent(id)}`).join('&');
   const allSelected = visible.length > 0 && visible.every((r) => selected.has(r.id));
@@ -387,6 +440,41 @@ export function CatalogueTable({ rows }: { rows: Row[] }) {
             Works cited
           </a>
 
+          {projects.length > 0 ? (
+            <span className="flex flex-wrap items-center gap-2 border-l border-rule pl-3">
+              <select
+                value={project === null ? '' : String(project)}
+                onChange={(e) => chooseProject(e.target.value)}
+                aria-label="Project"
+                className="w-auto max-w-56"
+              >
+                <option value="">Project…</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={String(p.id)}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={() => changeProject('add')}
+                disabled={pending || project === null}
+                className="text-sm text-accent hover:underline disabled:opacity-50"
+              >
+                Add to project
+              </button>
+              <button
+                type="button"
+                onClick={() => changeProject('remove')}
+                disabled={pending || project === null}
+                className="text-sm text-muted hover:text-accent disabled:opacity-50"
+                title="Takes out works added to the project. A work reached through one of its notes stays until the note leaves."
+              >
+                Take out of project
+              </button>
+            </span>
+          ) : null}
+
           <button
             type="button"
             onClick={() => {
@@ -451,6 +539,15 @@ export function CatalogueTable({ rows }: { rows: Row[] }) {
                         setRated((prev) => new Map(prev).set(row.id, v))
                       }
                     />
+                    {membership[row.id] === 'added' ? (
+                      <span className="text-accent" title={`Added to ${projectName}`}>
+                        in project
+                      </span>
+                    ) : membership[row.id] === 'notes' ? (
+                      <span title={`In ${projectName} through one of its notes`}>
+                        via notes
+                      </span>
+                    ) : null}
                     {row.kind !== 'monograph' ? <span>{row.kind.replace('_', ' ')}</span> : null}
                     <span
                       title={PURPOSE_LABEL[row.purpose]}

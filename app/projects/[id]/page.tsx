@@ -9,20 +9,19 @@ import { readableDay } from '@/lib/dates';
 import { listNotesByIds } from '@/lib/notes';
 import {
   addListToProject,
-  addWorkToProject,
   removeNoteFromProject,
   removeProject,
-  removeWorkFromProject,
   saveProject,
 } from '@/lib/project-actions';
 import { PROJECT_KINDS, getProject, projectNoteIds, projectWorks } from '@/lib/projects';
 import { preparationFor, type Preparation } from '@/lib/readiness';
-import { listExamLists, listWorks } from '@/lib/works';
+import { listExamLists } from '@/lib/works';
 
 export const dynamic = 'force-dynamic';
 
 // One project: its works with their readiness, its notes, and its works
-// cited. Works are added here; notes are added from the Notes page, by
+// cited. Works are added and taken out in the catalogue (/works?project=),
+// where the selection bar ticks them in batches; notes from the Notes page, by
 // ticking them and choosing the project, the same bar that tags them. An
 // axis added there brings its fichas, synthesis and exam move.
 //
@@ -44,11 +43,10 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const project = await getProject(projectId);
   if (!project) notFound();
 
-  const [members, noteIds, lists, works] = await Promise.all([
+  const [members, noteIds, lists] = await Promise.all([
     projectWorks(projectId),
     projectNoteIds(projectId),
     listExamLists(),
-    listWorks(),
   ]);
   const [prep, notes] = await Promise.all([
     preparationFor(members.map((m) => m.work_id)),
@@ -67,9 +65,6 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
     .sort(sortByAuthor);
   const all = [...added, ...reached];
   const t = tally(all);
-
-  const addedIds = new Set(added.map((w) => w.id));
-  const addable = works.filter((w) => !addedIds.has(w.id));
 
   const cited = (style: string) =>
     `/works-cited?project=${project.id}${style === 'chicago' ? '' : `&style=${style}`}`;
@@ -129,27 +124,13 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           </>
         )}
 
-        <div className="flex flex-wrap items-end gap-x-6 gap-y-3 border-t border-rule pt-3 text-sm">
-          <form action={addWorkToProject} className="flex min-w-72 flex-1 items-end gap-2">
-            <input type="hidden" name="project_id" value={project.id} />
-            <label className="flex-1 space-y-1">
-              <span className="text-xs text-muted">Add a work</span>
-              <select name="work_id" required defaultValue="">
-                <option value="" disabled>
-                  Choose a work
-                </option>
-                {addable.map((w) => (
-                  <option key={w.id} value={w.id}>
-                    {w.author ?? w.editor ?? '—'}, {w.title}
-                    {w.year !== null ? ` (${w.year})` : ''}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button type="submit" className="text-xs text-accent hover:underline">
-              Add
-            </button>
-          </form>
+        <div className="flex flex-wrap items-baseline gap-x-6 gap-y-3 border-t border-rule pt-3 text-sm">
+          <Link
+            href={`/works?project=${project.id}`}
+            className="border border-accent px-3 py-1 text-accent hover:bg-accent hover:text-background"
+          >
+            Add or take out works in the catalogue
+          </Link>
 
           {project.list_id ? (
             <form action={addListToProject}>
@@ -161,27 +142,6 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
             </form>
           ) : null}
 
-          {added.length > 0 ? (
-            <form action={removeWorkFromProject} className="flex items-end gap-2">
-              <input type="hidden" name="project_id" value={project.id} />
-              <label className="space-y-1">
-                <span className="text-xs text-muted">Take a work out</span>
-                <select name="work_id" required defaultValue="">
-                  <option value="" disabled>
-                    Choose a work
-                  </option>
-                  {added.map((w) => (
-                    <option key={w.id} value={w.id}>
-                      {w.author ?? w.editor ?? '—'}, {w.title}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button type="submit" className="text-xs text-muted hover:text-accent">
-                Remove
-              </button>
-            </form>
-          ) : null}
         </div>
         <p className="text-xs text-muted">
           A work reached through a note leaves the project when the note does.

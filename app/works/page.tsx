@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { CatalogueTable, type Row } from '@/components/catalogue-table';
 import { requireAllowedUser } from '@/lib/auth/guard';
 import { formatBibliography } from '@/lib/citation';
+import { listProjects, projectWorks } from '@/lib/projects';
 import {
   examinableIds,
   listExamLists,
@@ -15,20 +16,39 @@ export const dynamic = 'force-dynamic';
 
 const PURPOSES: Purpose[] = ['comps', 'both', 'dissertation', 'unassigned'];
 
+// ?project= chooses the project the selection bar adds to and takes out of
+// (migration 019), and marks the rows already in it. A project page links
+// here to pick its works. The parameter rides along on every filter link.
 export default async function WorksPage({
   searchParams,
 }: {
-  searchParams: Promise<{ list?: string; source?: string; purpose?: string; kind?: string }>;
+  searchParams: Promise<{
+    list?: string;
+    source?: string;
+    purpose?: string;
+    kind?: string;
+    project?: string;
+  }>;
 }) {
   await requireAllowedUser();
 
-  const { list, source, purpose, kind } = await searchParams;
+  const { list, source, purpose, kind, project: rawProject } = await searchParams;
 
-  const [lists, all, examinable] = await Promise.all([
+  const [lists, all, examinable, projects] = await Promise.all([
     listExamLists(),
     list ? listWorksInList(list) : listWorks(),
     examinableIds(),
+    listProjects(),
   ]);
+
+  const chosen = projects.find((p) => String(p.id) === rawProject) ?? null;
+  const membership: Record<string, 'added' | 'notes'> = {};
+  if (chosen) {
+    for (const m of await projectWorks(chosen.id)) {
+      membership[m.work_id] = m.added ? 'added' : 'notes';
+    }
+  }
+  const project = chosen ? String(chosen.id) : undefined;
 
   const byId = new Map(all.map((w) => [w.id, w]));
 
@@ -85,7 +105,7 @@ export default async function WorksPage({
 
   const query = (extra: Record<string, string | undefined>) => {
     const params = new URLSearchParams();
-    for (const [key, value] of Object.entries({ list, source, purpose, kind, ...extra })) {
+    for (const [key, value] of Object.entries({ list, source, purpose, kind, project, ...extra })) {
       if (value) params.set(key, value);
     }
     const string = params.toString();
@@ -94,6 +114,19 @@ export default async function WorksPage({
 
   return (
     <div className="space-y-6">
+      {chosen ? (
+        <p className="border-l-2 border-accent pl-3 text-sm">
+          Choosing works for{' '}
+          <Link href={`/projects/${chosen.id}`} className="text-accent hover:underline">
+            {chosen.name}
+          </Link>
+          : tick works, then Add to project or Take out of project in the bar.{' '}
+          <Link href={query({ project: undefined })} className="text-xs text-muted hover:text-accent">
+            stop
+          </Link>
+        </p>
+      ) : null}
+
       <div>
         <h1 className="text-2xl mb-1">{active ? active.name : 'Catalogue'}</h1>
         <p className="text-sm text-muted">
@@ -165,7 +198,12 @@ export default async function WorksPage({
         </Link>
       </nav>
 
-      <CatalogueTable rows={rows} />
+      <CatalogueTable
+        rows={rows}
+        projects={projects.map((p) => ({ id: p.id, name: p.name }))}
+        project={chosen ? chosen.id : null}
+        membership={membership}
+      />
     </div>
   );
 }

@@ -16,7 +16,7 @@ import {
   createProject,
   deleteProject,
   removeProjectNote,
-  removeProjectWork,
+  removeProjectWorks,
   updateProject,
   type ProjectInput,
   type ProjectKind,
@@ -78,12 +78,29 @@ export async function removeProject(form: FormData): Promise<void> {
   redirect('/projects');
 }
 
-export async function addWorkToProject(form: FormData): Promise<void> {
+// From the catalogue's selection bar: the ticked works into, or out of, one
+// project. Only works added to it can be taken out; a work reached through a
+// note stays until the note leaves.
+export async function addWorksToProject(
+  project: number,
+  workIds: string[],
+): Promise<{ changed: number }> {
   await requireAllowedUser();
-  const id = projectId(form);
-  const workId = text(form, 'work_id');
-  if (workId) await addProjectWorks(id, [workId]);
-  refresh(id);
+  const changed = await addProjectWorks(project, workIds);
+  refresh(project);
+  revalidatePath('/works');
+  return { changed };
+}
+
+export async function removeWorksFromProject(
+  project: number,
+  workIds: string[],
+): Promise<{ changed: number }> {
+  await requireAllowedUser();
+  const changed = await removeProjectWorks(project, workIds);
+  refresh(project);
+  revalidatePath('/works');
+  return { changed };
 }
 
 export async function addListToProject(form: FormData): Promise<void> {
@@ -91,14 +108,6 @@ export async function addListToProject(form: FormData): Promise<void> {
   const id = projectId(form);
   const listId = text(form, 'list_id');
   if (listId) await addListWorks(id, listId);
-  refresh(id);
-}
-
-export async function removeWorkFromProject(form: FormData): Promise<void> {
-  await requireAllowedUser();
-  const id = projectId(form);
-  const workId = text(form, 'work_id');
-  if (workId) await removeProjectWork(id, workId);
   refresh(id);
 }
 
