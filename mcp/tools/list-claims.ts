@@ -6,7 +6,8 @@ import { db } from '@/lib/db';
 import { anchorsFor } from '@/mcp/anchors';
 import { workRecord } from '@/mcp/work';
 
-type Row = { id: number; body: string; tags: string[] | null };
+// bigint id: the Neon HTTP driver returns it as a string; returned as a number, as the Python does.
+type Row = { id: string; body: string; tags: string[] | null };
 
 export async function listClaims(workId: string) {
   await workRecord(workId);
@@ -16,9 +17,14 @@ export async function listClaims(workId: string) {
       and exists (select 1 from note_anchors a where a.note_id = n.id and a.work_id = ${workId})
     order by n.id
   `) as Row[];
-  const anchors = await anchorsFor(rows.map((r) => r.id));
+  const anchors = await anchorsFor(rows.map((r) => Number(r.id)));
   return {
     work_id: workId,
-    claims: rows.map((r) => ({ id: r.id, claim: r.body, tags: r.tags, quotations: anchors.get(r.id) ?? [] })),
+    claims: rows.map((r) => ({
+      id: Number(r.id),
+      claim: r.body,
+      tags: r.tags,
+      quotations: anchors.get(Number(r.id)) ?? [],
+    })),
   };
 }

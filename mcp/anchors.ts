@@ -15,7 +15,7 @@ export type Quotation = {
 };
 
 type Row = {
-  note_id: number;
+  note_id: string; // bigint: the Neon HTTP driver returns it as a string
   work_id: string;
   printed_page: number | null;
   quote: string | null;
@@ -41,9 +41,9 @@ export async function anchorsFor(noteIds: number[]): Promise<Map<number, Quotati
       page_verified: r.printed_page === null ? '' : pageVerified(unverified, r.pagination_basis),
       quote: r.quote,
     };
-    const list = out.get(r.note_id) ?? [];
+    const list = out.get(Number(r.note_id)) ?? [];
     list.push(q);
-    out.set(r.note_id, list);
+    out.set(Number(r.note_id), list);
   }
   return out;
 }

@@ -14,7 +14,7 @@ import { ToolError, workRecord } from '@/mcp/work';
 export const MAX_NOTES_LISTED = 50;
 
 type Row = {
-  id: number;
+  id: string; // bigint: the Neon HTTP driver returns it as a string; returned as a number, as the Python does
   kind: string;
   title: string | null;
   body: string | null;
@@ -45,10 +45,10 @@ export async function listNotes(args: { work_id?: string | null; tag?: string | 
     order by n.id desc
     limit ${MAX_NOTES_LISTED}
   `) as Row[];
-  const anchors = await anchorsFor(rows.map((r) => r.id));
+  const anchors = await anchorsFor(rows.map((r) => Number(r.id)));
   return {
     notes: rows.map((r) => ({
-      id: r.id,
+      id: Number(r.id),
       kind: r.kind,
       title: r.title,
       body: r.body,
@@ -57,7 +57,7 @@ export async function listNotes(args: { work_id?: string | null; tag?: string | 
       origin: r.origin,
       reviewed: r.reviewed,
       tags: r.tags,
-      quotations: anchors.get(r.id) ?? [],
+      quotations: anchors.get(Number(r.id)) ?? [],
     })),
   };
 }

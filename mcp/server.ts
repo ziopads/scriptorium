@@ -195,6 +195,6 @@ export const handler = createMcpHandler(
   },
   {
     instructions: INSTRUCTIONS,
-    serverInfo: { name: 'scriptorium', version: '0.5.0' },
+    serverInfo: { name: 'scriptorium', version: '0.5.1' },
   },
 );
