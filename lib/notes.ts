@@ -148,6 +148,22 @@ export async function getNote(id: number): Promise<NoteWithRelations | null> {
   return (await withRelations(notes))[0];
 }
 
+// Several notes by id, in the order given, rejected ones left out. For a
+// project's notes (lib/projects.ts projectNoteIds).
+export async function listNotesByIds(ids: number[]): Promise<NoteWithRelations[]> {
+  if (ids.length === 0) return [];
+  const sql = db();
+  const notes = (await sql`
+    select id, kind, parent_id, ordinal, title, body, attribution, attributed_to,
+           tags, origin, reviewed, rejected_at, created_at, updated_at
+    from notes
+    where id = any(${ids}::bigint[]) and rejected_at is null
+  `) as Note[];
+  const order = new Map(ids.map((id, i) => [id, i]));
+  notes.sort((a, b) => (order.get(Number(a.id)) ?? 0) - (order.get(Number(b.id)) ?? 0));
+  return withRelations(notes);
+}
+
 export async function listNotesByTag(tag: string): Promise<NoteWithRelations[]> {
   const sql = db();
   const notes = (await sql`

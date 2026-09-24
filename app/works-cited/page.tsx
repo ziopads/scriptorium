@@ -2,6 +2,7 @@ import Link from 'next/link';
 
 import { requireAllowedUser } from '@/lib/auth/guard';
 import { formatBibliography, plain, type Style } from '@/lib/citation';
+import { getProject, projectWorks } from '@/lib/projects';
 import { getWork } from '@/lib/works';
 import type { Work } from '@/lib/types';
 
@@ -14,19 +15,41 @@ export const dynamic = 'force-dynamic';
 //
 // The selection arrives as repeated ?id= parameters because the form uses GET,
 // so the result is a URL she can bookmark, re-open, or send to her advisor
-// without re-ticking a hundred boxes. ?style= switches between Chicago and MLA:
-// the record holds a superset of what either needs, so the style is a function.
+// without re-ticking a hundred boxes. ?project= takes a project's works instead
+// (lib/projects.ts: its works and the works its notes reach), so a project's
+// works cited stays current as the project grows.
+//
+// ?style= is chicago (17th, the default), chicago18 or mla: the record holds a
+// superset of what each needs, so the style is a function. Both Chicago
+// editions are offered so she can cite by whichever her department asks for.
+
+const STYLE_LABEL: Record<Style, string> = {
+  chicago: 'Chicago 17th',
+  chicago18: 'Chicago 18th',
+  mla: 'MLA 9th',
+};
+
 export default async function WorksCitedPage({
   searchParams,
 }: {
-  searchParams: Promise<{ id?: string | string[]; style?: string }>;
+  searchParams: Promise<{ id?: string | string[]; style?: string; project?: string }>;
 }) {
   await requireAllowedUser();
 
-  const { id, style: rawStyle } = await searchParams;
-  const style: Style = rawStyle === 'mla' ? 'mla' : 'chicago';
+  const { id, style: rawStyle, project: rawProject } = await searchParams;
+  const style: Style =
+    rawStyle === 'mla' ? 'mla' : rawStyle === 'chicago18' ? 'chicago18' : 'chicago';
 
-  const ids = id === undefined ? [] : Array.isArray(id) ? id : [id];
+  const projectId = rawProject ? Number.parseInt(rawProject, 10) : Number.NaN;
+  const project = Number.isNaN(projectId) ? null : await getProject(projectId);
+
+  const ids = project
+    ? (await projectWorks(project.id)).map((m) => m.work_id)
+    : id === undefined
+      ? []
+      : Array.isArray(id)
+        ? id
+        : [id];
   const found = await Promise.all(ids.map((one) => getWork(one)));
   const works = found.filter((w): w is Work => w !== null);
 
@@ -55,19 +78,34 @@ export default async function WorksCitedPage({
 
   const incomplete = entries.filter((e) => e.citation.missing.length > 0);
   const text = entries.map((e) => plain(e.citation.text)).join('\n\n');
-  const other: Style = style === 'chicago' ? 'mla' : 'chicago';
-  const otherHref = `/works-cited?${ids.map((i) => `id=${encodeURIComponent(i)}`).join('&')}&style=${other}`;
+  const selection = project
+    ? `project=${project.id}`
+    : ids.map((i) => `id=${encodeURIComponent(i)}`).join('&');
+  const others = (Object.keys(STYLE_LABEL) as Style[]).filter((s) => s !== style);
+  const hrefFor = (s: Style) => `/works-cited?${selection}&style=${s}`;
 
   return (
     <div className="space-y-6">
       <header className="space-y-1">
+        {project ? (
+          <p className="text-xs text-muted">
+            <Link href={`/projects/${project.id}`} className="hover:text-accent">
+              {project.name}
+            </Link>
+          </p>
+        ) : null}
         <h1 className="text-2xl">Works cited</h1>
         <p className="text-sm text-muted">
-          {works.length} {works.length === 1 ? 'entry' : 'entries'} ·{' '}
-          {style === 'chicago' ? 'Chicago 17th' : 'MLA 9th'} · sorted by author ·{' '}
-          <Link href={otherHref} className="text-accent hover:underline">
-            switch to {other === 'chicago' ? 'Chicago' : 'MLA'}
-          </Link>
+          {works.length} {works.length === 1 ? 'entry' : 'entries'} · {STYLE_LABEL[style]} ·
+          sorted by author · switch to{' '}
+          {others.map((s, i) => (
+            <span key={s}>
+              {i > 0 ? ' or ' : null}
+              <Link href={hrefFor(s)} className="text-accent hover:underline">
+                {STYLE_LABEL[s]}
+              </Link>
+            </span>
+          ))}
         </p>
       </header>
 

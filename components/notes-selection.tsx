@@ -12,6 +12,7 @@ import {
 } from 'react';
 
 import { tagSelection } from '@/lib/actions';
+import { addSelectionToProject } from '@/lib/project-actions';
 
 // Selecting notes and tagging them in bulk.
 //
@@ -122,9 +123,18 @@ export function NoteCheckbox({ id }: { id: number }) {
   );
 }
 
-export function BulkTagBar({ knownTags }: { knownTags: string[] }) {
+// Also puts the ticked notes into a project (migration 019). An axis ticked
+// here brings its parts; lib/projects.ts reads them through parent_id.
+export function BulkTagBar({
+  knownTags,
+  projects = [],
+}: {
+  knownTags: string[];
+  projects?: { id: number; name: string }[];
+}) {
   const selection = useSelection();
   const [tag, setTag] = useState('');
+  const [project, setProject] = useState('');
   const [note, setNote] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -152,6 +162,19 @@ export function BulkTagBar({ knownTags }: { knownTags: string[] }) {
         }`,
       );
       setTag('');
+      selection.clear();
+    });
+  }
+
+  function addToProject() {
+    if (!selection || count === 0 || project === '') return;
+    const ids = [...selection.selected];
+    const target = Number(project);
+    const name = projects.find((p) => p.id === target)?.name ?? 'the project';
+
+    startTransition(async () => {
+      const { added } = await addSelectionToProject(target, ids);
+      setNote(`Added ${added} ${added === 1 ? 'note' : 'notes'} to ${name}`);
       selection.clear();
     });
   }
@@ -206,6 +229,32 @@ export function BulkTagBar({ knownTags }: { knownTags: string[] }) {
           >
             Remove tag
           </button>
+          {projects.length > 0 ? (
+            <span className="flex items-center gap-2">
+              <select
+                value={project}
+                onChange={(e) => setProject(e.target.value)}
+                aria-label="Project"
+                className="w-auto max-w-56"
+              >
+                <option value="">Project…</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={String(p.id)}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={addToProject}
+                disabled={pending || project === ''}
+                className="text-accent hover:underline disabled:opacity-50"
+              >
+                Add to project
+              </button>
+            </span>
+          ) : null}
+
           <button type="button" onClick={selection.clear} className="text-muted hover:text-accent">
             Clear
           </button>

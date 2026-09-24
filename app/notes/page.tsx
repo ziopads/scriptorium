@@ -17,6 +17,7 @@ import {
   listUnsupportedClaims,
   searchNotes,
 } from '@/lib/notes';
+import { listProjects } from '@/lib/projects';
 import type { NoteWithRelations } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -55,7 +56,7 @@ export default async function NotesPage({
                         ? everything.filter((n) => localDay(n.created_at) === day)
                         : everything;
 
-  const tags = await allTags();
+  const [tags, projects] = await Promise.all([allTags(), listProjects()]);
 
   // The review queues are counted on every visit so the counts are visible
   // before she opens them. Four small queries; the page is not hot.
@@ -245,7 +246,10 @@ export default async function NotesPage({
         </p>
       ) : (
         <SelectionProvider order={notes.map((n) => n.id)}>
-          <BulkTagBar knownTags={tags.map((t) => t.tag)} />
+          <BulkTagBar
+            knownTags={tags.map((t) => t.tag)}
+            projects={projects.map((p) => ({ id: p.id, name: p.name }))}
+          />
           {grouped ? (
             <div className="mt-6 space-y-8">
               {[...byDay.entries()].map(([key, dayNotes]) => (

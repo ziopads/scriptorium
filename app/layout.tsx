@@ -38,6 +38,7 @@ const NAV = [
   { href: '/works', label: 'Catalogue' },
   { href: '/notes', label: 'Notes' },
   { href: '/axes', label: 'Axes' },
+  { href: '/projects', label: 'Projects' },
   { href: '/gaps', label: 'Gaps' },
   { href: '/como', label: 'Cómo' },
 ];

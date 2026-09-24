@@ -1,5 +1,6 @@
 // The readiness matrix: every item on an examinable list, with how far its
-// preparation has come. Read by app/readiness/page.tsx.
+// preparation has come. Read by app/readiness/page.tsx, and for a project's
+// works by app/projects/[id]/page.tsx.
 //
 // Two separate things per item, because they do not form one ladder:
 //
@@ -17,19 +18,16 @@
 // pending proposals other than dossier claims. A proposal is not preparation
 // until she has accepted it.
 //
-// A listed volume counts the notes, quotations and axes on the essays inside
-// it as well as on itself: she reads the essays, and the list names the
-// volume. A study aid is looked for the same way.
+// A volume counts the notes, quotations and axes on the essays inside it as
+// well as on itself: she reads the essays, and the list names the volume. A
+// study aid is looked for the same way.
 
 import { db } from '@/lib/db';
 import { fileStates, type FileState } from '@/lib/gaps';
 
 export type AidState = 'reviewed' | 'draft' | null;
 
-export interface ReadinessItem {
-  list_id: string;
-  section_id: string | null;
-  ordinal: number | null;
+export interface Preparation {
   id: string;
   author: string | null;
   editor: string | null;
@@ -44,19 +42,25 @@ export interface ReadinessItem {
   file: FileState | null;
 }
 
-export async function readinessItems(): Promise<ReadinessItem[]> {
+export interface ReadinessItem extends Preparation {
+  list_id: string;
+  section_id: string | null;
+  ordinal: number | null;
+}
+
+// The facts above for any set of works, keyed by id.
+export async function preparationFor(ids: string[]): Promise<Map<string, Preparation>> {
+  const unique = [...new Set(ids)];
+  if (unique.length === 0) return new Map();
+
   const sql = db();
   const rows = (await sql`
     with items as (
-      select li.list_id, li.section_id, li.ordinal,
-             el.sort as list_sort, ls.sort as section_sort,
-             w.id, w.author, w.editor, w.title, w.year, w.kind
-      from list_items li
-      join exam_lists el on el.id = li.list_id and el.examinable
-      join works w on w.id = li.work_id
-      left join list_sections ls on ls.id = li.section_id
+      select w.id, w.author, w.editor, w.title, w.year, w.kind
+      from works w
+      where w.id = any(${unique}::text[])
     ),
-    -- The item and anything inside it.
+    -- The work and anything inside it.
     scope as (
       select distinct i.id as item_id, s.id as work_id
       from items i
@@ -73,8 +77,7 @@ export async function readinessItems(): Promise<ReadinessItem[]> {
       ) t on t.work_id = sc.work_id
       join reviewed_notes n on n.id = t.note_id
     )
-    select i.list_id, i.section_id, i.ordinal, i.id, i.author, i.editor,
-           i.title, i.year, i.kind,
+    select i.id, i.author, i.editor, i.title, i.year, i.kind,
            exists (select 1 from touched x where x.item_id = i.id) as has_notes,
            exists (select 1 from touched x where x.item_id = i.id and x.quoted) as has_quotation,
            exists (
@@ -91,15 +94,36 @@ export async function readinessItems(): Promise<ReadinessItem[]> {
              where sc.item_id = i.id
            ) as study_aid
     from items i
-    order by i.list_sort, i.section_sort nulls last, i.ordinal nulls last,
-             coalesce(i.author, i.title)
-  `) as Omit<ReadinessItem, 'file'>[];
+  `) as Omit<Preparation, 'file'>[];
 
-  const states = await fileStates([...new Set(rows.map((r) => r.id))]);
+  const states = await fileStates(unique);
   const byId = new Map(states.map((s) => [s.id, s.state]));
 
-  return rows.map((r) => ({
-    ...r,
-    file: r.kind === 'film' ? null : byId.get(r.id) ?? 'no_pdf',
-  }));
+  return new Map(
+    rows.map((r) => [
+      r.id,
+      { ...r, file: r.kind === 'film' ? null : byId.get(r.id) ?? 'no_pdf' },
+    ]),
+  );
+}
+
+// Every item on an examinable list, in the printed order.
+export async function readinessItems(): Promise<ReadinessItem[]> {
+  const sql = db();
+  const items = (await sql`
+    select li.list_id, li.section_id, li.ordinal, li.work_id
+    from list_items li
+    join exam_lists el on el.id = li.list_id and el.examinable
+    join works w on w.id = li.work_id
+    left join list_sections ls on ls.id = li.section_id
+    order by el.sort, ls.sort nulls last, li.ordinal nulls last,
+             coalesce(w.author, w.title)
+  `) as { list_id: string; section_id: string | null; ordinal: number | null; work_id: string }[];
+
+  const prep = await preparationFor(items.map((i) => i.work_id));
+
+  return items.flatMap((i) => {
+    const p = prep.get(i.work_id);
+    return p ? [{ ...p, list_id: i.list_id, section_id: i.section_id, ordinal: i.ordinal }] : [];
+  });
 }
