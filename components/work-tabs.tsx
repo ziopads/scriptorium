@@ -4,7 +4,8 @@ import { useSelectedLayoutSegment } from 'next/navigation';
 
 import { Tabs } from '@/components/workbench/tabs';
 
-// The book page's tab bar, the same seven tabs as a work in the workbench.
+// The book page's tab bar: the workbench's seven tabs, and Nearest
+// (lib/neighbours.ts), which the workbench does not have.
 // Each tab is its own address under /works/<id>, so a tab can be linked to and
 // the back button works; the header above them is drawn once by the layout.
 //
@@ -20,6 +21,7 @@ const TABS = [
   { id: 'claims', label: 'Claims' },
   { id: 'notes', label: 'Notes' },
   { id: 'axes', label: 'Axes' },
+  { id: 'nearest', label: 'Nearest' },
 ] as const;
 
 export function WorkTabs({

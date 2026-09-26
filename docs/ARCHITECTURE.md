@@ -337,6 +337,7 @@ app/                         one directory per route
   notes/, axes/              notes and their review queues; the mapa de cruces
                              and the axis map
   search/                    search by word and by meaning, as a motif strip
+  map/                       the corpus map: works placed by resemblance
   projects/                  projects, each with its works and notes
   works-cited/               a bibliography from ?id= or ?project=
   gaps/                      what the catalogue still lacks, one tab per kind
@@ -348,7 +349,8 @@ components/                  shared components; workbench/ for the three panes
 lib/                         reads, writes and rules shared by pages and tools
   db.ts                      the Neon HTTP client
   works.ts, notes.ts, projects.ts, readiness.ts, gaps.ts,
-  pages.ts, sections.ts, dossier.ts, axis-map.ts, motif.ts
+  pages.ts, sections.ts, dossier.ts, axis-map.ts, motif.ts,
+  neighbours.ts              works' resemblance, language average removed
   search.ts                  both searches, shared with the MCP server
   actions.ts, project-actions.ts   Server Actions
   citation.ts                Chicago 17th and 18th and MLA from one record
