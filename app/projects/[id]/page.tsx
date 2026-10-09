@@ -152,11 +152,6 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
         </p>
       </section>
 
-      <section className="space-y-2">
-        <h2 className="text-base">Works cited</h2>
-        <WorksCitedButton projectId={project.id} count={all.length} />
-      </section>
-
       <section className="space-y-3">
         <h2 className="text-base">Notes</h2>
         {notes.length === 0 ? (
