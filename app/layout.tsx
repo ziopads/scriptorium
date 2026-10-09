@@ -5,6 +5,7 @@ import './globals.css';
 
 import { signOut } from '@/app/auth/sign-in/actions';
 import { Wordmark } from '@/components/wordmark';
+import { MainNav } from '@/components/main-nav';
 import { getAllowedUser } from '@/lib/auth/guard';
 
 // Two families, one job each. Literata for anything she reads or writes at
@@ -63,22 +64,18 @@ export default async function RootLayout({
     >
       <body className="min-h-full flex flex-col font-sans">
         <header className="border-b border-rule">
-          <div className="mx-auto max-w-7xl px-5 py-2.5 flex items-baseline gap-6">
+          <div className="mx-auto max-w-7xl px-5 pt-2.5 flex items-end gap-6">
             {/* The wordmark goes to the introduction, not to the workbench.
                 The workbench has its own link now: a name in the nav is easier
                 to aim at than a logo, and it leaves the wordmark free to point
                 at what this is. */}
-            <Wordmark href="/about" />
-            <nav className="flex gap-4 text-sm text-muted">
-              {NAV.map((item) => (
-                <Link key={item.href} href={item.href} className="hover:text-accent">
-                  {item.label}
-                </Link>
-              ))}
-            </nav>
+            <div className="pb-2">
+              <Wordmark href="/about" />
+            </div>
+            <MainNav items={NAV} />
 
             {user ? (
-              <form action={signOut} className="ml-auto flex items-baseline gap-3 text-sm">
+              <form action={signOut} className="ml-auto flex items-baseline gap-3 pb-2 text-sm">
                 <span className="text-muted">{user.name ?? user.email}</span>
                 <button type="submit" className="text-muted hover:text-accent">
                   Sign out

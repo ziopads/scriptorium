@@ -21,15 +21,21 @@ const FAIL_AT = 0.85;
 // 2026). Used only when Neon's API reports no quota of its own, and labelled so.
 const FREE_PLAN_COMPUTE_HOURS = 100;
 
-const NEON_PROJECT = process.env.NEON_PROJECT_ID ?? 'dark-glade-66435488';
+// Account identifiers come from the environment, never from the source: the
+// repository holds no names, project IDs or account details.
+const NEON_PROJECT = process.env.NEON_PROJECT_ID;
 
 const LINKS = [
-  { label: 'Neon project', href: `https://console.neon.tech/app/projects/${NEON_PROJECT}` },
+  {
+    label: 'Neon project',
+    href: NEON_PROJECT
+      ? `https://console.neon.tech/app/projects/${NEON_PROJECT}`
+      : 'https://console.neon.tech/app/projects',
+  },
   { label: 'Neon billing and usage', href: 'https://console.neon.tech/app/billing' },
   { label: 'Vercel dashboard (Usage tab)', href: 'https://vercel.com/dashboard' },
   { label: 'Voyage dashboard (usage, rate limits)', href: 'https://dashboard.voyageai.com/' },
-  { label: 'Claude usage (each person signs in to their own)', href: 'https://claude.ai/settings/usage' },
-  { label: 'GitHub repository', href: 'https://github.com/ziopads/scriptorium' },
+  { label: 'Claude usage (for the account signed in)', href: 'https://claude.ai/settings/usage' },
 ];
 
 interface Row {
@@ -200,9 +206,9 @@ export default async function HealthPage() {
   });
   rows.push({
     level: 'hand',
-    what: 'Claude (Zazil’s Pro, James’s Max)',
-    reading: 'No usage API; limits reset in five-hour windows',
-    note: 'The likeliest interruption for her during long research sessions.',
+    what: 'Claude subscriptions',
+    reading: 'No usage API; each account’s limits reset in five-hour windows',
+    note: 'Check the usage page of each account that uses the connector.',
     href: LINKS[4].href,
   });
 

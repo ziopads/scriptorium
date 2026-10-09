@@ -139,6 +139,15 @@ async function neonGet(path: string, key: string): Promise<Record<string, unknow
     cache: 'no-store',
     signal: AbortSignal.timeout(TIMEOUT_MS),
   });
+  if (res.status === 404) {
+    throw new Error(
+      `Neon API ${path}: HTTP 404. NEON_PROJECT_ID must be the project's ID (the part ` +
+        'after /projects/ in the Neon console address), not its name.',
+    );
+  }
+  if (res.status === 401) {
+    throw new Error(`Neon API ${path}: HTTP 401. NEON_API_KEY was refused; create a new key.`);
+  }
   if (!res.ok) throw new Error(`Neon API ${path}: HTTP ${res.status}`);
   return (await res.json()) as Record<string, unknown>;
 }
