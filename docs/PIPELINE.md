@@ -1,7 +1,7 @@
 # The corpus pipeline
 
-**Version:** 0.3
-**Date:** 2026-09-24
+**Version:** 0.4
+**Date:** 2026-10-08
 **Scope:** How files on disk become rows in the database. Page numbering —
 offsets, ranges, accepted pagination and the unverified-page marker — is in
 `PAGE-NUMBERS.md`. The application is in `ARCHITECTURE.md`; what it has to do
@@ -12,6 +12,7 @@ carries none.
 
 ## Changelog
 
+- **0.4** (2026-10-08) — §4: the storage limit is 1 GB on the Free plan, not 512 MB.
 - **0.3** (2026-09-24) — §8: the `.env.local` append trap.
 - **0.2** (2026-09-23) — Rewritten against the code. The seven-stage batch,
   the gate, which file a work reads, space. The seeding scripts kept as
@@ -176,10 +177,11 @@ nothing supports that yet (§7).
 
 ## 4. Space
 
-*From the handoff of 22 Sept; not rechecked against Neon for this revision.*
-
-Neon's limit is 512 MB, counting data, indexes and history. `chunks` is nearly
-all TOAST: the vectors and chunk text stored out of line. Deleting and
+The project is on Neon's Free plan, which allows 1 GB of storage per project
+(neon.com/pricing, checked 8 Oct 2026); going over it blocks writes. The
+512 MB recorded here until 0.4 was Neon's earlier Free limit. Storage counts
+data, indexes and history; current use is on the branch's row in the console.
+`chunks` is nearly all TOAST: the vectors and chunk text stored out of line. Deleting and
 reinserting a work's rows leaves the old versions in the file until
 `vacuum full` rewrites it, so **run the vacuum after any batch that reloads
 several books**. A `load_chunks` that fails with `DiskFull` is recovered with,
