@@ -267,6 +267,54 @@ export function plain(text: string): string {
   return text.replaceAll('*', '');
 }
 
+// The citation text marks italics with paired asterisks: "*Dead Subjects*".
+// Split into runs so a page can render real italics, and the clipboard can
+// carry them, instead of deleting the marks as plain() does. An unpaired
+// asterisk is left as text rather than italicising the rest of the entry.
+export interface Run {
+  text: string;
+  italic: boolean;
+}
+
+export function runs(text: string): Run[] {
+  const out: Run[] = [];
+  const pattern = /\*([^*]+)\*/g;
+  let last = 0;
+  for (const match of text.matchAll(pattern)) {
+    const at = match.index ?? 0;
+    if (at > last) out.push({ text: text.slice(last, at), italic: false });
+    out.push({ text: match[1], italic: true });
+    last = at + match[0].length;
+  }
+  if (last < text.length) out.push({ text: text.slice(last), italic: false });
+  return out;
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;');
+}
+
+// A list of entries as HTML for the clipboard: one paragraph each, italics as
+// <i>, a half-inch hanging indent and double spacing, which is the layout MLA
+// and Chicago both ask of a bibliography. Word and Google Docs keep these
+// inline styles on paste.
+export function bibliographyHtml(texts: string[]): string {
+  const style =
+    'margin:0 0 0 0.5in;text-indent:-0.5in;line-height:2;' +
+    'font-family:Times New Roman,serif;font-size:12pt';
+  const paragraphs = texts.map((text) => {
+    const body = runs(text)
+      .map((r) => (r.italic ? `<i>${escapeHtml(r.text)}</i>` : escapeHtml(r.text)))
+      .join('');
+    return `<p style="${style}">${body}</p>`;
+  });
+  return paragraphs.join('');
+}
+
 // Chicago's shortened note, for every citation after the first: surname, short
 // title, page. "Rama, *Transculturación narrativa*, 45."
 //

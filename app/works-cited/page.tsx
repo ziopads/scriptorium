@@ -1,7 +1,9 @@
 import Link from 'next/link';
 
 import { requireAllowedUser } from '@/lib/auth/guard';
-import { formatBibliography, plain, type Style } from '@/lib/citation';
+import { CitationText } from '@/components/citation-text';
+import { CopyFormatted } from '@/components/copy-formatted';
+import { bibliographyHtml, formatBibliography, plain, type Style } from '@/lib/citation';
 import { getProject, projectWorks } from '@/lib/projects';
 import { getWork } from '@/lib/works';
 import type { Work } from '@/lib/types';
@@ -78,6 +80,7 @@ export default async function WorksCitedPage({
 
   const incomplete = entries.filter((e) => e.citation.missing.length > 0);
   const text = entries.map((e) => plain(e.citation.text)).join('\n\n');
+  const html = bibliographyHtml(entries.map((e) => e.citation.text));
   const selection = project
     ? `project=${project.id}`
     : ids.map((i) => `id=${encodeURIComponent(i)}`).join('&');
@@ -138,17 +141,19 @@ export default async function WorksCitedPage({
             </div>
           ) : null}
 
+          <CopyFormatted html={html} text={text} />
+
           <ol className="space-y-3 text-sm">
             {entries.map((entry) => (
               <li key={entry.work.id} className="border-l-2 border-rule pl-6 -indent-3">
-                {plain(entry.citation.text)}
+                <CitationText text={entry.citation.text} />
               </li>
             ))}
           </ol>
 
           <div className="space-y-1">
             <p className="text-xs uppercase tracking-wide text-muted">
-              Plain text — select all and copy
+              Plain text, no italics — for anywhere formatting is lost
             </p>
             <textarea
               readOnly
