@@ -93,7 +93,10 @@ export default async function RootLayout({
         <footer className="border-t border-rule">
           <div className="mx-auto flex max-w-7xl items-baseline gap-4 px-5 py-2 text-xs text-muted">
             <span>Reading list, bibliography, and notes</span>
-            <Link href="/colophon" className="ml-auto text-[10px] hover:text-accent">
+            <Link href="/health" className="ml-auto text-[10px] hover:text-accent">
+              system health
+            </Link>
+            <Link href="/colophon" className="text-[10px] hover:text-accent">
               colophon
             </Link>
           </div>
