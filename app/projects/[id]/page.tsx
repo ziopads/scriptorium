@@ -4,6 +4,7 @@ import { notFound } from 'next/navigation';
 import { NoteCard } from '@/components/note-card';
 import { ProjectFields } from '@/components/project-fields';
 import { ReadinessCell, ReadinessLegend, tally } from '@/components/readiness-cell';
+import { WorksCitedButton } from '@/components/works-cited-button';
 import { requireAllowedUser } from '@/lib/auth/guard';
 import { readableDay } from '@/lib/dates';
 import { listNotesByIds } from '@/lib/notes';
@@ -66,9 +67,6 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
   const all = [...added, ...reached];
   const t = tally(all);
 
-  const cited = (style: string) =>
-    `/works-cited?project=${project.id}${style === 'chicago' ? '' : `&style=${style}`}`;
-
   return (
     <div className="space-y-8">
       <header className="space-y-2">
@@ -82,6 +80,9 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
           {project.due_on ? ` · ${readableDay(project.due_on)}` : null}
         </p>
         {project.question ? <p className="reading max-w-2xl">{project.question}</p> : null}
+        <div className="pt-2">
+          <WorksCitedButton projectId={project.id} count={all.length} />
+        </div>
       </header>
 
       <section className="space-y-3">
@@ -153,14 +154,7 @@ export default async function ProjectPage({ params }: { params: Promise<{ id: st
 
       <section className="space-y-2">
         <h2 className="text-base">Works cited</h2>
-        <p className="text-sm">
-          {all.length} {all.length === 1 ? 'entry' : 'entries'}:{' '}
-          <Link href={cited('chicago')} className="text-accent hover:underline">Chicago 17th</Link>
-          {' · '}
-          <Link href={cited('chicago18')} className="text-accent hover:underline">Chicago 18th</Link>
-          {' · '}
-          <Link href={cited('mla')} className="text-accent hover:underline">MLA 9th</Link>
-        </p>
+        <WorksCitedButton projectId={project.id} count={all.length} />
       </section>
 
       <section className="space-y-3">
