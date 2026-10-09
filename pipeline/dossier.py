@@ -438,11 +438,22 @@ class Book:
 # written as "Rama sostiene…" and bridges name her themes. Claim references
 # such as (c46) are removed first; their digits are not the book's numbers.
 #
+# The aid is written in Spanish whatever the book's language, so a Spanish
+# word opening a sentence ("Según", "Sostiene", "Estado") is not in an English
+# book and was flagged: on 9 Oct this marked 85 of Gordon's 143 claims and
+# removed 37 of Fisher's examples, nearly all for ordinary Spanish words. So a
+# capitalised word also passes when it is a common Spanish word: one found in
+# lower case at least COMMON_MIN times in the Spanish chunks of the corpus
+# (chunks/*.json, lang 'spanish'). Lower case is what separates a common word
+# from a name, so Inglaterra and Bajtín are still flagged in an English book.
+#
 # This is a net for imported facts, not a proof of accuracy. A flag means:
 # look at the page.
 
 WORD = re.compile(r"[^\W\d_]{2,}|\d+")
 CLAIM_REF = re.compile(r"\bc\d+\b")
+CHUNKS = PIPELINE / "chunks"
+COMMON_MIN = 3
 
 
 def fold(word: str) -> str:
@@ -450,8 +461,33 @@ def fold(word: str) -> str:
     return "".join(c for c in decomposed if not unicodedata.combining(c))
 
 
+_COMMON_SPANISH: set[str] | None = None
+
+
+def common_spanish() -> set[str]:
+    """Folded words written in lower case at least COMMON_MIN times in the
+    corpus's Spanish chunks. Read once per run."""
+    global _COMMON_SPANISH
+    if _COMMON_SPANISH is None:
+        counts: dict[str, int] = {}
+        for path in sorted(CHUNKS.glob("*.json")):
+            doc = json.loads(path.read_text(encoding="utf-8"))
+            for chunk in doc.get("chunks", []):
+                if chunk.get("lang") != "spanish":
+                    continue
+                for w in WORD.findall(chunk.get("text", "")):
+                    if w[0].islower():
+                        f = fold(w)
+                        counts[f] = counts.get(f, 0) + 1
+        _COMMON_SPANISH = {w for w, n in counts.items() if n >= COMMON_MIN}
+        if not _COMMON_SPANISH:
+            print("  ! no Spanish chunks found: Spanish words in the aid will be flagged")
+    return _COMMON_SPANISH
+
+
 class Vocabulary:
-    def __init__(self, texts: list[str], extra: list[str]):
+    def __init__(self, texts: list[str], extra: list[str], common: set[str] | None = None):
+        self.common: set[str] = common or set()
         self.words: set[str] = set()
         for text in texts + extra:
             self.words.update(fold(w) for w in WORD.findall(text))
@@ -478,6 +514,8 @@ class Vocabulary:
         for token in WORD.findall(CLAIM_REF.sub(" ", text or "")):
             if not (token.isdigit() or token[0].isupper()):
                 continue
+            if not token.isdigit() and fold(token) in self.common:
+                continue
             if not self.known(token) and token not in out:
                 out.append(token)
         return out
@@ -487,7 +525,22 @@ def vocabulary_for(work: dict, themes: list[str]) -> Vocabulary:
     return Vocabulary(
         [p["text"] for p in work["pages"]],
         [work["author"] or "", work["title"] or ""] + themes,
+        common_spanish(),
     )
+
+
+def check_wording(c: dict, vocabulary: Vocabulary) -> None:
+    """Flag names and numbers in a claim's wording, and set aside an example
+    carrying one. An example set aside by an earlier check comes back when it
+    now passes, so a corrected check can be applied to a record on disk."""
+    c["unfound"] = vocabulary.unfound(c["claim"])
+    if not c.get("example") and c.get("example_removed"):
+        c["example"] = c["example_removed"]["text"]
+    c.pop("example_removed", None)
+    missing = vocabulary.unfound(c.get("example", ""))
+    if missing:
+        c["example_removed"] = {"text": c["example"], "unfound": missing}
+        c["example"] = ""
 
 
 # --------------------------------------------------------------------------
@@ -1027,13 +1080,10 @@ def generate(work_id: str, model: str, limit: int | None) -> None:
     vocabulary = vocabulary_for(work, themes)
     flagged_claims = removed_examples = 0
     for c in kept:
-        c["unfound"] = vocabulary.unfound(c["claim"])
+        check_wording(c, vocabulary)
         if c["unfound"]:
             flagged_claims += 1
-        missing = vocabulary.unfound(c["example"])
-        if missing:
-            c["example_removed"] = {"text": c["example"], "unfound": missing}
-            c["example"] = ""
+        if c.get("example_removed"):
             removed_examples += 1
     print(f"  names and numbers: {flagged_claims} claims carry one not found in the book;"
           f" {removed_examples} examples removed for the same reason")
@@ -1100,10 +1150,15 @@ def condense(work_id: str, model: str) -> None:
     claims = [{"id": i, **c} for i, c in document["claims"].items()]
     before = len(claims)
     claims = without_front_matter(claims)
+    removed_before = sum(1 for c in claims if c.get("example_removed"))
     for c in claims:
-        c["unfound"] = vocabulary.unfound(c["claim"])
+        check_wording(c, vocabulary)
     if before != len(claims):
         print(f"  {before - len(claims)} claims resting only on front matter removed")
+    flagged = sum(1 for c in claims if c["unfound"])
+    removed = sum(1 for c in claims if c.get("example_removed"))
+    print(f"  names and numbers: {flagged} claims carry one not found in the book;"
+          f" examples set aside {removed_before} -> {removed}")
     print(f"  {work_id}: condensing {len(claims)} claims, model {model}", flush=True)
 
     started = time.time()
