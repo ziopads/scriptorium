@@ -38,7 +38,7 @@ export default async function WorkPreviewPage({
     );
   }
 
-  const inSection = await sectionAt(id, preview.page.printed_page);
+  const inSection = await sectionAt(id, preview.printedPage);
 
   return (
     <div className="space-y-2">
@@ -46,6 +46,8 @@ export default async function WorkPreviewPage({
       <PageView
         params={{ w: id }}
         page={preview.page}
+        printedPage={preview.printedPage}
+        missing={preview.missing}
         bounds={preview.bounds}
         language={work.language}
         offsetWrong={preview.offsetWrong}

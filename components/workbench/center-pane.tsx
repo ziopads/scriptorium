@@ -43,10 +43,11 @@ const SOURCE_LABEL: Record<string, string> = {
   none: 'no file held',
 };
 
-// Only five works have been through the pipeline, so most of the catalogue
-// reaches the no-pages branch of the Preview tab. source_format on the work
-// says a file is held, which is a different claim from pages having been
-// loaded. loadPreview lives in lib/pages.ts, shared with the book page.
+// The no-pages branch of the Preview tab is for works with no page text at
+// all. source_format on the work says a file is held, which is a different
+// claim from pages having been loaded. A page missing inside a loaded book is
+// PageView's business, not this branch's. loadPreview lives in lib/pages.ts,
+// shared with the book page.
 
 function Field({ label, value }: { label: string; value: string | number | null }) {
   if (value === null || value === '') return null;
@@ -129,7 +130,7 @@ export async function CenterPane({ params }: { params: WorkbenchParams }) {
 
   const preview = view === 'preview' ? await loadPreview(work.id, params.p) : null;
   const sections = view === 'toc' ? await listSections(work.id) : [];
-  const inSection = preview ? await sectionAt(work.id, preview.page.printed_page) : null;
+  const inSection = preview ? await sectionAt(work.id, preview.printedPage) : null;
   const dossier = view === 'dossier' ? await getDossier(work.id) : null;
   const claimsData =
     view === 'claims'
@@ -282,6 +283,8 @@ export async function CenterPane({ params }: { params: WorkbenchParams }) {
             <PageView
               params={params}
               page={preview.page}
+              printedPage={preview.printedPage}
+              missing={preview.missing}
               bounds={preview.bounds}
               language={work.language}
               offsetWrong={preview.offsetWrong}
@@ -294,7 +297,7 @@ export async function CenterPane({ params }: { params: WorkbenchParams }) {
             ) : (
               <p>
                 A file is held for this work, but its pages have not been extracted and
-                loaded yet. Five books have been through the pipeline so far.
+                loaded yet.
               </p>
             )}
           </div>

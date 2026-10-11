@@ -42,14 +42,38 @@ export async function pageBounds(workId: string): Promise<PageBounds | null> {
   return { first: row.first, last: row.last, count: row.count };
 }
 
+// Two rows can share a printed page where the offset ranges overlap or step
+// backwards: an unnumbered plate insert that the range before it runs through,
+// or a page scanned twice (14 of 103 works, October 2026). Until those pages
+// can be marked as unnumbered, the choice between them is made here rather
+// than left to row order: first the row whose folio reads the number it is
+// given, then the later scan, which is the text page in every plate case.
 export async function getPage(workId: string, printedPage: number): Promise<PageText | null> {
   const sql = db();
   const rows = (await sql`
     select page_index, printed_page, folio, text
     from printed_pages
     where work_id = ${workId} and printed_page = ${printedPage}
+    order by (folio = printed_page) desc nulls last, page_index desc
+    limit 1
   `) as PageText[];
   return rows[0] ?? null;
+}
+
+// The nearest printed pages held on either side of one that is not, for the
+// links offered where a page is missing from the file.
+async function neighbours(
+  workId: string,
+  printedPage: number,
+): Promise<{ before: number | null; after: number | null }> {
+  const sql = db();
+  const rows = (await sql`
+    select max(printed_page) filter (where printed_page < ${printedPage})::int as before,
+           min(printed_page) filter (where printed_page > ${printedPage})::int as after
+    from printed_pages
+    where work_id = ${workId}
+  `) as { before: number | null; after: number | null }[];
+  return rows[0] ?? { before: null, after: null };
 }
 
 // Whether this work's offset looks wrong, judged across the book rather than
@@ -74,10 +98,23 @@ export async function offsetLooksWrong(workId: string): Promise<boolean> {
   return row.disagreeing > row.with_folio * 0.2;
 }
 
-// The page a Preview shows: the one asked for, clamped to the pages held, or
-// the first. Null when nothing has been loaded. Used by the workbench's
-// Preview tab and the book page's.
-export async function loadPreview(workId: string, p: string | undefined) {
+// The page a Preview shows: the one asked for, clamped to the range held, or
+// the first. Null only when nothing has been loaded for the work.
+//
+// A number inside the range can still have no page behind it: a blank verso
+// the scan left out, a plate, a leaf missing from the copy. Then page is null
+// and missing carries the nearest pages held, so the viewer keeps its controls
+// and says the page is not in the file. Returning null here instead is what
+// told her a loaded book had never been loaded (Derrida, Mal de archivo, p. 23).
+export interface Preview {
+  bounds: PageBounds;
+  printedPage: number;
+  page: PageText | null;
+  missing: { before: number | null; after: number | null } | null;
+  offsetWrong: boolean;
+}
+
+export async function loadPreview(workId: string, p: string | undefined): Promise<Preview | null> {
   const bounds = await pageBounds(workId);
   if (!bounds) return null;
   const asked = Number.parseInt(p ?? '', 10);
@@ -88,5 +125,6 @@ export async function loadPreview(workId: string, p: string | undefined) {
     getPage(workId, wanted),
     offsetLooksWrong(workId),
   ]);
-  return page ? { bounds, page, offsetWrong } : null;
+  const missing = page ? null : await neighbours(workId, wanted);
+  return { bounds, printedPage: wanted, page, missing, offsetWrong };
 }
