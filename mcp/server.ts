@@ -7,7 +7,9 @@
 // pipeline/mcp_server.py, which remains the full set until then. list_gaps and
 // the survey guidance in the instructions came after (0.6.0), in both servers;
 // then projects (0.7.0): list_projects, and a project argument on find_works,
-// search and list_notes (mcp/project.ts).
+// search and list_notes (mcp/project.ts); then outlines (0.8.0): the
+// instructions on keeping her writing, quotations, accepted proposals and the
+// conversation's own material apart, and origin and truncated on list_notes.
 // Page numbers leave here as they leave the app: page_label with the asterisk,
 // page_verified as the notes export writes it (lib/page-verified.ts).
 
@@ -38,7 +40,14 @@ find_quotation checks a quotation against the page text and returns the book's o
 
 Anything you write for her goes through draft_note, which verifies every quotation against the page text and stores the book's own words and page; one quotation not found refuses the whole note. Copy quotations exactly from read_pages, search or find_quotation results. For your own analysis, leave attribution out; she decides whose claim it is. Use 'author' only when the note reports the anchored work's own position, and 'other' with attributed_to for a third party's. The note waits in her proposals queue until she accepts or rejects it.
 
-Study-aid sections and notes say whether she has reviewed them. An unreviewed section, or a note with origin 'assistant' and reviewed false, is a draft or a pending proposal, not her view; say so when you use it. Notes carry an attribution (author, own, other) saying whose claim they state.`;
+Study-aid sections and notes say whether she has reviewed them. An unreviewed section, or a note with origin 'assistant' and reviewed false, is a draft or a pending proposal, not her view; say so when you use it. Notes carry an attribution (author, own, other) saying whose claim they state.
+
+When she asks for an outline, a plan or a report built from her notes, gather her notes first (list_notes by project, by work, or with origin 'human'), then keep four kinds of material visibly apart, because she must know whose words every line is:
+1. Her writing: notes with origin 'human'. Give her words as she wrote them, unreworded, as plain text, and say whose claim each is from its attribution: 'own' is her claim, 'author' her account of the author's position, 'other' a third party's, none unmarked.
+2. Quotations: a note's quotations are verified against the book; give them as block quotations with the work and page_label. A quotation typed into a note's body is not verified and its page may be wrong; check it with find_quotation before giving a page, or mark it unverified.
+3. Notes written by draft_note (origin 'assistant'): an accepted one (reviewed true) is one she approved and may have edited, but did not write; label it as an accepted proposal, never as her writing. An unreviewed one is pending.
+4. What this conversation adds: search results, study aids, your own analysis and anything from outside the corpus, in a section of its own after her material, cited by page_label.
+Fetch notes in narrow calls (one project or one work at a time); a broad text filter returns long results. If list_notes reports truncated, narrow the filter until it does not, or tell her which notes were not reached.`;
 
 function json(value: unknown) {
   return { content: [{ type: 'text' as const, text: JSON.stringify(value, null, 2) }] };
@@ -233,16 +242,21 @@ export const handler = createMcpHandler(
       {
         title: 'List notes',
         description:
-          'Her notes, filtered by a work (full id), a tag, text in the title or body, or a project (its notes ' +
-          'and the parts of its axes); at least one filter. ' +
+          'Her notes, filtered by a work (full id), a tag, text in the title or body, a project (its notes ' +
+          'and the parts of its axes), or origin; at least one filter. ' +
           'Rejected proposals and unreviewed dossier claims are left out, as in the app. Each note says who ' +
           'wrote it (origin) and whether she has reviewed it; an unreviewed assistant note is a pending ' +
-          'proposal, not her writing.',
+          'proposal, not her writing. origin alone (\'human\') lists the notes she wrote. At most 50 notes, ' +
+          'most recent first; truncated true means older matches were left out.',
         inputSchema: z.object({
           work_id: z.string().optional().describe('full work id'),
           tag: z.string().optional(),
           contains: z.string().optional().describe('text in the title or body'),
           project: z.number().int().optional().describe('a project id from list_projects'),
+          origin: z
+            .enum(['human', 'assistant'])
+            .optional()
+            .describe("'human': notes she wrote; 'assistant': notes written by draft_note"),
         }),
       },
       async (args) => run(() => listNotes(args)),
@@ -250,6 +264,6 @@ export const handler = createMcpHandler(
   },
   {
     instructions: INSTRUCTIONS,
-    serverInfo: { name: 'scriptorium', version: '0.7.0' },
+    serverInfo: { name: 'scriptorium', version: '0.8.0' },
   },
 );

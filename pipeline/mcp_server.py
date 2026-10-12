@@ -103,7 +103,14 @@ find_quotation checks a quotation against the page text and returns the book's o
 
 Anything you write for her goes through draft_note, which verifies every quotation against the page text and stores the book's own words and page; one quotation not found refuses the whole note. Copy quotations exactly from read_pages, search or find_quotation results. For your own analysis, leave attribution out; she decides whose claim it is. Use 'author' only when the note reports the anchored work's own position, and 'other' with attributed_to for a third party's. The note waits in her proposals queue until she accepts or rejects it.
 
-Study-aid sections and notes say whether she has reviewed them. An unreviewed section, or a note with origin 'assistant' and reviewed false, is a draft or a pending proposal, not her view; say so when you use it. Notes carry an attribution (author, own, other) saying whose claim they state."""
+Study-aid sections and notes say whether she has reviewed them. An unreviewed section, or a note with origin 'assistant' and reviewed false, is a draft or a pending proposal, not her view; say so when you use it. Notes carry an attribution (author, own, other) saying whose claim they state.
+
+When she asks for an outline, a plan or a report built from her notes, gather her notes first (list_notes by project, by work, or with origin 'human'), then keep four kinds of material visibly apart, because she must know whose words every line is:
+1. Her writing: notes with origin 'human'. Give her words as she wrote them, unreworded, as plain text, and say whose claim each is from its attribution: 'own' is her claim, 'author' her account of the author's position, 'other' a third party's, none unmarked.
+2. Quotations: a note's quotations are verified against the book; give them as block quotations with the work and page_label. A quotation typed into a note's body is not verified and its page may be wrong; check it with find_quotation before giving a page, or mark it unverified.
+3. Notes written by draft_note (origin 'assistant'): an accepted one (reviewed true) is one she approved and may have edited, but did not write; label it as an accepted proposal, never as her writing. An unreviewed one is pending.
+4. What this conversation adds: search results, study aids, your own analysis and anything from outside the corpus, in a section of its own after her material, cited by page_label.
+Fetch notes in narrow calls (one project or one work at a time); a broad text filter returns long results. If list_notes reports truncated, narrow the filter until it does not, or tell her which notes were not reached."""
 
 mcp = MCPServer("scriptorium", instructions=INSTRUCTIONS)
 
@@ -719,18 +726,24 @@ def list_notes(
     tag: str | None = None,
     contains: str | None = None,
     project: int | None = None,
+    origin: str | None = None,
 ) -> dict:
     """Her notes, filtered by a work (full id), a tag, text in the title or
-    body, or a project (its notes and the parts of its axes). Rejected proposals and unreviewed dossier claims are left out, as in
-    the app. Each note says who wrote it (origin) and whether she has reviewed
-    it; an unreviewed assistant note is a pending proposal, not her writing."""
-    if not (work_id or tag or contains or project is not None):
-        raise ToolError("filter by work_id, tag, contains or project")
+    body, a project (its notes and the parts of its axes), or origin; at least
+    one filter. Rejected proposals and unreviewed dossier claims are left out,
+    as in the app. Each note says who wrote it (origin) and whether she has
+    reviewed it; an unreviewed assistant note is a pending proposal, not her
+    writing. origin alone ('human') lists the notes she wrote. At most 50
+    notes, most recent first; truncated true means older matches were left out."""
+    if origin is not None and origin not in ("human", "assistant"):
+        raise ToolError("origin is 'human' or 'assistant'")
+    if not (work_id or tag or contains or project is not None or origin):
+        raise ToolError("filter by work_id, tag, contains, project or origin")
     where = [
         "n.rejected_at is null",
         "not ('dossier' = any(n.tags) and n.reviewed = false)",
     ]
-    params: dict = {"limit": MAX_NOTES_LISTED}
+    params: dict = {"limit": MAX_NOTES_LISTED + 1}
     with connect() as conn, conn.cursor() as cur:
         if work_id:
             work_record(cur, work_id)
@@ -749,6 +762,9 @@ def list_notes(
             project_record(cur, project)
             where.append(f"n.id in ({PROJECT_NOTES_SQL})")
             params["project"] = project
+        if origin:
+            where.append("n.origin = %(origin)s")
+            params["origin"] = origin
         cur.execute(
             f"""
             select n.id, n.kind, n.title, n.body, n.attribution, n.attributed_to,
@@ -759,8 +775,17 @@ def list_notes(
             params,
         )
         rows = cur.fetchall()
+        truncated = len(rows) > MAX_NOTES_LISTED
+        rows = rows[:MAX_NOTES_LISTED]
         anchors = anchors_for(cur, [r[0] for r in rows])
+    more = (
+        {"more": f"Only the {MAX_NOTES_LISTED} most recent matching notes are listed; older ones are not. "
+                 "Narrow the filter (a work_id, a project, a tag) to reach them, and say so if you cannot."}
+        if truncated else {}
+    )
     return {
+        "truncated": truncated,
+        **more,
         "notes": [
             {
                 "id": r[0], "kind": r[1], "title": r[2], "body": r[3],

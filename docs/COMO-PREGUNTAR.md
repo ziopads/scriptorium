@@ -12,6 +12,10 @@ The section on projects (added 24 Sept) rests on the servers' 0.7.0 tools:
 `list_projects`, and the `project` argument of `find_works`, `search` and
 `list_notes`. Its Spanish is a draft for Zazil to read.
 
+The section on outlines (added 11 Oct, the eve of comps) rests on the
+servers' 0.8.0 instructions and on `origin` and `truncated` in `list_notes`.
+Its Spanish is also a draft for Zazil to read.
+
 ---
 
 ## Español
@@ -64,6 +68,28 @@ el catálogo y las notas desde Notes. Claude puede trabajar dentro de un
 proyecto: nombra el proyecto en la pregunta («en mi proyecto Ensayo 1,
 busca…») y puede limitar la búsqueda a sus obras y la lectura a sus notas.
 También te dirá qué obras del proyecto no puede buscar.
+
+### Un esquema desde tus notas
+
+Para un ensayo, crea antes su proyecto y añade las obras que vas a usar.
+Luego pega la pregunta del examen y esto:
+
+> Hazme un esquema para responder esta pregunta. Empieza por mis notas del
+> proyecto [nombre] y después completa con búsquedas en el corpus. En el
+> esquema separa a la vista:
+>
+> - mis palabras, tal como las escribí, sin reformular, diciendo si es una
+>   afirmación mía o mi lectura del autor;
+> - las citas, en bloque, con obra y página; si una cita está escrita dentro
+>   de mi nota, compruébala o márcala «sin verificar»;
+> - las notas que acepté de Claude, marcadas como «propuesta aceptada»;
+> - lo que añades tú (búsquedas, guías de estudio, tu análisis, lo que sabes
+>   de otras fuentes), en una sección aparte al final.
+>
+> Dime si quedaron notas mías que no alcanzaste a leer.
+
+Una nota que Claude propuso y tú aceptaste sigue marcada como suya aunque la
+hayas editado: así sabes después qué frases escribiste tú.
 
 ### Lo que Claude no puede saber
 
@@ -143,6 +169,28 @@ from the catalogue and notes from Notes. Claude can work inside a project: name
 it in your question ("in my project Essay 1, search…") and it can limit its
 searches to that project's works and its reading to its notes. It will also
 tell you which of the project's works it cannot search.
+
+### An outline from your notes
+
+For an essay, make its project first and add the works you will use. Then
+paste the exam question and this:
+
+> Make me an outline for answering this question. Start from my notes in the
+> project [name], then add from searches of the corpus. In the outline, keep
+> these visibly apart:
+>
+> - my words, as I wrote them, unreworded, saying whether each is my own
+>   claim or my reading of the author;
+> - quotations, as block quotations with the work and page; if a quotation is
+>   typed inside my note, check it or mark it "unverified";
+> - notes I accepted from Claude, marked "accepted proposal";
+> - what you add (searches, study aids, your analysis, what you know from
+>   elsewhere), in a separate section at the end.
+>
+> Tell me if any of my notes were left unread.
+
+A note Claude proposed and you accepted stays marked as Claude's even after
+you edit it, so you can later tell which sentences you wrote.
 
 ### What Claude cannot know
 

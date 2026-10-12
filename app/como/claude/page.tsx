@@ -97,6 +97,39 @@ export default async function ComoClaudePage() {
           También te dirá qué obras del proyecto no puede buscar.
         </p>
 
+        <H>Un esquema desde tus notas</H>
+        <p>
+          Para un ensayo, crea antes su proyecto y añade las obras que vas a usar. Luego
+          pega la pregunta del examen y esto:
+        </p>
+        <Prompt>
+          <p>
+            Hazme un esquema para responder esta pregunta. Empieza por mis notas del
+            proyecto [nombre] y después completa con búsquedas en el corpus. En el
+            esquema separa a la vista:
+          </p>
+          <ul className="list-disc space-y-1 pl-5">
+            <li>
+              mis palabras, tal como las escribí, sin reformular, diciendo si es una
+              afirmación mía o mi lectura del autor;
+            </li>
+            <li>
+              las citas, en bloque, con obra y página; si una cita está escrita dentro de
+              mi nota, compruébala o márcala «sin verificar»;
+            </li>
+            <li>las notas que acepté de Claude, marcadas como «propuesta aceptada»;</li>
+            <li>
+              lo que añades tú (búsquedas, guías de estudio, tu análisis, lo que sabes de
+              otras fuentes), en una sección aparte al final.
+            </li>
+          </ul>
+          <p>Dime si quedaron notas mías que no alcanzaste a leer.</p>
+        </Prompt>
+        <p>
+          Una nota que Claude propuso y tú aceptaste sigue marcada como suya aunque la
+          hayas editado: así sabes después qué frases escribiste tú.
+        </p>
+
         <H>Lo que Claude no puede saber</H>
         <ul className="list-disc space-y-2 pl-5">
           <li>
@@ -206,6 +239,39 @@ export default async function ComoClaudePage() {
           your question (&ldquo;in my project Essay 1, search&hellip;&rdquo;) and it can
           limit its searches to that project&rsquo;s works and its reading to its notes.
           It will also tell you which of the project&rsquo;s works it cannot search.
+        </p>
+
+        <H>An outline from your notes</H>
+        <p>
+          For an essay, make its project first and add the works you will use. Then paste
+          the exam question and this:
+        </p>
+        <Prompt>
+          <p>
+            Make me an outline for answering this question. Start from my notes in the
+            project [name], then add from searches of the corpus. In the outline, keep
+            these visibly apart:
+          </p>
+          <ul className="list-disc space-y-1 pl-5">
+            <li>
+              my words, as I wrote them, unreworded, saying whether each is my own claim
+              or my reading of the author;
+            </li>
+            <li>
+              quotations, as block quotations with the work and page; if a quotation is
+              typed inside my note, check it or mark it &ldquo;unverified&rdquo;;
+            </li>
+            <li>notes I accepted from Claude, marked &ldquo;accepted proposal&rdquo;;</li>
+            <li>
+              what you add (searches, study aids, your analysis, what you know from
+              elsewhere), in a separate section at the end.
+            </li>
+          </ul>
+          <p>Tell me if any of my notes were left unread.</p>
+        </Prompt>
+        <p>
+          A note Claude proposed and you accepted stays marked as Claude&rsquo;s even
+          after you edit it, so you can later tell which sentences you wrote.
         </p>
 
         <H>What Claude cannot know</H>
