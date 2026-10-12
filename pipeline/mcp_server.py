@@ -110,7 +110,7 @@ When she asks for an outline, a plan or a report built from her notes, gather he
 2. Quotations: a note's quotations are verified against the book; give them as block quotations with the work and page_label. A quotation typed into a note's body is not verified and its page may be wrong; check it with find_quotation before giving a page, or mark it unverified.
 3. Notes written by draft_note (origin 'assistant'): an accepted one (reviewed true) is one she approved and may have edited, but did not write; label it as an accepted proposal, never as her writing. An unreviewed one is pending.
 4. What this conversation adds: search results, study aids, your own analysis and anything from outside the corpus, in a section of its own after her material, cited by page_label.
-Fetch notes in narrow calls (one project or one work at a time); a broad text filter returns long results. If list_notes reports truncated, narrow the filter until it does not, or tell her which notes were not reached."""
+Fetch notes in narrow calls (one project or one work at a time); a broad text filter returns long results. If list_notes reports truncated, call it again with the same filters and before_id set to next_before_id, until truncated is false; never build an outline from a truncated list without saying so."""
 
 mcp = MCPServer("scriptorium", instructions=INSTRUCTIONS)
 
@@ -727,6 +727,7 @@ def list_notes(
     contains: str | None = None,
     project: int | None = None,
     origin: str | None = None,
+    before_id: int | None = None,
 ) -> dict:
     """Her notes, filtered by a work (full id), a tag, text in the title or
     body, a project (its notes and the parts of its axes), or origin; at least
@@ -734,9 +735,12 @@ def list_notes(
     as in the app. Each note says who wrote it (origin) and whether she has
     reviewed it; an unreviewed assistant note is a pending proposal, not her
     writing. origin alone ('human') lists the notes she wrote. At most 50
-    notes, most recent first; truncated true means older matches were left out."""
+    notes, most recent first; when truncated is true, pass next_before_id as
+    before_id to get the next older page."""
     if origin is not None and origin not in ("human", "assistant"):
         raise ToolError("origin is 'human' or 'assistant'")
+    if before_id is not None and before_id <= 0:
+        raise ToolError("before_id is a note id from next_before_id")
     if not (work_id or tag or contains or project is not None or origin):
         raise ToolError("filter by work_id, tag, contains, project or origin")
     where = [
@@ -765,6 +769,9 @@ def list_notes(
         if origin:
             where.append("n.origin = %(origin)s")
             params["origin"] = origin
+        if before_id is not None:
+            where.append("n.id < %(before_id)s")
+            params["before_id"] = before_id
         cur.execute(
             f"""
             select n.id, n.kind, n.title, n.body, n.attribution, n.attributed_to,
@@ -779,8 +786,9 @@ def list_notes(
         rows = rows[:MAX_NOTES_LISTED]
         anchors = anchors_for(cur, [r[0] for r in rows])
     more = (
-        {"more": f"Only the {MAX_NOTES_LISTED} most recent matching notes are listed; older ones are not. "
-                 "Narrow the filter (a work_id, a project, a tag) to reach them, and say so if you cannot."}
+        {"next_before_id": rows[-1][0],
+         "more": f"{MAX_NOTES_LISTED} notes listed, newest first; older matches remain. Call list_notes again "
+                 "with the same filters and before_id set to next_before_id, until truncated is false."}
         if truncated else {}
     )
     return {

@@ -14,7 +14,10 @@
 // draft_note tool wrote ('assistant'; editing one in the app keeps its origin).
 // It can be the only filter, so "all of her own notes" is one call. One row
 // past the limit is fetched so the result can say truncated rather than end
-// silently at the fiftieth note.
+// silently at the fiftieth note. before_id pages: a truncated result gives
+// next_before_id, the id of its oldest note, and the next call passes it to
+// get the next older page. An id cursor, unlike an offset, does not shift
+// when she adds a note between calls.
 
 import { db } from '@/lib/db';
 import { anchorsFor } from '@/mcp/anchors';
@@ -41,12 +44,17 @@ export async function listNotes(args: {
   contains?: string | null;
   project?: number | null;
   origin?: 'human' | 'assistant' | null;
+  before_id?: number | null;
 }) {
   const work = args.work_id || null;
   const tag = args.tag || null;
   const q = args.contains ? `%${args.contains}%` : null;
   const project = args.project ?? null;
   const origin = args.origin || null;
+  const beforeId = args.before_id ?? null;
+  if (beforeId !== null && !(Number.isInteger(beforeId) && beforeId > 0)) {
+    throw new ToolError('before_id is a note id from next_before_id');
+  }
   if (origin && origin !== 'human' && origin !== 'assistant') {
     throw new ToolError("origin is 'human' or 'assistant'");
   }
@@ -66,6 +74,7 @@ export async function listNotes(args: {
            or exists (select 1 from note_works nw where nw.note_id = n.id and nw.work_id = ${work}::text))
       and (${tag}::text is null or ${tag}::text = any(n.tags))
       and (${origin}::text is null or n.origin = ${origin}::text)
+      and (${beforeId}::bigint is null or n.id < ${beforeId}::bigint)
       and (${q}::text is null or n.body ilike ${q}::text or n.title ilike ${q}::text)
       and (${project}::int is null or n.id in (
            select pn.note_id from project_notes pn where pn.project_id = ${project}::int
@@ -83,8 +92,9 @@ export async function listNotes(args: {
     truncated,
     ...(truncated
       ? {
-          more: `Only the ${MAX_NOTES_LISTED} most recent matching notes are listed; older ones are not. ` +
-            'Narrow the filter (a work_id, a project, a tag) to reach them, and say so if you cannot.',
+          next_before_id: Number(rows[rows.length - 1].id),
+          more: `${MAX_NOTES_LISTED} notes listed, newest first; older matches remain. Call list_notes again ` +
+            'with the same filters and before_id set to next_before_id, until truncated is false.',
         }
       : {}),
     notes: rows.map((r) => ({

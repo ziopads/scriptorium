@@ -9,7 +9,8 @@
 // then projects (0.7.0): list_projects, and a project argument on find_works,
 // search and list_notes (mcp/project.ts); then outlines (0.8.0): the
 // instructions on keeping her writing, quotations, accepted proposals and the
-// conversation's own material apart, and origin and truncated on list_notes.
+// conversation's own material apart, and origin, truncated and before_id
+// (paging) on list_notes.
 // Page numbers leave here as they leave the app: page_label with the asterisk,
 // page_verified as the notes export writes it (lib/page-verified.ts).
 
@@ -47,7 +48,7 @@ When she asks for an outline, a plan or a report built from her notes, gather he
 2. Quotations: a note's quotations are verified against the book; give them as block quotations with the work and page_label. A quotation typed into a note's body is not verified and its page may be wrong; check it with find_quotation before giving a page, or mark it unverified.
 3. Notes written by draft_note (origin 'assistant'): an accepted one (reviewed true) is one she approved and may have edited, but did not write; label it as an accepted proposal, never as her writing. An unreviewed one is pending.
 4. What this conversation adds: search results, study aids, your own analysis and anything from outside the corpus, in a section of its own after her material, cited by page_label.
-Fetch notes in narrow calls (one project or one work at a time); a broad text filter returns long results. If list_notes reports truncated, narrow the filter until it does not, or tell her which notes were not reached.`;
+Fetch notes in narrow calls (one project or one work at a time); a broad text filter returns long results. If list_notes reports truncated, call it again with the same filters and before_id set to next_before_id, until truncated is false; never build an outline from a truncated list without saying so.`;
 
 function json(value: unknown) {
   return { content: [{ type: 'text' as const, text: JSON.stringify(value, null, 2) }] };
@@ -247,7 +248,7 @@ export const handler = createMcpHandler(
           'Rejected proposals and unreviewed dossier claims are left out, as in the app. Each note says who ' +
           'wrote it (origin) and whether she has reviewed it; an unreviewed assistant note is a pending ' +
           'proposal, not her writing. origin alone (\'human\') lists the notes she wrote. At most 50 notes, ' +
-          'most recent first; truncated true means older matches were left out.',
+          'most recent first; when truncated is true, pass next_before_id as before_id to get the next older page.',
         inputSchema: z.object({
           work_id: z.string().optional().describe('full work id'),
           tag: z.string().optional(),
@@ -257,6 +258,12 @@ export const handler = createMcpHandler(
             .enum(['human', 'assistant'])
             .optional()
             .describe("'human': notes she wrote; 'assistant': notes written by draft_note"),
+          before_id: z
+            .number()
+            .int()
+            .positive()
+            .optional()
+            .describe('next_before_id from a truncated result: the next older page'),
         }),
       },
       async (args) => run(() => listNotes(args)),
