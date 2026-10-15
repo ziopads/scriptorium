@@ -272,5 +272,10 @@ export const handler = createMcpHandler(
   {
     instructions: INSTRUCTIONS,
     serverInfo: { name: 'scriptorium', version: '0.8.0' },
+    // No subscriptions: this server never sends notifications, and on Vercel
+    // each subscriptions/listen stream stayed open until the function timed
+    // out, billing memory for the whole wait. Refused with the protocol's
+    // own 'Subscription limit reached'; tool calls do not use the stream.
+    maxSubscriptions: 0,
   },
 );
